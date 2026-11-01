@@ -21,6 +21,9 @@ runs NAM captures on the unit's own SHARC DSP. This is the HX Effects port of
 simulator and firmware tools it uses (copied into `tools/` and `src/`, with the HX Effects support
 added).
 
+**You do this at your own risk! Do not attempt it if you are not comfortable with running command line tools and 
+potentially having to recover your unit yourself!**
+
 > **Unofficial and experimental.** Not affiliated with, endorsed by or supported by Line 6 or Yamaha
 > Guitar Group. Installing modified firmware is at your own risk and may void your warranty. Read
 > [Recovery](#recovery) before you start, and keep the stock firmware file to hand.
@@ -115,10 +118,7 @@ so you can hear the block without converting anything yourself:
 3. Set Input, Bass/Mid/Treble/Presence and Ch Vol to 5.0 for the capture as recorded, then adjust.
 
 Each `.wav` is about 8 KB and is not an audio IR: it carries the capture's 1,871 weights behind a
-small header. Loading one into the stock 2048‑sample IR block does nothing useful. The original
-`.nam` files are alongside, so you can compare in the NAM desktop plugin. These are my own captures
-of my own gear, shared freely for trying the block out.
-
+small header. Loading one into the stock 2048‑sample IR block does nothing useful. 
 
 - **HX Edit cannot edit the NAM block.** It shows "Failed to load model (code −8200)" when a preset
   containing one is selected, because its own definition of the 1024‑sample IR block has 5 knobs and
@@ -185,8 +185,6 @@ makes recovery possible. Your presets, IRs and global settings survive a recover
 - Still stuck: Line 6's own instructions for a unit in an unrecoverable state are the same
   **>**‑at‑power‑on procedure ("Fail‑safe update mode" in the
   [Helix/HX reset procedures](https://kb.line6.com/helix-rack-lt-fx-stomp-reset-procedures-and-troubleshooting-tricks)).
-  If it does not respond at all, contact Line 6 support; do not mention third‑party firmware if you
-  want warranty service, and expect that service may not be honoured.
 
 ### Other power‑on combinations (from the same Line 6 page)
 
