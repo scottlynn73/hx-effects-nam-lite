@@ -85,6 +85,29 @@ python3 build_effects.py
 refuses any other file; the kernel is first run in the SHARC simulator and must match the reference bit
 for bit (`--no-check` skips that).
 
+## Tuning the declared DSP cost
+
+The block declares a DSP cost of 2700 (`DSP_COST` in `build_effects.py`). That number is bookkeeping
+only: the app uses it to decide when to grey out other blocks, and it has no effect on what the DSP
+actually does. The kernel was measured in the simulator at about 23% of a block (34,000 of 150,000
+cycles per audio block); stock blocks declare costs in roughly hundredths of a percent, so the honest
+figure is around 2300 and 2700 leaves a heavy block's worth of margin. As shipped, two NAM blocks and
+a few effects fit in one preset.
+
+If you want to trade some of that margin for more blocks:
+
+1. Lower `DSP_COST` in `build_effects.py` (try 2300; don't go below it, that's what the measurement
+   supports), rebuild and flash.
+2. Build the heaviest preset the unit now allows: two NAM blocks plus whatever was previously greyed
+   out (the dynamic reverbs, Shimmer, Poly Pitch, Cosmos Echo are the heavy ones).
+3. Stress it: big chords, long reverb tails, and change **Model** on both blocks while notes ring. A
+   capture change is the kernel's worst case.
+4. Crackling, dropouts or a block going silent means the number is too low: raise it and rebuild.
+
+Declaring too little lets the app accept a chain the DSP can't service; declaring too much only costs
+you a block you might have fitted. When in doubt, leave it at 2700.
+
+
 ## Install
 
 **Double check that you have a backed up version of the .hxf firmware file for your unit- you may need it for recovery!**
