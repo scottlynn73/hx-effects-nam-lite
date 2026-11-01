@@ -94,6 +94,9 @@ for bit (`--no-check` skips that).
 3. Let it finish and restart the unit. A normal boot means the install worked; see
    [Recovery](#recovery) if it shows "Boot Failure" or stops at the splash.
 
+**Note- you may find the software says there was a problem, just try again and it should work on the second try (this tends to be 
+more likely when recovering from scratch, not when updating an already working firmware.**
+
 ## Use
 
 1. Convert a capture to a User IR:
