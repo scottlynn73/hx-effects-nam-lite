@@ -87,6 +87,8 @@ for bit (`--no-check` skips that).
 
 ## Install
 
+**Double check that you have a backed up version of the .hxf firmware file for your unit- you may need it for recovery!**
+
 1. In HX Edit, back up your presets and IRs, then **close HX Edit**.
 2. Open Line 6 Updater, choose **Choose File**, pick `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf`.
 3. Let it finish and restart the unit. A normal boot means the install worked; see
