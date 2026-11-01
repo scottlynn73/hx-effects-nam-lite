@@ -1,0 +1,9 @@
+# Line 6's firmware is copyrighted: never commit it, nor anything built from it
+firmware/*
+!firmware/PUT_FIRMWARE_HERE.txt
+build/
+.venv/
+__pycache__/
+*.hxf
+*.l6ia
+.DS_Store
