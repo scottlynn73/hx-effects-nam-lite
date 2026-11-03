@@ -57,7 +57,10 @@ PREAMBLE_INFO = bytes.fromhex('010005000100000005')
 HELLO_REPLY = bytes.fromhex('01040404')
 INFO_TAIL = bytes.fromhex('0300000001000000000000000200000000000000030000000100000000000000')
 REPLY_LEN = {0x01: 4, 0x02: 4, 0x03: 36, 0x04: 28, 0x05: 60, 0x06: 4, 0x07: 8, 0x09: 4, 0x0a: 12}
-IMAGE_STATUS = {1: 'ok', 5: 'damaged'}
+# The updater app's image check (cmd 04): 1 = header and size fine, 4 = no header, 5 = the header's
+# length is over the partition's declared size. Image 4 is always 5: its partition is declared 0x5000
+# sectors (10 MiB) but stock 3.80.0's image 4 is already 12.4 MB; the physical gap to image 5 is 15.5 MiB.
+IMAGE_STATUS = {1: 'ok', 4: 'no image', 5: 'over its declared partition size (normal for image 4, stock too)'}
 
 
 class FlashError(RuntimeError):

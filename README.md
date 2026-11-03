@@ -137,6 +137,12 @@ main app into its USB DFU loader, loads the updater app from the `.hxf`, writes 
 updater mode; run it again, or use Line 6 Updater. `python3 tools/flash.py info` shows what the unit is
 running without changing anything.
 
+Before writing, it lists images the unit flags. Image 4 is always listed: the updater app flags any
+image longer than its partition's declared size, and image 4's partition is declared as 10 MiB while
+stock 3.80.0's image 4 is already 12.4 MB (ours is 14.3 MB). The physical space before the next
+partition is 15.5 MiB, which is the limit the build checks against. Line 6 Updater rewrites flagged images
+first and so does this tool; it is not damage.
+
 "Booted" means the main app came up and answers on USB. It does not yet tell a clean boot from one that
 stops at a "Boot Failure" message, so glance at the screen as well.
 
