@@ -89,17 +89,25 @@ knobs moving every 100 ms. Each call is also held to the register contract the N
 (R0-R15, the alternate registers, the DAG registers and MODE1 unchanged; no loop or PC stack left),
 and every memory write must land in the output buffer, the instance's state words or the save area.
 
-Measured (6.5 s per case, 2,496,000 samples): bit-identical; 283 instructions; worst 1,361 and mean
-about 620 cycles per 16-sample call, under 1 % of the roughly 150,000 a call has at 450 MHz.
+Measured: bit-identical; 343 instructions; worst 1,478 and mean about 640 cycles per 16-sample call,
+under 1 % of the roughly 150,000 a call has at 450 MHz.
 
 For the match to be exact the reference avoids anything the port can't reproduce: constants are
 computed in double and rounded once (the port's tables are generated the same way), Accent is whole dB
 (a 13-entry table), the beep's release is a fixed per-sample
 step, and the C build uses `-ffp-contract=off` (no fused multiply-add).
 
-The port's own ABI, which the firmware integration must give it: knob words DM(5) Tempo (float),
+The port's own ABI, which the firmware gives it (`build_click.py`): knob words DM(5) Tempo (float),
 DM(6) Beats/Bar (int), DM(7) Accent (int dB), DM(8) Sound (int), DM(9) Level (float 0..1), DM(10)
-Subdivision (int); state in words 16..37 of the instance block (assumed free: the NAM kernel only used
-words up to 15); a zeroed block starts at beat 1. Code at PM 0xc4ef8, data at DM 0xe4850 (NAM's
-regions: Click replaces NAM in its own build). Not yet done: the Entry 3/4/0 changes for Click's
-knobs, and anything on the unit.
+Subdivision (int). Two conventions copied from the NAM kernel after the first hardware build froze the
+unit's controls (audio kept running; any knob or bypass change hung the panel):
+
+- **DM(3) is the stock knob writer's flag.** It sets it on every write; the kernel must clear it.
+  Click now clears it on every call; the check fails if it doesn't.
+- **The instance block is not the kernel's.** The hook copies stock primitive 0x822's record, whose
+  control functions own that block. Click now writes only DM(3) and DM(12) (its slot number, as NAM's
+  word 12) and keeps its state in one of 8 slots in Block 3, claimed per block as NAM claims its slots
+  (fresh or taken-over blocks claim a free slot, else one idle for 64 calls, and start from beat 1;
+  a ninth simultaneous block passes its input through).
+
+Which of the two caused the hang is not known yet; both are fixed together.

@@ -29,9 +29,10 @@ import ssim  # noqa: E402
 SR = 48000.0
 CODE, CODE_END = 0xC4EF8, 0xC5554
 DATA = 0xE4850
-STATE = dict(ST_STARTED=16, ST_FIRE=17, ST_ACC=18, ST_SUBIDX=19, ST_BEAT=20, ST_ACTIVE=21, ST_SOUND=22,
-             ST_C0=23, ST_S0=24, ST_WC0=25, ST_WS0=26, ST_C1=27, ST_S1=28, ST_WC1=29, ST_WS1=30,
-             ST_AMP=31, ST_ENV=32, ST_DECAY=33, ST_MIX2=34, ST_AGE=35, ST_TICKS=36, ST_KIND=37)
+_ST = ['STARTED', 'FIRE', 'ACC', 'SUBIDX', 'BEAT', 'ACTIVE', 'SOUND', 'C0', 'S0', 'WC0', 'WS0', 'C1', 'S1',
+       'WC1', 'WS1', 'AMP', 'ENV', 'DECAY', 'MIX2', 'AGE', 'TICKS', 'KIND']
+STATE = {f'ST_{n}': 2 + k for k, n in enumerate(_ST)}          # offsets in a slot, after OWNER and LAST
+NSLOTS, NSTATE, SLOTW, STALE, P_SLOT = 8, len(_ST), 2 + len(_ST), 64, 12
 KNOB = dict(tempo=5, meter=6, accent=7, sound=8, level=9, subdiv=10)
 INT_KNOBS = {'meter', 'accent', 'sound', 'subdiv'}
 PARAM_ORDER = ['tempo', 'meter', 'accent', 'sound', 'level', 'subdiv']    # = metronome.h M_*
@@ -71,12 +72,18 @@ def constants():
 def source():
     c = constants()
     lay, a = [], DATA
-    lay.append(('SAVE', a, [0] * 18)); a += 18
+    lay.append(('SAVE', a, [0] * 19)); a += 19
+    lay.append(('G_CALLS', a, [0])); a += 1
+    slots = a + NSLOTS                         # SLOTS follows the table
+    lay.append(('T_SLOTBASE', a, [slots + SLOTW * k for k in range(NSLOTS)])); a += NSLOTS
+    lay.append(('SLOTS', a, [0] * (SLOTW * NSLOTS))); a += SLOTW * NSLOTS
     for name, v in (('K_SUBGAIN', SUB_GAIN), ('K_SILENT', SILENT), ('K_RELSTEP', c['relstep'])):
         lay.append((name, a, [fw(f32(v))])); a += 1
     for name, vals in (('T_ACCENT', c['accent']), ('T_OSC', c['osc']), ('T_MIX2', c['mix2']), ('T_DECAY', c['decay'])):
         lay.append((name, a, [fw(v) for v in vals])); a += len(vals)
     equ = [f'.equ {k}, {v}' for k, v in STATE.items()]
+    equ += ['.equ S_OWNER, 0', '.equ S_LAST, 1', f'.equ P_SLOT, {P_SLOT}', f'.equ NSLOTS, {NSLOTS}',
+            f'.equ NSTATE, {NSTATE}', f'.equ STALE, {STALE}']
     equ += [f'.equ PERIOD, {c["period"]}', f'.equ GATE, {c["gate"]}', f'.equ MAXAGE, {c["max_age"]}']
     equ += [f'.equ {name}, {addr:#x}' for name, addr, _ in lay]
     data = [f'.section dm {DATA:#x}'] + ['.word ' + ', '.join(f'{w:#010x}' for w in words) for _, _, words in lay]
@@ -148,6 +155,7 @@ class Rig:
     def knobs(self, i0, knobs):
         for k, v in knobs.items():
             self.sim.wr(i0 + KNOB[k], int(v) if k in INT_KNOBS else ssim.f2b(float(v)))
+        self.sim.wr(i0 + 3, 1)                       # as the stock knob writer does
 
     def call(self, i0, block_words, label=''):
         sim, rnd = self.sim, self.rnd
@@ -192,7 +200,11 @@ class Rig:
             raise AssertionError(f'{label}: registers changed: {bad}')
         if sim.loops or sim.pcstk:
             raise AssertionError(f'{label}: returns with the loop or PC stack not empty')
-        allowed = [(BO, BO + 16), (i0 + 16, i0 + 38), (self.data[0], self.data[0] + 18)]
+        if sim.rd(i0 + 3) != 0:
+            raise AssertionError(f'{label}: DM(3) (the knob writer\'s flag) not cleared')
+        lo = self.syms['SAVE']
+        allowed = [(BO, BO + 16), (i0 + 3, i0 + 4), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 20),
+                   (self.syms['SLOTS'], self.syms['SLOTS'] + SLOTW * NSLOTS)]
         stray = [a for a in writes if not any(lo <= a < hi for lo, hi in allowed)]
         if stray:
             raise AssertionError(f'{label}: wrote outside its memory: {[hex(a) for a in stray[:5]]}')
@@ -263,6 +275,46 @@ def check(seconds=2.0):
                 raise AssertionError(f'moving knobs, block {b}: kernel and reference differ')
             total += 16
     print(f'  two instances, knobs moving every 100 ms: {2 * nblk * 16} samples identical')
+
+    # a block deleted and re-created at the same place: zeroed block -> fresh slot state (reset)
+    kn = dict(tempo=150, meter=3, accent=9, sound=2, level=0.8, subdiv=2)
+    i0 = rig.inst(2)
+    rig.knobs(i0, kn)
+    x = signal(400 * 16, 21)
+    st = ref.new()
+    for b in range(400):
+        if b == 200:
+            i0 = rig.inst(2)
+            rig.knobs(i0, kn)
+            st = ref.new()
+        blk = x[16 * b:16 * b + 16]
+        if rig.call(i0, blk, f're-created block {b}') != ref.process(st, kn, [ssim.b2f(v) for v in blk]):
+            raise AssertionError(f're-created block: block {b} differs')
+    total += 400 * 16
+    print('  a block re-created at the same place starts again at beat 1: identical')
+
+    # more blocks than slots: the extra one passes its input through; a block that stops
+    # running loses its slot after STALE calls, and the next newcomer gets it
+    rig2 = Rig(secs, syms, data, seed=3)
+    insts = [rig2.inst(k) for k in range(NSLOTS + 1)]
+    for i0 in insts:
+        rig2.knobs(i0, kn)
+    x = signal(16, 4)
+    for i0 in insts[:NSLOTS]:
+        rig2.call(i0, x)
+    out = rig2.call(insts[NSLOTS], x, 'no free slot')
+    if out != x:
+        raise AssertionError('with every slot taken, a block does not pass its input through')
+    for _ in range(STALE // (NSLOTS - 1) + 2):            # all but the first keep running
+        for i0 in insts[1:NSLOTS]:
+            rig2.call(i0, x)
+    st = ref.new()
+    got = rig2.call(insts[NSLOTS], x, 'stale slot taken')
+    if got != ref.process(st, kn, [ssim.b2f(v) for v in x]) or rig2.sim.rd(insts[NSLOTS] + P_SLOT) != 1:
+        raise AssertionError('a stale slot was not taken over by the waiting block')
+    st0 = ref.new()                                        # the first one comes back: claims anew
+    rig2.call(insts[0], x, 'returning block')
+    print(f'  {NSLOTS} slots: a 9th block passes through; a stale slot goes to the next block; DM(3) cleared every call')
     worst, mean = max(rig.cycles), sum(rig.cycles) / len(rig.cycles)
     print(f'{total} samples identical to the reference; cycles per 16-sample call: worst {worst}, mean {mean:.0f} '
           f'(budget {MAX_CYCLES}; about 150,000 per call at 450 MHz)')
