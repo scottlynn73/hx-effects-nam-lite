@@ -380,14 +380,13 @@ def expand_sharc_blob0_buffer(e2_raw_bytes):
     assert w[c] >> 16 == 0x0f04 and w[c + 1] & 0xffff == 0x727e and \
         ((w[c] & 0xffff) << 16) | (w[c + 1] >> 16) == w[s], f'Heap 6 clear at w[{c}] does not match'
     changed = cur == DEV.BLOB0_WORDS or w[s] == DEV.HEAP6[0]
-    part = os.environ.get('NAM_E2_PART', 'both')
-    size = DEV.BLOB0_MAX_WORDS if part in ('both', 'buffer') else cur
+    size = DEV.BLOB0_MAX_WORDS
     if kind == 'split':
         w[i] = 0x0f000000 | (size >> 16)
         w[i + 1] = ((size & 0xffff) << 16) | 0x1901
     else:
         w[i] = size
-    ns, ne = DEV.HEAP6_MOVED if part in ('both', 'heap') else (w[s], w[e])
+    ns, ne = DEV.HEAP6_MOVED
     w[s], w[e] = ns, ne
     w[c] = 0x0f040000 | (ns >> 16)
     w[c + 1] = ((ns & 0xffff) << 16) | 0x727e
@@ -755,113 +754,6 @@ def _parse_e0_segments_any(e0):
         assert nxt == off + 12 + slen
         segs.append((off, off + 12, slen, dst, nxt)); off = nxt
     return segs
-
-
-def add_model_entry0_effects(e0, src_name_idx, new_name_idx, display_name, short_name=None,
-                             preset_id=None, dsp_cost=None, n_params=None, folder_name='NAM', drop_idx=(), ir1024_idx=None):
-    """HX Effects v3.80.0: Table 2 keeps only the rows Table 1 lists (the amp/cab/mic rows the
-    unit never shows go), and the new Table 1 and the one-item NAM folder list are written
-    into the bytes that frees, all inside the old Table 2 span."""
-    A = EFFECTS_E0
-    e0 = bytearray(e0)
-    segs = _parse_e0_segments_any(e0)
-    assert segs[A.CODE_SEG][3] == A.CODE_DST, 'not the HX Effects v3.80.0 Entry 0'
-    fo = lambda va, ln=4: _e0_vaddr_to_foff(segs, va, ln)
-    vread = lambda va, ln: bytes(e0[fo(va, ln): fo(va, ln) + ln])
-    vu32 = lambda va: struct.unpack_from('<I', e0, fo(va))[0]
-    def vwrite(va, b): e0[fo(va, len(b)): fo(va, len(b)) + len(b)] = b
-    def set_movw(va, imm):
-        rd, _ = _decode_thumb_movw(vread(va, 4)); vwrite(va, _encode_thumb_movw(rd, imm))
-
-    for p in A.TAB1_BASE_PTRS: assert vu32(p) == A.TAB1_BASE, f'Table 1 pointer at {p:#x}'
-    for i in A.TAB1_CNT_INSNS: assert _decode_thumb_movw(vread(i, 4))[1] == A.TAB1_CNT, f'movw at {i:#x}'
-    assert vu32(A.TAB2_BASE_PTR) == A.TAB2_BASE
-    for i in A.TAB2_CNT_INSNS: assert _decode_thumb_movw(vread(i, 4))[1] == A.TAB2_CNT, f'movw at {i:#x}'
-
-    t1 = bytearray(vread(A.TAB1_BASE, 12 * A.TAB1_CNT))
-    rows = [struct.unpack_from('<IHHI', t1, 12 * i) for i in range(A.TAB1_CNT)]
-    src = next((r for r in rows if r[0] == src_name_idx), None)
-    assert src, 'UI source model not in Table 1'
-    assert not any(r[0] == new_name_idx for r in rows), 'new model already in Table 1'
-    free = sorted(set(range(1, 833)) - {r[1] for r in rows})
-    pid = preset_id if preset_id is not None else free[0]
-    assert pid in free, f'preset id {pid} unavailable; free: {free[:10]}'
-    cost = src[3] if dsp_cost is None else dsp_cost
-    t1 += struct.pack('<IHHI', new_name_idx, pid, 0, cost)
-    harness = vread(A.TAB1_BASE + 12 * A.TAB1_CNT, 28)      # the 7-entry harness table that follows Table 1
-    for p in A.HARNESS_TAB_PTRS: assert vu32(p) == A.TAB1_BASE + 12 * A.TAB1_CNT, f'end/harness pointer at {p:#x}'
-
-    listed = {r[0] for r in rows}
-    t2 = vread(A.TAB2_BASE, 44 * A.TAB2_CNT)
-    drop_idx = set(drop_idx)
-    keep = [t2[44 * i: 44 * (i + 1)] for i in range(A.TAB2_CNT)
-            if struct.unpack_from('<I', t2, 44 * i)[0] not in drop_idx]
-    srow = bytearray(next(r for r in keep if struct.unpack_from('<I', r)[0] == src_name_idx))
-    struct.pack_into('<I', srow, 0, new_name_idx)
-    srow[4:20] = (short_name or display_name).encode('latin1')[:16].ljust(16, b'\0')
-    if n_params is not None:
-        struct.pack_into('<3I', srow, 24, n_params, n_params, n_params)
-    keep.append(bytes(srow))
-    new_t2 = b''.join(keep)
-
-    lptr, lcnt = vu32(A.BLIST_PTR_TAB + 16 * A.NAM_CAT), vu32(A.BLIST_CNT_TAB + 16 * A.NAM_CAT)
-    item = None
-    for k in range(lcnt):
-        it = bytearray(vread(lptr + 48 * k, 48))
-        btype, m_idx, c_idx, u12 = struct.unpack_from('<IIiH', it, 0)
-        if m_idx == src_name_idx:
-            struct.pack_into('<IIiH', it, 0, 1, new_name_idx, c_idx, pid if c_idx == -1 else u12)   # btype 1: a generic block, not an IR type
-            it[14:40] = display_name.encode('latin1')[:25].ljust(26, b'\0')
-            struct.pack_into('<2I', it, 40, 1, 0)
-            item = bytes(it); break
-    assert item, 'UI source model not in the IR browser list'
-    sub, slot = 0, 4 * A.NAM_CAT                     # IR > Single, the folder its metadata names
-    item = vread(lptr, 48 * lcnt) + item             # that list, one item longer
-    if os.environ.get('NAM_REPLACE_1024'):              # bisection: NAM in place of the 1024-sample IR item
-        lst = bytearray(vread(lptr, 48 * lcnt)); new = item[-48:]
-        k = next(k for k in range(lcnt) if struct.unpack_from('<I', lst, 48 * k + 4)[0] == ir1024_idx)
-        lst[48 * k: 48 * (k + 1)] = new; item = bytes(lst); lcnt -= 1
-    if os.environ.get('NAM_LIST_ONLY_MOVE'):
-        item = vread(lptr, 48 * lcnt); lcnt -= 1          # bisection: the stock list moved, unchanged
-
-    span = 44 * A.TAB2_CNT
-    part = os.environ.get('NAM_E0_PART')
-    if part in ('compact', 'reloc', 'rows', 't1row', 't2row'):   # bisection builds, no folder
-        new_t2 = b''.join(keep[:-1])
-        blob = new_t2
-        if part in ('reloc', 'rows'):
-            t1_va = A.TAB2_BASE + len(new_t2)
-            rows_bytes = bytes(t1) if part == 'rows' else bytes(t1[:12 * A.TAB1_CNT])
-            blob += rows_bytes + harness
-            for p in A.TAB1_BASE_PTRS: vwrite(p, struct.pack('<I', t1_va))
-            for p in A.HARNESS_TAB_PTRS: vwrite(p, struct.pack('<I', t1_va + len(rows_bytes)))
-            if part == 't1row':                              # NAM in Table 1 only, count 466
-                rows_bytes = bytes(t1)
-                blob = new_t2 + rows_bytes + harness
-                for p in A.HARNESS_TAB_PTRS: vwrite(p, struct.pack('<I', t1_va + len(rows_bytes)))
-                set_movw(A.TAB1_CNT_INSNS[4], A.TAB1_CNT + 1)
-            if part in ('rows', 't2row'):                    # with the NAM Table 2 row
-                new_t2 = b''.join(keep)
-                blob = new_t2 + rows_bytes + harness
-                for p in A.TAB1_BASE_PTRS: vwrite(p, struct.pack('<I', A.TAB2_BASE + len(new_t2)))
-                for p in A.HARNESS_TAB_PTRS: vwrite(p, struct.pack('<I', A.TAB2_BASE + len(new_t2) + len(rows_bytes)))
-                set_movw(A.TAB1_CNT_INSNS[4], A.TAB1_CNT + 1)   # the count getter only
-        vwrite(A.TAB2_BASE, blob + b'\0' * (span - len(blob)))
-        for i in A.TAB2_CNT_INSNS: set_movw(i, len(keep) - (0 if part in ('rows', 't2row') else 1))
-        print(f'[!] NAM_E0_PART={part}: Table 2 {len(keep) - 1} rows' + (f', Table 1 moved to {t1_va:#x}' if part == 'reloc' else ''))
-        return bytes(l6ia.fix_internal_crcs(bytes(e0))), pid, cost, [(slot, A.NAM_CAT, sub, 1, 0)]
-    t1_va = A.TAB2_BASE + len(new_t2)
-    list_va = t1_va + len(t1) + len(harness)
-    blob = new_t2 + bytes(t1) + harness + item
-    assert len(blob) <= span, f'{len(blob)} B needed, {span} B available'
-    vwrite(A.TAB2_BASE, blob + b'\0' * (span - len(blob)))
-    for p in A.TAB1_BASE_PTRS: vwrite(p, struct.pack('<I', t1_va))
-    for p in A.HARNESS_TAB_PTRS: vwrite(p, struct.pack('<I', t1_va + len(t1)))   # new end = the moved harness table
-    for i in A.TAB1_CNT_INSNS: set_movw(i, A.TAB1_CNT + 1)
-    for i in A.TAB2_CNT_INSNS: set_movw(i, len(keep))
-    vwrite(A.BLIST_PTR_TAB + 4 * slot, struct.pack('<I', list_va))
-    vwrite(A.BLIST_CNT_TAB + 4 * slot, struct.pack('<I', lcnt + 1))
-    return bytes(l6ia.fix_internal_crcs(bytes(e0))), pid, cost, [(slot, A.NAM_CAT, sub, lcnt + 1, list_va)]
 
 
 def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp_cost=None, n_params=None, strip_title='NAM / IR_2048'):
@@ -1307,9 +1199,6 @@ def nam_host_member(b0, comp_id, sdram_words=0):
         assert hdr[2] == 3, f'{comp_id:#x} has {hdr[2]} members, the NAM host wants 3'
         assert 0x600000 <= b0[r + 6] < 0x601000, 'member 1 is not a composite'
     assert b0[r + 7] == 1 and b0[r + 9] == 1, 'member 1 is not 1-in 1-out'
-    if os.environ.get('NAM_NO_SWAP'):
-        print('[!] NAM_NO_SWAP: member 1 left as the stock primitive')
-        return
     b0[r + 6] = 0x9c75
     b0[r + 11] = 0                  # no static init parameters
     for k in range(15, 20):         # sub-arena sizes: 0 for a primitive, as stock primitive members have
@@ -1480,12 +1369,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
         raise_amp_harness_sdram(b0_words, sdram_words)
     err = sharc_blob0_check(b0_words, DEV.BLOB0_MAX_WORDS)
     assert err is None, err
-    if os.environ.get('NAM_NO_EXTRA'):
-        print('[!] NAM_NO_EXTRA: no inits for the other members'); extra = []
-    if os.environ.get('NAM_DUP_IR'):
-        src_blob_words = list(src_blob_words); src_blob_words[tl + 1] = new_comp_id
-    else:
-        src_blob_words = nam_host_blob(new_comp_id, nam, extra)
+    src_blob_words = nam_host_blob(new_comp_id, nam, extra)
 
     added_blobs.append(src_blob_words)
     if dir_off > 6:
@@ -1682,10 +1566,6 @@ def cmd_add_model(args):
     src = find_model(info, DEV.CLONE or args.clone)
     src_name_idx = src['words'][2]
 
-    if os.environ.get('NAM_DUP_IR'):               # bisection: a plain copy of the source model
-        global NAM_PARAMS
-        NAM_PARAMS = tuple((q['slot'], src['name'], q['name'], 5 + k, None, None) for k, q in enumerate(src['params']))
-        print('[!] NAM_DUP_IR: the source model duplicated, its own parameters and blob')
     nam = nam_params(e3, info)
     e4 = get_entry_swapped(l6ia_bytes, 4)
     new_e4, blob, new_comp_id = add_model_entry4(e4, src['blob_index'], nam, args.sdram_words)
@@ -1761,20 +1641,16 @@ def cmd_add_model(args):
         t1_addr = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, A.TAB1_BASE_PTRS[0]))[0]
         _, t1_cnt = _decode_thumb_movw(new_e0[_e0_vaddr_to_foff(segs_chk, A.TAB1_CNT_INSN):][:4])
         last_t1 = struct.unpack_from('<IHHI', new_e0, _e0_vaddr_to_foff(segs_chk, t1_addr + 12 * (t1_cnt - 1), 12))
-        assert os.environ.get('NAM_E0_PART') or last_t1 == (new_name_idx, new_pid, 0, dsp_cost)
+        assert last_t1 == (new_name_idx, new_pid, 0, dsp_cost)
         t2_addr = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, A.TAB2_BASE_PTR))[0]
         _, t2_cnt = _decode_thumb_movw(new_e0[_e0_vaddr_to_foff(segs_chk, A.TAB2_CNT_INSN):][:4])
         last_t2_idx = struct.unpack_from('<I', new_e0, _e0_vaddr_to_foff(segs_chk, t2_addr + 44 * (t2_cnt - 1), 44))[0]
-        assert os.environ.get('NAM_E0_PART') or last_t2_idx == new_name_idx
+        assert last_t2_idx == new_name_idx
         menus_str = ', '.join(f'({cat},{sub})->{cnt}' for _, cat, sub, cnt, _ in blist_addrs)
         print(f"[+] Entry 0: preset_id={new_pid} (<= 832), dsp_cost={dsp_cost}, "
               f"Table 1 ({t1_cnt} rows @ {t1_addr:#x}), Table 2 ({t2_cnt} rows @ {t2_addr:#x}), "
               f"UI browser lists [{menus_str}]; {len(e0):#x} -> {len(new_e0):#x} bytes")
 
-    for k in os.environ.get('NAM_SKIP', '').split(','):
-        if k and int(k) in replaced:
-            del replaced[int(k)]
-            print(f'[!] NAM_SKIP: Entry {k} left stock')
     new_l6ia, old_end, new_end = l6ia.rebuild_archive(l6ia_bytes, replaced)
     donor = args.input if is_hxf else args.donor
     save_l6ia_to_any(new_l6ia, args.output, donor_hxf=donor)
