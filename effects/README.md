@@ -81,6 +81,10 @@ than 200 ms; two interleaved instances equal each alone; identical output for bl
 
 ### Click on the SHARC (`metronome/sharc/`)
 
+**Works on the unit (2026-11-03):** `build_click.py` → Delay > Mono > "Click" (the mono Mod/Chorus
+Echo's slot): all six knobs shown and working, footswitch bypass working, timing and sounds as in the
+reference. That image has no NAM block; NAM + Click in one image is a separate step.
+
 `click_kernel.asm` is a hand-written port of `metronome.c` for the HX Effects' SHARC, assembled with
 `tools/sharc/sasm.py`. `click_kernel.py --check` (or `make sharc-check`) runs it in `tools/sharc/ssim.py`
 and calls the C reference through `out/libfx.so`, and requires **every output word to be identical**:

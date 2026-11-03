@@ -1,7 +1,7 @@
 # Handover: NAM A2 Lite on the Line 6 HX Effects
 
 Working state as of 2026‑11‑03 (first written 2026‑11‑01). A working, tested firmware build exists,
-and a USB flasher that installs it without Line 6 Updater. This note is for picking the
+a USB flasher that installs it without Line 6 Updater, and a working custom metronome block (Click). This note is for picking the
 project up in Claude Code (or anywhere) without re‑deriving anything.
 
 ## What exists
@@ -56,6 +56,28 @@ harness table at `0x28102650`; count getter `movw #465` at `0x28100b5c` (the oth
 (we used `0x2810021c` = Distortion onward), counts `+0xf0`, 13 categories × 4, IR = cat 9 (our index),
 subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `btype` per item is a block‑type enum
 (IR = 0x13/0x14/0x15), not a category.
+
+## Custom effects (branch `metronome`, from `custom-effects`)
+
+- **Click** (preset-block metronome) **works on the unit**: `python3 build_click.py` →
+  `build/HX_Effects_v3.80.0_Click.hxf`, then `tools/flash.py flash` it. It takes over the **mono
+  Mod/Chorus Echo** delay (Delay > Mono > "Click"); this image has **no NAM**. Tempo 20.0–300.0, Beats/Bar,
+  Accent, Sound, Level, Subdivision; footswitch bypass works.
+- Code: C99 reference + tests in `effects/` (`make -C effects test`), SHARC kernel in
+  `effects/metronome/sharc/` (`make -C effects sharc-check`: bit-exact against the C reference in ssim),
+  image read-back check `tools/verify/verify_click.py`. Geiger (bitcrusher) exists as a C reference only.
+  Baseline audit: `docs/baseline-audit.md`.
+- Hard-won rules for any custom kernel (details in `effects/README.md`):
+  1. Restore **I1–I3** on exit (NAM does via B1–B3). Leaving I1/I2 advanced froze knobs and footswitches.
+  2. **DM(3) of the instance block is not ours**: non-zero whenever the block is on; never write it,
+     and don't treat it as bypass. Write nothing in the instance block except your slot word (12);
+     keep state in your own slots (NAM's scheme).
+  3. **Don't host a non-IR effect on an IR block.** HX draws IR pages (knob 1 = IR selector). A delay
+     host gets ordinary pages, and its bypass works.
+  4. Knob records: floats on Clarity's records (Bass, ChVol…) reach the kernel; a chorus "Mix" record
+     did not. Lists must stay short (stock max 21 entries); a 281-entry list broke page drawing.
+- Next: Tempo on a delay **Time** knob with tempo sync (tap tempo/global BPM); then **NAM + Click in one
+  image** (needs PM space beside NAM, a second free primitive, slot data in Block 3).
 
 ## Why the takeover approach
 
