@@ -24,7 +24,7 @@ the IR selector, which made a metronome unusable.)
 
   kernel  effects/metronome/sharc/click_kernel.asm (checked bit for bit against the C reference in
           the simulator first, unless --no-check)
-  knobs   Tempo (20..300 BPM), Beats/Bar (2/4..5/4), Accent (Off, 1..12 dB), Sound (Click, Wood,
+  knobs   Tempo (20.0..300.0 BPM), Beats/Bar (2/4..5/4), Accent (Off, 1..12 dB), Sound (Click, Wood,
           Beep), Level (0..100 %), Subdivision (1/4, 1/8, 1/8T, 1/16)
 
 This image has no NAM block. Rebuild with build_effects.py and flash that to go back.
@@ -55,8 +55,9 @@ DSP_COST = 300
 # Knob: (slot, pid = instance word, template model, template param, display, short, kind, range, default)
 LIST = 'list'
 CLICK_PARAMS = (
-    (1, 5,  'HD2_DelayAdriaticDelayMono', 'BBD Size', 'Tempo', 'Tempo', LIST,
-     {k: f'{k} BPM' for k in range(20, 301)}, 120),
+    # Tempo as a float (one decimal shown) on NAM's Clarity 'Bass' record; as a 281-entry list
+    # (stock lists have at most 21 entries) the page holding it was not drawn
+    (1, 5,  'HD2_AmpLine6Clarity', 'Bass', 'Tempo', 'Tempo', 'tenths', (20.0, 300.0), 120.0),
     (2, 6,  'HD2_DelayMultiPassMono', 'Pattern', 'Beats/Bar', 'Beats', LIST,
      {2: '2/4', 3: '3/4', 4: '4/4', 5: '5/4'}, 4),
     (3, 7,  'HD2_TremoloPatternMono', 'Step1', 'Accent', 'Accent', LIST,

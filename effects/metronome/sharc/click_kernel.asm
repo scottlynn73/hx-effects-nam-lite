@@ -21,7 +21,7 @@
 //   through. A slot is {owner I0, last call count, the state words}.
 //
 // Knob words (ABI of this port; the firmware's Entry 3 must match it):
-//   DM(5) Tempo int BPM     DM(6) Beats/Bar int    DM(7) Accent int dB
+//   DM(5) Tempo float BPM   DM(6) Beats/Bar int    DM(7) Accent int dB
 //   DM(8) Sound int         DM(9) Level float 0..1 DM(10) Subdivision int
 // State: DM(ST_.., I3), I3 = this instance's slot.
 
@@ -136,16 +136,16 @@ k_on:
 
     // ---- knobs, clamped as fx_param_clamp does (finite values)
 k_knobs:
-    R0 = DM(5, I0);                     // Tempo, whole BPM 20..300
-    R8 = 20;
-    R0 = MAX(R0, R8);
-    R8 = 300;
-    R0 = MIN(R0, R8);
-    R8 = LSHIFT R0 BY 6;                // x 100 = x 64 + x 32 + x 4
-    R9 = LSHIFT R0 BY 5;
-    R8 = R8 + R9;
-    R9 = LSHIFT R0 BY 2;
-    R0 = R8 + R9;                       // BPM x 100
+    F0 = DM(5, I0);                     // Tempo, float BPM 20..300 (0.01 BPM steps)
+    F8 = 20.0;
+    F0 = MAX(F0, F8);
+    F8 = 300.0;
+    F0 = MIN(F0, F8);
+    F8 = 100.0;
+    F0 = F0 * F8;
+    F8 = 0.5;
+    F0 = F0 + F8;
+    R0 = TRUNC F0;                      // BPM x 100
 
     R1 = DM(6, I0);                     // Beats/Bar 2..5
     R8 = 2;

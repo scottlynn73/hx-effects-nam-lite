@@ -34,7 +34,7 @@ _ST = ['CHK', 'STARTED', 'FIRE', 'ACC', 'SUBIDX', 'BEAT', 'ACTIVE', 'SOUND', 'C0
 STATE = {f'ST_{n}': 2 + k for k, n in enumerate(_ST)}          # offsets in a slot, after OWNER and LAST
 NSLOTS, NSTATE, SLOTW, STALE, P_SLOT = 8, len(_ST), 2 + len(_ST), 64, 12
 KNOB = dict(tempo=5, meter=6, accent=7, sound=8, level=9, subdiv=10)
-INT_KNOBS = {'tempo', 'meter', 'accent', 'sound', 'subdiv'}
+INT_KNOBS = {'meter', 'accent', 'sound', 'subdiv'}
 PARAM_ORDER = ['tempo', 'meter', 'accent', 'sound', 'level', 'subdiv']    # = metronome.h M_*
 MAX_CYCLES = 3000                         # per 16-sample call; the NAM kernel's budget is 33,000
 
@@ -309,10 +309,10 @@ def check(seconds=2.0):
     print(f'code {CODE:#x}..{end:#x} ({end - CODE} instructions), data {data[0]:#x}..{data[1]:#x}')
     cases = [
         dict(tempo=120, meter=4, accent=6, sound=0, level=0.5, subdiv=1),
-        dict(tempo=137, meter=3, accent=12, sound=1, level=1, subdiv=2),
+        dict(tempo=137.5, meter=3, accent=12, sound=1, level=1, subdiv=2),
         dict(tempo=300, meter=5, accent=0, sound=2, level=0.75, subdiv=4),
         dict(tempo=20, meter=2, accent=3, sound=1, level=0.3, subdiv=3),
-        dict(tempo=97, meter=4, accent=12, sound=0, level=0, subdiv=1),          # level 0: dry
+        dict(tempo=97.31, meter=4, accent=12, sound=0, level=0, subdiv=1),          # level 0: dry
         dict(tempo=500, meter=9, accent=40, sound=7, level=2.5, subdiv=0),          # out of range: clamped
     ]
     total = 0
@@ -338,9 +338,9 @@ def check(seconds=2.0):
     xa, xb = signal(nblk * 16, 11), signal(nblk * 16, 12)
     for b in range(nblk):
         if b % 300 == 0:
-            ka = dict(tempo=r.randint(20, 300), meter=r.randint(2, 5), accent=r.randint(0, 12),
+            ka = dict(tempo=round(r.uniform(20, 300), 2), meter=r.randint(2, 5), accent=r.randint(0, 12),
                       sound=r.randint(0, 2), level=round(r.uniform(0, 1), 3), subdiv=r.randint(1, 4))
-            kb = dict(tempo=r.randint(20, 300), meter=r.randint(2, 5), accent=r.randint(0, 12),
+            kb = dict(tempo=round(r.uniform(20, 300), 2), meter=r.randint(2, 5), accent=r.randint(0, 12),
                       sound=r.randint(0, 2), level=round(r.uniform(0, 1), 3), subdiv=r.randint(1, 4))
             rig.knobs(ia, ka)
             rig.knobs(ib, kb)

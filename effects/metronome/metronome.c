@@ -6,7 +6,7 @@
 #define PI 3.14159265358979323846
 
 static const FxParamDesc PARAMS[M_NPARAMS] = {
-    { "tempo",  "Tempo",       FX_INTEGER,    20.0f, 300.0f, 120.0f, "BPM", "immediate" },
+    { "tempo",  "Tempo",       FX_CONTINUOUS, 20.0f, 300.0f, 120.0f, "BPM", "immediate (0.01 BPM steps)" },
     { "meter",  "Beats/Bar",   FX_INTEGER,    2.0f,  5.0f,   4.0f,   "beats", "immediate" },
     { "accent", "Accent",      FX_INTEGER,    0.0f,  12.0f,  6.0f,   "dB", "immediate" },
     { "sound",  "Sound",       FX_INTEGER,    0.0f,  2.0f,   0.0f,   "", "immediate" },

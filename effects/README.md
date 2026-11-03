@@ -54,14 +54,14 @@ A metronome as an ordinary **preset block**: it lives in a preset, takes one blo
 block's bypass/footswitch. Not a global metronome. The guitar passes at exactly unity gain; a
 synthesised click is added.
 
-Six parameters: Tempo (20..300 BPM in whole BPM, quarter-note beats), Beats/Bar (2..5: 2/4,
+Six parameters: Tempo (20..300 BPM, quarter-note beats, 0.01 BPM resolution), Beats/Bar (2..5: 2/4,
 3/4, 4/4, 5/4), Accent (0..12 dB on beat 1; 0 dB = no accent, same sound as other beats), Sound
 (click, wood, beep), Level (0..1, shown as % on the unit, linear, peak 1.0), Subdivision (1..4 per beat: quarters, eighths,
 triplets, sixteenths; subdivision clicks are lower and about 8 dB quieter).
 
 - **Timing is exact.** The tempo phase is an integer: it gains BPM x 100 x subdivision per sample and
-  ticks at sample rate x 6000 (the x 100 is kept from when Tempo had 0.01 BPM steps), so tick k lands on the first sample at or after k x 60 / BPM s, for
-  ever. No floating-point drift (tested over 10 minutes at 20, 60, 120, 137 and 300 BPM).
+  ticks at sample rate x 6000, so tick k lands on the first sample at or after k x 60 / BPM s, for
+  ever. No floating-point drift (tested over 10 minutes at 20, 60, 120, 137.5 and 300 BPM).
 - **Bar position:** the first sample after `reset()` is beat 1, accented ("restart on enable"). Whether
   the unit re-creates or resets a block when it is enabled is not known yet; if it does not, the block
   will resume its running count instead. Tempo changes keep the phase within the beat.
@@ -97,7 +97,7 @@ computed in double and rounded once (the port's tables are generated the same wa
 (a 13-entry table), the beep's release is a fixed per-sample
 step, and the C build uses `-ffp-contract=off` (no fused multiply-add).
 
-The port's own ABI, which the firmware gives it (`build_click.py`): knob words DM(5) Tempo (int
+The port's own ABI, which the firmware gives it (`build_click.py`): knob words DM(5) Tempo (float
 BPM), DM(6) Beats/Bar (int), DM(7) Accent (int dB), DM(8) Sound (int), DM(9) Level (float 0..1),
 DM(10) Subdivision (int). What the hardware builds taught (2026-11-03):
 
@@ -116,4 +116,5 @@ DM(10) Subdivision (int). What the hardware builds taught (2026-11-03):
   (fresh or taken-over blocks claim a free slot, else one idle for 64 calls, and start from beat 1;
   a ninth simultaneous block passes its input through).
 - **Level is built on NAM's ChVol record.** On a chorus's "Mix" record its value never reached the
-  kernel. Tempo is a 20..300 BPM list knob.
+  kernel. Tempo is a float knob too (20.0..300.0, one decimal shown): as a 281-entry list (stock lists have at most
+  21) the page holding it was not drawn.
