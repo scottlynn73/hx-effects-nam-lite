@@ -86,7 +86,7 @@ than 200 ms; two interleaved instances equal each alone; identical output for bl
 Echo's slot): all knobs shown and working, footswitch bypass working, timing and sounds as in the
 reference. That image has no NAM block; NAM + Click in one image is a separate step.
 
-**Tempo from the delay's own Time knob (built, not yet tried on the unit):** Click now uses Mod/Chorus
+**Tempo from the delay's own Time knob (works on the unit, 2026-11-03: tap tempo, global BPM, ms mode):** Click now uses Mod/Chorus
 Echo's Time, note-value and Tempo Sync parameters. HX shows Time in ms, or as a note value when synced
 (pressing the knob toggles it), and synced it follows tap tempo and the global BPM; the default is
 synced, 1/4. Stock delays work out the synced time in their DSP parameter map (nodes 0x2a and 0x54);
