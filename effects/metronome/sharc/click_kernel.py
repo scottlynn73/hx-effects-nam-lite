@@ -69,13 +69,8 @@ def constants():
                 accent=[f32(10.0 ** (k / 20.0)) for k in range(13)], mix2=[0.0, f32(WOOD_MIX), 0.0])
 
 
-BYPASS = """    // ---- bypassed (DM(3) set by the host): pass through; start again at beat 1 after
-    R8 = DM(3, I0);
-    R8 = PASS R8;
-    IF EQ JUMP k_on;
-    R8 = 0;
-    DM(ST_STARTED, I3) = R8;
-    JUMP k_pass;
+BYPASS = """    // ---- DM(3): non-zero the whole time the block is on (probe builds on the unit); the
+    //      footswitch did not change it. Not a usable bypass flag: ignored, never written.
 k_on:
 """
 PROBE = """    // ---- PROBE (diagnostic build), never writes DM(3):
@@ -228,7 +223,7 @@ class Rig:
         i0 = 0xB3000 + 0x400 * k
         for a in range(145):
             self.sim.wr(i0 + a, 0)
-        # DM(3) 0: enabled (the bypass flag, stock 0x822)
+        self.sim.wr(i0 + 3, 1)                       # as on the unit: non-zero while the block is on
         return i0
 
     def knobs(self, i0, knobs):
@@ -398,28 +393,20 @@ def check(seconds=2.0):
     rig2.call(insts[0], x, 'returning block')
     print(f'  {NSLOTS} slots: a 9th block passes through; a stale slot goes to the next block')
 
-    # bypass: DM(3) set -> the input exactly, DM(3) untouched; on again -> beat 1 (a fresh reference)
+    # DM(3) as the unit has it (non-zero while on, any value): ignored, never written
     kn = dict(tempo=200, meter=4, accent=12, sound=1, level=0.9, subdiv=2)
     rig3 = Rig(secs, syms, data, seed=9)
     i0 = rig3.inst(0)
     rig3.knobs(i0, kn)
-    x = signal(900 * 16, 31)
+    x = signal(600 * 16, 31)
     st = ref.new()
-    for b in range(900):
+    for b in range(600):
+        rig3.sim.wr(i0 + 3, (1, 2, 0x12345, 0)[b // 150])
         blk = x[16 * b:16 * b + 16]
-        if b in (300, 650):
-            rig3.bypass(i0, True)
-        if b in (500, 800):
-            rig3.bypass(i0, False)
-            st = ref.new()
-        got = rig3.call(i0, blk, f'bypass block {b}')
-        if 300 <= b < 500 or 650 <= b < 800:
-            if got != blk or rig3.sim.rd(i0 + 3) != 1:
-                raise AssertionError(f'bypassed block {b}: output is not the input, or DM(3) changed')
-        elif got != ref.process(st, kn, [ssim.b2f(v) for v in blk]):
-            raise AssertionError(f'bypass test block {b}: differs from the reference')
-    total += 900 * 16
-    print('  bypass: input passed exactly, DM(3) never written; switched on again it restarts at beat 1')
+        if rig3.call(i0, blk, f'DM(3) block {b}') != ref.process(st, kn, [ssim.b2f(v) for v in blk]):
+            raise AssertionError(f'DM(3) test block {b}: the kernel reacted to DM(3)')
+    total += 600 * 16
+    print('  DM(3) ignored (0, 1, 2, other) and never written')
     worst, mean = max(rig.cycles), sum(rig.cycles) / len(rig.cycles)
     print(f'{total} samples identical to the reference; cycles per 16-sample call: worst {worst}, mean {mean:.0f} '
           f'(budget {MAX_CYCLES}; about 150,000 per call at 450 MHz)')

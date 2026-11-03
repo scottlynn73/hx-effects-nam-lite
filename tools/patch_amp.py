@@ -798,9 +798,10 @@ def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp
                 it[14:40] = display_name.encode('latin1')[:25].ljust(26, b'\0')
                 vwrite(va, bytes(it)); hits.append(slot)
     assert hits, 'target model in no browser list'
-    title = b'Impulse Response\0'                 # the IR category's default strip title (one string)
-    assert bytes(e0).count(title) == 1, 'the IR title string is not where expected'
-    e0[e0.index(title): e0.index(title) + len(title)] = strip_title.encode('latin1')[:16].ljust(len(title), b'\0')
+    if strip_title is not None:                   # None: leave the IR category's title alone
+        title = b'Impulse Response\0'             # the IR category's default strip title (one string)
+        assert bytes(e0).count(title) == 1, 'the IR title string is not where expected'
+        e0[e0.index(title): e0.index(title) + len(title)] = strip_title.encode('latin1')[:16].ljust(len(title), b'\0')
     return bytes(l6ia.fix_internal_crcs(bytes(e0))), pid, cost, hits
 
 
@@ -1403,7 +1404,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
     return out, new_blob_idx, new_comp_id
 
 
-def add_model_entry3(e3, src, new_name, display_name, blob_index, nam):
+def add_model_entry3(e3, src, new_name, display_name, blob_index, nam, meta_set=None):
     """Entry 3 with one more model: a copy of `src` (a parse_entry3_full model)
     under a new internal name and displayName, with the next model ID and the
     parameters `nam` (nam_params).
@@ -1468,6 +1469,15 @@ def add_model_entry3(e3, src, new_name, display_name, blob_index, nam):
         if ks == i_key:
             assert kt == 7, 'displayName is not a string record'
             struct.pack_into('<3I', meta, 12 * k, ks, kt, i_disp)
+    for key, val in (meta_set or {}).items():           # other string fields of src's metadata
+        hit = False
+        for k in range(d[0]):
+            ks, kt, kv = struct.unpack_from('<3I', meta, 12 * k)
+            if ks == names.get(key):
+                assert kt == 7, f'{key} is not a string record'
+                struct.pack_into('<3I', meta, 12 * k, ks, kt, string(val))
+                hit = True
+        assert hit, f'{src["name"]} has no metadata field {key}'
 
     # one state per parameter map input node (nam_host_blob: node k for nam[k])
     m_states = b''.join(struct.pack('<5I', 0, 0x80b98, string(p['state']), p['type'], k)

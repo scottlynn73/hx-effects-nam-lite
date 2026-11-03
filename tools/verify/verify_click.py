@@ -46,8 +46,15 @@ check(prim is not None and prim[0] == 0x9c75 and prim[5] == syms['CLICK_ENTRY'] 
 # Entry 3: the knobs as the unit will read them
 e3 = pa.get_entry_swapped(img, 3)
 info = pa.parse_entry3_full(e3)
-m = pa.find_model(info, 'HD2_ImpulseResponse1024Mono')
-check(m['displayName'] == 'Click', f"model 72 displayName {m['displayName']!r}")
+m = pa.find_model(info, build_click.TAKEOVER)
+md = m.get('meta') or {}
+check(m['displayName'] == 'Click' and md.get('category') == 'delay' and md.get('subcategory') == 'mono'
+      and md.get('displayNameShort') == 'Click' and md.get('displayParamCount') == '6',
+      f"{build_click.TAKEOVER} (model {m['model_id']}) is Click, Delay > Mono, 6 knobs shown: {md}")
+stock3 = pa.parse_entry3_full(pa.get_entry_swapped(stock, 3))
+ir = pa.find_model(info, 'HD2_ImpulseResponse1024Mono'); ir0 = pa.find_model(stock3, 'HD2_ImpulseResponse1024Mono')
+check(ir['displayName'] == ir0['displayName'] and ir['blob_index'] == ir0['blob_index'] and len(ir['params']) == len(ir0['params']),
+      'the 1024 IR block is stock again')
 def f(x): return struct.unpack('<f', struct.pack('<I', x))[0]
 ps = sorted(m['params'], key=lambda p: p['slot'])
 for p, c in zip(ps, build_click.CLICK_PARAMS):

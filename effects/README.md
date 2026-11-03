@@ -104,14 +104,16 @@ DM(10) Subdivision (int). What the hardware builds taught (2026-11-03):
 - **Put I1-I3 back on exit.** The NAM kernel does (restoring B1-B3 reloads them). Returning with
   I1/I2 advanced past the buffers froze the unit's knobs and footswitches while audio carried on.
   The check now requires every index register to come back unchanged; the old kernel fails it.
-- **DM(3) is the block's bypass flag.** Run in ssim, stock primitive 0x822 (whose control functions
-  the hook copies) copies its input to its output while DM(3) != 0 and never writes it. Click does the
-  same and restarts the bar at beat 1 when switched back on. The NAM kernel instead clears DM(3)
-  (it took it for a knob-write flag), which is why the footswitch lit but did not bypass Click; NAM's
-  bypass is probably defeated the same way.
+- **DM(3) is not a usable bypass flag.** Probe builds showed it non-zero the whole time the block is
+  on, unchanged by the footswitch (stock 0x822's kernel passes audio through while it is non-zero,
+  so it means something else for a block like this). The kernel ignores it and never writes it.
+- **Don't host a non-IR effect on an IR block.** HX draws an IR block's own page layout: knob 1 is
+  the IR selector (it scrolled the stored IRs whatever its label), some knobs never appear, and
+  anything but an IR number on knob 1 froze the controls. Click now takes over the mono
+  Mod/Chorus Echo delay, which gets ordinary knob pages (`build_click.py`).
 - **Leave the instance block alone.** Click writes only DM(12) (its slot number, as NAM's word 12)
   and keeps its state in one of 8 slots in Block 3, claimed per block as NAM claims its slots
   (fresh or taken-over blocks claim a free slot, else one idle for 64 calls, and start from beat 1;
   a ninth simultaneous block passes its input through).
-- **Tempo is a list knob (20..300 BPM).** As a float with the "tenths" display (borrowed from an EQ's
-  Q) it froze the unit's controls when turned; the four list knobs and the percent knob worked.
+- **Level is built on NAM's ChVol record.** On a chorus's "Mix" record its value never reached the
+  kernel. Tempo is a 20..300 BPM list knob.

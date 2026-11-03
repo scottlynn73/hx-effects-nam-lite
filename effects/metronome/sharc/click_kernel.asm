@@ -10,10 +10,9 @@
 // Lessons from the hardware builds:
 // - I1-I3 are put back on exit (the NAM kernel does, through B1-B3). Returning with I1/I2
 //   advanced froze the unit's controls.
-// - DM(3, I0) is the block's bypass flag. Stock primitive 0x822, whose control functions
-//   this hook copies, copies input to output while DM(3) != 0 and never writes it (run
-//   in ssim). So does Click; switching back on restarts the bar at beat 1. (NAM's kernel
-//   took DM(3) for a knob-write flag and cleared it, which defeats the footswitch.)
+// - DM(3, I0) is not ours: on the unit it is non-zero the whole time the block is on and
+//   the footswitch leaves it alone (probe builds). Stock 0x822's kernel passes audio through
+//   while it is non-zero, so its meaning for a block like this one is unknown. Never written.
 // - The instance block is otherwise left alone: only the knob words are read, and only
 //   DM(P_SLOT = 12) is written (NAM's own words 12..14). The state lives in
 //   one of NSLOTS slots in Block 3, claimed as NAM claims its slots: a fresh block
@@ -117,13 +116,8 @@ c_zero:
 c_have:
     DM(S_LAST, I3) = R9;
 
-    // ---- bypassed (DM(3) set by the host): pass through; start again at beat 1 after
-    R8 = DM(3, I0);
-    R8 = PASS R8;
-    IF EQ JUMP k_on;
-    R8 = 0;
-    DM(ST_STARTED, I3) = R8;
-    JUMP k_pass;
+    // ---- DM(3): non-zero the whole time the block is on (probe builds on the unit); the
+    //      footswitch did not change it. Not a usable bypass flag: ignored, never written.
 k_on:
 
     // ---- first call of this instance: beat 1 on its first sample (reset())

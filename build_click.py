@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build HX Effects firmware 3.80.0 with the Click metronome block (instead of NAM), for a hardware test.
+"""Build HX Effects firmware 3.80.0 with the Click metronome block, for a hardware test.
 
 usage: python3 build_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--no-check] [--diag-nam-knobs]
 
@@ -16,9 +16,11 @@ usage: python3 build_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] 
                   Subdivision and Sound ignored).
                   Writes build/HX_Effects_v3.80.0_Click_probe.hxf.
 
-The same takeover as build_effects.py: Click becomes the 1024-sample IR block (IR > Single > "Click";
-the 2048 IR block stays), on a copy of the 2048 IR block's graph with its convolution replaced by
-primitive 0x9c75. Only the kernel and the knobs differ:
+Click takes over the mono Mod/Chorus Echo delay (Delay > Mono > "Click"; the stereo Mod/Chorus Echo
+and every other delay stay), so the unit draws it with ordinary knob pages. Its DSP graph is a copy of
+the 2048 IR block's (one in, one out) with the convolution replaced by primitive 0x9c75. (The first
+builds took over the 1024 IR block as NAM does; HX draws an IR block's own page layout, with knob 1 as
+the IR selector, which made a metronome unusable.)
 
   kernel  effects/metronome/sharc/click_kernel.asm (checked bit for bit against the C reference in
           the simulator first, unless --no-check)
@@ -41,10 +43,11 @@ sys.path.insert(0, os.path.join(TOOLS, 'sharc'))
 sys.path.insert(0, os.path.join(HERE, 'effects', 'metronome', 'sharc'))
 
 STOCK_MD5 = '7c2ebdf1bffb6bcc5f89dda97f91e40c'
-TAKEOVER = 'HD2_ImpulseResponse1024Mono'
+TAKEOVER = 'HD2_DelayModChorusEchoMono'          # the stock model Click becomes
+IR_TAKEOVER = 'HD2_ImpulseResponse1024Mono'      # the diagnostic build's (NAM's) target
 CLONE = 'HD2_ImpulseResponse2048Mono'
 NAME, DISPLAY, SHORT = 'HD2_ClickMetronome', 'Click', 'Click'
-STRIP_TITLE = 'Click / IR_2048'
+STRIP_TITLE = None                               # the IR category's title is left alone
 # Measured worst case 1,361 of ~150,000 cycles per call (0.9 %); stock costs look like hundredths
 # of a per cent, so ~91. Declared with a 3x margin.
 DSP_COST = 300
@@ -52,15 +55,13 @@ DSP_COST = 300
 # Knob: (slot, pid = instance word, template model, template param, display, short, kind, range, default)
 LIST = 'list'
 CLICK_PARAMS = (
-    # Knob 1 of an IR-type block is drawn as the IR selector (shown large on page 1). Floats and a
-    # 281-entry list there froze the unit's controls, so it holds the short Sound list instead.
-    (1, 8,  'HD2_FM4SynthOMatic', 'Wave', 'Sound', 'Sound', LIST, {0: 'Click', 1: 'Wood', 2: 'Beep'}, 0),
-    (2, 5,  'HD2_DelayAdriaticDelayMono', 'BBD Size', 'Tempo', 'Tempo', LIST,
+    (1, 5,  'HD2_DelayAdriaticDelayMono', 'BBD Size', 'Tempo', 'Tempo', LIST,
      {k: f'{k} BPM' for k in range(20, 301)}, 120),
-    (3, 6,  'HD2_DelayMultiPassMono', 'Pattern', 'Beats/Bar', 'Beats', LIST,
+    (2, 6,  'HD2_DelayMultiPassMono', 'Pattern', 'Beats/Bar', 'Beats', LIST,
      {2: '2/4', 3: '3/4', 4: '4/4', 5: '5/4'}, 4),
-    (4, 7,  'HD2_TremoloPatternMono', 'Step1', 'Accent', 'Accent', LIST,
+    (3, 7,  'HD2_TremoloPatternMono', 'Step1', 'Accent', 'Accent', LIST,
      {k: ('Off' if k == 0 else f'{k} dB') for k in range(13)}, 6),
+    (4, 8,  'HD2_FM4SynthOMatic', 'Wave', 'Sound', 'Sound', LIST, {0: 'Click', 1: 'Wood', 2: 'Beep'}, 0),
     # Level on NAM's ChVol record (proven to reach the kernel); on Chorus 'Mix' it never arrived
     (5, 9,  'HD2_AmpLine6Clarity', 'ChVol', 'Level', 'Level', 'percent', (0.0, 1.0), 0.5),
     (6, 10, 'HD2_DelayCrissCrossMono', 'Shape', 'Subdivision', 'Subdiv', LIST,
@@ -156,11 +157,15 @@ def main():
     e4 = pa.get_entry_swapped(l6ia_bytes, 4)
     info = pa.parse_entry3_full(e3)
     src_m = pa.find_model(info, CLONE)
-    tgt = pa.find_model(info, TAKEOVER)
+    tgt = pa.find_model(info, IR_TAKEOVER if diag else TAKEOVER)
     params = pa.nam_params(e3, info) if diag else click_params(pa, e3, info)
     # diagnostic: everything but the kernel exactly as build_effects.py makes it (names, cost, title)
     name, display, cost_decl, title = ('HD2_AmpNAMLite', 'NAM A2 Lite', 2700, 'NAM / IR_2048') if diag else \
         (NAME, DISPLAY, DSP_COST, STRIP_TITLE)
+    # Entry 3's new model copies the target's own metadata (category, subcategory, ...) except
+    # for an IR target, where it copies the graph source's as NAM does
+    meta_src, meta_set = (src_m, None) if diag else \
+        (tgt, {'displayNameShort': SHORT, 'displayParamCount': str(len(params))})
 
     # 2. Entry 4: the host graph (the 2048 IR block's, member 1 -> primitive 0x9c75)
     new_e4, blob, comp = pa.add_model_entry4(e4, src_m['blob_index'], params, 0)
@@ -172,7 +177,7 @@ def main():
     e2_raw, _ = pa.expand_sharc_blob0_buffer(e2_raw)
 
     # 4. Entry 3: the model, its descriptor copied over the takeover target's
-    new_e3, new_id, _ = pa.add_model_entry3(e3, src_m, name, display, blob, params)
+    new_e3, new_id, _ = pa.add_model_entry3(e3, meta_src, name, display, blob, params, meta_set=meta_set)
     new_e3 = bytearray(new_e3)
     ms = pa.parse_entry3_full(bytes(new_e3))['models']
     d_new = struct.unpack_from('<14I', new_e3, ms[new_id]['off'])
@@ -185,7 +190,7 @@ def main():
     assert chk['displayName'] == display and chk['blob_index'] == blob and len(chk['params']) == len(params)
     for p, q in zip(sorted(chk['params'], key=lambda x: x['slot']), sorted(params, key=lambda x: x['slot'])):
         assert (p['name'], p['type'], p['slot']) == (q['name'], q['type'], q['slot'])
-    print(f'[+] Entry 3: {TAKEOVER} (model {tgt["model_id"]}) now carries {display}: '
+    print(f'[+] Entry 3: {tgt["name"]} (model {tgt["model_id"]}) now carries {display}: '
           f'{len(params)} knobs{" (NAM\'s records, diagnostic)" if diag else ""}')
 
     # 5. Entry 0: cost, counts, names, strip title
