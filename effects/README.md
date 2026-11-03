@@ -78,3 +78,28 @@ input, otherwise output = input + click (within 1e-6) with a peak of at most 1.0
 untouched between clicks; random knob changes (including NaN) and resets for two minutes give only
 finite, bounded output, no two ticks closer than the fastest possible interval, and no voice longer
 than 200 ms; two interleaved instances equal each alone; identical output for block sizes 1/16/37/4096.
+
+### Click on the SHARC (`metronome/sharc/`)
+
+`click_kernel.asm` is a hand-written port of `metronome.c` for the HX Effects' SHARC, assembled with
+`tools/sharc/sasm.py`. `click_kernel.py --check` (or `make sharc-check`) runs it in `tools/sharc/ssim.py`
+and calls the C reference through `out/libfx.so`, and requires **every output word to be identical**:
+six fixed settings (including Level 0 and out-of-range knobs) and two interleaved instances with all
+knobs moving every 100 ms. Each call is also held to the register contract the NAM kernel's rig uses
+(R0-R15, the alternate registers, the DAG registers and MODE1 unchanged; no loop or PC stack left),
+and every memory write must land in the output buffer, the instance's state words or the save area.
+
+Measured (6.5 s per case, 2,496,000 samples): bit-identical; 283 instructions; worst 1,361 and mean
+about 620 cycles per 16-sample call, under 1 % of the roughly 150,000 a call has at 450 MHz.
+
+For the match to be exact the reference avoids anything the port can't reproduce: constants are
+computed in double and rounded once (the port's tables are generated the same way), Accent is whole dB
+(a 13-entry table), Level is scaled by x 0.01 (no division), the beep's release is a fixed per-sample
+step, and the C build uses `-ffp-contract=off` (no fused multiply-add).
+
+The port's own ABI, which the firmware integration must give it: knob words DM(5) Tempo (float),
+DM(6) Beats/Bar (int), DM(7) Accent (int dB), DM(8) Sound (int), DM(9) Level (float %), DM(10)
+Subdivision (int); state in words 16..37 of the instance block (assumed free: the NAM kernel only used
+words up to 15); a zeroed block starts at beat 1. Code at PM 0xc4ef8, data at DM 0xe4850 (NAM's
+regions: Click replaces NAM in its own build). Not yet done: the Entry 3/4/0 changes for Click's
+knobs, and anything on the unit.

@@ -19,6 +19,11 @@
 #include "../common/fx.h"
 
 enum { M_TEMPO, M_METER, M_ACCENT, M_SOUND, M_LEVEL, M_SUBDIV, M_NPARAMS };
+
+/* Constants a SHARC port takes from its tables (metronome.c). */
+#define CLICK_PITCH(sound, kind) click_pitch[sound][kind]
+extern const float click_pitch[3][3];
+extern const float click_wood_ratio, click_wood_mix, click_sub_gain, click_silent;
 enum { CLICK_ACCENT, CLICK_BEAT, CLICK_SUB, CLICK_KINDS };
 enum { SOUND_CLICK, SOUND_WOOD, SOUND_BEEP, SOUNDS };
 
@@ -36,7 +41,10 @@ typedef struct {
     int active, kind, sound;
     Rotor osc[2];                        /* two partials */
     float amp, env, decay, mix2;         /* amplitude, envelope, per-sample decay, 2nd partial */
-    uint32_t age, gate, release;         /* samples since the tick; beep's gate and release */
+    uint32_t age;                        /* samples since the tick */
+    /* constants, set by reset() for the sample rate */
+    float decay_k[2], rel_step;          /* click and wood decay per sample; beep release step */
+    uint32_t gate, max_age;
     /* bookkeeping the tests read */
     uint32_t ticks;
     int last_kind;

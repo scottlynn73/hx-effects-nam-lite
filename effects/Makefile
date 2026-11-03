@@ -3,8 +3,9 @@
 #   make test       run every test (no hardware needed)
 #   make demo       render the fixtures and Geiger's variants into out/
 #   make golden     re-record Geiger's golden metrics (after an intended change)
+#   make sharc-check  run the SHARC kernels in the simulator against the reference (bit for bit)
 CC ?= cc
-CFLAGS ?= -std=c99 -O2 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wconversion -Wno-sign-conversion
+CFLAGS ?= -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Wpedantic -Werror -Wshadow -Wconversion -Wno-sign-conversion
 LDLIBS = -lm
 
 COMMON = common/fx.c common/wav.c common/signals.c
@@ -25,6 +26,13 @@ $(OUT)/test_geiger: geiger/test_geiger.c $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT
 
 $(OUT)/test_metronome: metronome/test_metronome.c $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) -o $@ metronome/test_metronome.c $(COMMON) $(EFFECTS) $(LDLIBS)
+
+# the reference as a shared library, for the SHARC kernels' checks (ctypes)
+$(OUT)/libfx.so: $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
+	$(CC) $(CFLAGS) -shared -fPIC -o $@ $(COMMON) $(EFFECTS) $(LDLIBS)
+
+sharc-check: $(OUT)/libfx.so
+	../.venv/bin/python3 metronome/sharc/click_kernel.py --check
 
 test: all
 	$(OUT)/test_geiger geiger/golden.txt
@@ -50,4 +58,4 @@ demo: all
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test golden demo clean
+.PHONY: all test golden demo clean sharc-check
