@@ -1,24 +1,30 @@
 # Handover: NAM A2 Lite on the Line 6 HX Effects
 
-Working state as of 2026‑11‑01. A working, tested firmware build exists. This note is for picking the
+Working state as of 2026‑11‑03 (first written 2026‑11‑01). A working, tested firmware build exists,
+and a USB flasher that installs it without Line 6 Updater. This note is for picking the
 project up in Claude Code (or anywhere) without re‑deriving anything.
 
 ## What exists
 
 - **Repo:** `/Users/scott/hx-effects-nam-lite` → <https://github.com/scottlynn73/hx-effects-nam-lite>
   (standalone, GPL‑3.0, no Line 6 files tracked; `.gitignore` excludes `firmware/`, `build/`, `*.hxf`,
-  `*.l6ia`, `.venv/`, `.DS_Store`). Single clean commit on `main`, SSH remote.
+  `*.l6ia`, `.venv/`, `.DS_Store`, `usblog/`). Work is on `main`, SSH remote; not pushed since 2026‑11‑03.
 - **Upstream + scratch work:** `~/hx-stomp-nam-lite` (clone of
   <https://github.com/nocaseguy/hx-stomp-nam-lite> with all the edits applied by `apply_effects*.py`,
   plus the bisection scripts, `*_parts/` entry dumps, `stomp_e2.txt`/`effects_e2.txt`, `*_ddr.txt`).
   Not needed to build; useful if the offsets ever have to be re‑mapped.
 - **Build:** `cd /Users/scott/hx-effects-nam-lite && source .venv/bin/activate && python3 build_effects.py`
   reads `firmware/HX_Effects_v3.80.0_0xd97239907.hxf` (MD5 `7c2ebdf1bffb6bcc5f89dda97f91e40c`) and
-  writes `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf`. Flash with Line 6 Updater → Choose File, HX Edit closed.
+  writes `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf` (current output MD5 `a27780d3ff57612ebd2484a4cc4a9f7e`).
+- **Flash:** HX Edit and Line 6 Updater closed, then
+  `python3 tools/flash.py flash build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf` (~2 min, ends `BOOTED` /
+  `BOOT FAILED`, exit 0/1). `flash.py info` is read‑only. Needs `pip install pyusb libusb-package` in
+  the venv. Line 6 Updater → Choose File still works too.
 - **Result on the unit:** block under **IR → Single → "NAM A2 Lite"** (takes over the 1024‑sample IR
-  block's identity; the 2048 IR block is intact). Knobs: Model (User IR slot), Input, Bass, Mid, Treble,
-  Presence, Ch Vol, Polarity. Strip title "NAM / IR_2048". Two NAM blocks + a few effects fit in one
-  preset. Sounds right (confirmed by ear after the EQ fixes below).
+  block's identity; the 2048 IR block is intact). The standalone build was flashed and booted on
+  2026‑11‑03, with both Line 6 Updater and `flash.py`. Knobs: Model (User IR slot), Input, Bass, Mid,
+  Treble, Presence, Ch Vol, Polarity. Strip title "NAM / IR_2048". Two NAM blocks + a few effects
+  fit in one preset. Sounds right (confirmed by ear after the EQ fixes below).
 - **Recovery:** hold the **>** (right arrow) button while powering on → fail‑safe update mode → Updater
   → Choose File → stock `.hxf`. Verified against Line 6's reset‑procedures KB page.
 
@@ -66,6 +72,34 @@ inclusive); silent splash hang = Table 1 walk running to the old end pointer; "b
 filters at their static 1 kHz; "two signals" = wet/dry sum at −3/−3 dB; "dry only" = mix pair swapped;
 "no low end" = cut frequencies swapped.
 
+## The USB flasher, in one screen
+
+Taken from a capture of Line 6 Updater 1.28 flashing this build (`tools/usb/capture.sh` injects
+`usblog.dylib` with `DYLD_INSERT_LIBRARIES`; the Updater has no hardened runtime; `decode.py` reads the
+log). `flash.py replay <hxf> <log>` reproduces the Updater's traffic byte for byte. The log is in
+`usblog/` (git‑ignored: it contains firmware bytes).
+
+1. Main app (`0e41:4245`, class 0xef, device‑info name `F15Main`): update‑port handshake, cmd 01/03/02,
+   close. It restarts into the NXP ROM DFU loader (`1fc9:000c`).
+2. DFU 1.1: the `.hxf`'s kind‑5 region (83,472‑byte updater app) in 2048‑byte DNLOAD blocks + GETSTATUS,
+   then a zero‑length DNLOAD. The unit comes back as `0e41:4245` class 0 (`F15Updater` v0.09.5a).
+3. Updater app: cmd 04 per image (status), then per L6IA entry: 05 begin (id, words, entry‑header
+   Fletcher pair), 06 start, 07 chunks of 4096 words (index, chunk Fletcher pair, LE data), 09 end; then
+   0a finish. About 100 s, limited by the unit (~200 kB/s).
+4. Boot check: the main app answers `F15Main` on its device‑info port. This does not yet tell a clean
+   boot from one stopped at "Boot Failure"; look at the screen too.
+
+Transport: 16‑byte header (u16 len‑after‑8, kind 0x28 connect / 0x18 stream, ports 0x1001→0x03ef,
+u8 seq, BE u16 flags 02/04/08/10, u32 ack = peer base + bytes received), ≤496‑byte payloads, 512‑byte
+window, heartbeat every 1 s (the unit times out at 4 s).
+
+**Image 4 is always flagged (status 5).** The updater app's partition table (in the DFU app, file
+offset ~0xf8dc) declares image 4's partition as 0x5000 sectors (10 MiB) and flags any image whose header
+length exceeds that. Stock 3.80.0's image 4 is already 12.4 MB (the HX Stomp's too); ours is 14.3 MB.
+The physical gap to image 5's header (sector 0x11005) is 0x7bfe sectors (15.5 MiB), which the build's
+`E4_MAX` stays under. Not damage. One unproven assumption: nothing else uses the sectors between
+stock's end and ours (not in the partition table; presets and IRs live elsewhere; nothing broken so far).
+
 ## Things that were tried and are still in the scratch tree (not in the standalone repo)
 
 - `NAM_E0_PART`, `NAM_SKIP`, `NAM_NO_SWAP`, `NAM_NO_EXTRA`, `NAM_DUP_IR`, `NAM_REPLACE_1024`,
@@ -79,19 +113,22 @@ filters at their static 1 kHz; "two signals" = wet/dry sum at −3/−3 dB; "dry
 
 ## Open / next
 
-1. **Verify the standalone build on the unit** (it was built but the last flashed image came from
-   `~/hx-stomp-nam-lite/build/`). Expect identical behaviour plus the "NAM / IR_2048" strip title.
+1. ~~Verify the standalone build on the unit~~ — done 2026‑11‑03 (flashed twice, boots). Still worth a
+   look: the "NAM / IR_2048" strip title.
 2. ~~Add the DSP‑cost tuning note to the README~~ — done (README, `DSP_COST = 2700`, floor ≈2300).
-3. Optiona3. ~~Strip the bisection switches from `tools/patch_amp.py`~~ — done 2026‑11‑03: all `NAM_*` env switches
+3. ~~Strip the bisection switches from `tools/patch_amp.py`~~ — done 2026‑11‑03: all `NAM_*` env switches
    (except `NAM_DEVICE`) and the dead `add_model_entry0_effects()` removed; the build output is byte‑identical
    (MD5 `a27780d3ff57612ebd2484a4cc4a9f7e`). The HX Stomp `add-model` path is kept.
-l: open an issue/PR upstream with the findings (amp slots unused on the Effects, the −21
-   self‑test path, the identity takeover, fixed‑DDR2 kernel variant).
-5. Edge tests not yet done: changing Model while playing with two blocks; a preset with every
-   heavy effect alongside; power‑cycle with a NAM block in the startup preset.
+4. Optional: open an issue/PR upstream with the findings (amp slots unused on the Effects, the −21
+   self‑test path, the identity takeover, fixed‑DDR2 kernel variant, the USB update protocol, the
+   image‑4 partition flag).
+5. Edge tests not yet done (each build can now be flashed with `tools/flash.py`): changing Model
+   while playing with two blocks; a preset with every heavy effect alongside; power‑cycle with a NAM
+   block in the startup preset.
 
 ## Don'ts
 
 - Don't change the MD5 check to force another firmware through; every offset above is for 3.80.0.
 - Don't commit anything from `firmware/` or `build/`; both are Line 6's firmware (the `.l6ia` too).
+- Don't flash while HX Edit or Line 6 Updater is open (they hold the USB interface).
 - Don't `sudo` anything in the home folder again (that's what broke `~/.config/git` and the venv).
