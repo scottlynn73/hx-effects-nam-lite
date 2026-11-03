@@ -21,7 +21,7 @@
 //   through. A slot is {owner I0, last call count, the state words}.
 //
 // Knob words (ABI of this port; the firmware's Entry 3 must match it):
-//   DM(5) Tempo float BPM   DM(6) Beats/Bar int    DM(7) Accent int dB
+//   DM(5) Time float s/beat DM(6) Beats/Bar int    DM(7) Accent int dB
 //   DM(8) Sound int         DM(9) Level float 0..1 DM(10) Subdivision int
 // State: DM(ST_.., I3), I3 = this instance's slot.
 
@@ -136,16 +136,35 @@ k_on:
 
     // ---- knobs, clamped as fx_param_clamp does (finite values)
 k_knobs:
-    F0 = DM(5, I0);                     // Tempo, float BPM 20..300 (0.01 BPM steps)
-    F8 = 20.0;
+    F0 = DM(5, I0);                     // Time: one beat in seconds, 0.1..4.0
+    F8 = DM(K_TMIN);
     F0 = MAX(F0, F8);
-    F8 = 300.0;
+    F8 = 4.0;
     F0 = MIN(F0, F8);
-    F8 = 100.0;
+    F8 = 384000.0;                      // eighth-samples at 48 kHz
     F0 = F0 * F8;
     F8 = 0.5;
     F0 = F0 + F8;
-    R0 = TRUNC F0;                      // BPM x 100
+    R9 = TRUNC F0;                      // R9 = p
+    R10 = LSHIFT R9 BY -1;              // BPM x 100 = (NUM + p/2) / p, unsigned, shift-and-subtract
+    R8 = BPM100_NUM;
+    R8 = R8 + R10;                      // R8: the dividend
+    R10 = 0;                            // R10: remainder
+    R0 = 0;                             // R0: quotient
+    R11 = 32;
+k_div:
+    R10 = LSHIFT R10 BY 1;
+    R12 = LSHIFT R8 BY -31;
+    R10 = R10 OR R12;
+    R8 = LSHIFT R8 BY 1;
+    R0 = LSHIFT R0 BY 1;
+    COMPU(R10, R9);
+    IF LT JUMP k_divn;
+    R10 = R10 - R9;
+    R0 = R0 + 1;
+k_divn:
+    R11 = R11 - 1;
+    IF NE JUMP k_div;                   // R0 = BPM x 100
 
     R1 = DM(6, I0);                     // Beats/Bar 2..5
     R8 = 2;

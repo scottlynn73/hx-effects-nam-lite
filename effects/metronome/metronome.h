@@ -2,8 +2,10 @@
  *
  * The guitar passes through at exactly unity; a synthesised click is added on each beat.
  *
- * Timing is exact rational arithmetic, so there is no long-term drift: tempo is held in
- * hundredths of a BPM, an integer accumulator gains (BPM x 100 x subdivision) per sample,
+ * Tempo comes in as Time, the length of one beat in seconds (an HX delay's Time knob, synced to tap
+ * tempo or not), and becomes hundredths of a BPM by integer division (click_bpm100).
+ * Timing is exact rational arithmetic, so there is no long-term drift: an integer accumulator
+ * gains (BPM x 100 x subdivision) per sample,
  * and a tick fires when it reaches sample_rate x 60 x 100. Tick k therefore lands on sample
  * ceil(k x T / inc), the nearest sample at or after its ideal time, forever.
  *
@@ -18,7 +20,12 @@
 
 #include "../common/fx.h"
 
-enum { M_TEMPO, M_METER, M_ACCENT, M_SOUND, M_LEVEL, M_SUBDIV, M_NPARAMS };
+enum { M_TIME, M_METER, M_ACCENT, M_SOUND, M_LEVEL, M_SUBDIV, M_NPARAMS };
+
+/* Time is the length of one beat in seconds (what an HX delay's Time knob, or its tempo sync,
+   delivers). BPM x 100 = 60 x 100 / Time = CLICK_BPM100_NUM / (Time in eighth-samples at 48 kHz). */
+#define CLICK_BPM100_NUM 2304000000u
+uint32_t click_bpm100(float beat_seconds);
 
 /* Constants a SHARC port takes from its tables (metronome.c). */
 #define CLICK_PITCH(sound, kind) click_pitch[sound][kind]

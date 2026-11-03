@@ -54,7 +54,8 @@ A metronome as an ordinary **preset block**: it lives in a preset, takes one blo
 block's bypass/footswitch. Not a global metronome. The guitar passes at exactly unity gain; a
 synthesised click is added.
 
-Six parameters: Tempo (20..300 BPM, quarter-note beats, 0.01 BPM resolution), Beats/Bar (2..5: 2/4,
+Six parameters: Time (one beat, 0.1..4.0 s = 15..600 BPM, as an HX delay's Time knob delivers it,
+synced to tap tempo or not; turned into BPM to 0.01 by integer division), Beats/Bar (2..5: 2/4,
 3/4, 4/4, 5/4), Accent (0..12 dB on beat 1; 0 dB = no accent, same sound as other beats), Sound
 (click, wood, beep), Level (0..1, shown as % on the unit, linear, peak 1.0), Subdivision (1..4 per beat: quarters, eighths,
 triplets, sixteenths; subdivision clicks are lower and about 8 dB quieter).
@@ -82,8 +83,17 @@ than 200 ms; two interleaved instances equal each alone; identical output for bl
 ### Click on the SHARC (`metronome/sharc/`)
 
 **Works on the unit (2026-11-03):** `build_click.py` → Delay > Mono > "Click" (the mono Mod/Chorus
-Echo's slot): all six knobs shown and working, footswitch bypass working, timing and sounds as in the
+Echo's slot): all knobs shown and working, footswitch bypass working, timing and sounds as in the
 reference. That image has no NAM block; NAM + Click in one image is a separate step.
+
+**Tempo from the delay's own Time knob (built, not yet tried on the unit):** Click now uses Mod/Chorus
+Echo's Time, note-value and Tempo Sync parameters. HX shows Time in ms, or as a note value when synced
+(pressing the knob toggles it), and synced it follows tap tempo and the global BPM; the default is
+synced, 1/4. Stock delays work out the synced time in their DSP parameter map (nodes 0x2a and 0x54);
+Click's map copies those two nodes exactly (`verify_click.py` compares them with the stock map) and
+sends the result, the beat length in seconds, to word 5. The kernel turns it into BPM x 100 by an
+integer shift-and-subtract division (no float divide on the SHARC), still bit-identical to the C
+reference.
 
 `click_kernel.asm` is a hand-written port of `metronome.c` for the HX Effects' SHARC, assembled with
 `tools/sharc/sasm.py`. `click_kernel.py --check` (or `make sharc-check`) runs it in `tools/sharc/ssim.py`

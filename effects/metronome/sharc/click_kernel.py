@@ -33,9 +33,9 @@ _ST = ['CHK', 'STARTED', 'FIRE', 'ACC', 'SUBIDX', 'BEAT', 'ACTIVE', 'SOUND', 'C0
        'WC1', 'WS1', 'AMP', 'ENV', 'DECAY', 'MIX2', 'AGE', 'TICKS', 'KIND']
 STATE = {f'ST_{n}': 2 + k for k, n in enumerate(_ST)}          # offsets in a slot, after OWNER and LAST
 NSLOTS, NSTATE, SLOTW, STALE, P_SLOT = 8, len(_ST), 2 + len(_ST), 64, 12
-KNOB = dict(tempo=5, meter=6, accent=7, sound=8, level=9, subdiv=10)
+KNOB = dict(time=5, meter=6, accent=7, sound=8, level=9, subdiv=10)
 INT_KNOBS = {'meter', 'accent', 'sound', 'subdiv'}
-PARAM_ORDER = ['tempo', 'meter', 'accent', 'sound', 'level', 'subdiv']    # = metronome.h M_*
+PARAM_ORDER = ['time', 'meter', 'accent', 'sound', 'level', 'subdiv']    # = metronome.h M_*
 MAX_CYCLES = 3000                         # per 16-sample call; the NAM kernel's budget is 33,000
 
 # The reference's constants (metronome.c); each rounded to float exactly as C does.
@@ -146,14 +146,14 @@ def source(probe=False):
     slots = a + NSLOTS                         # SLOTS follows the table
     lay.append(('T_SLOTBASE', a, [slots + SLOTW * k for k in range(NSLOTS)])); a += NSLOTS
     lay.append(('SLOTS', a, [0] * (SLOTW * NSLOTS))); a += SLOTW * NSLOTS
-    for name, v in (('K_SUBGAIN', SUB_GAIN), ('K_SILENT', SILENT), ('K_RELSTEP', c['relstep'])):
+    for name, v in (('K_TMIN', 0.1), ('K_SUBGAIN', SUB_GAIN), ('K_SILENT', SILENT), ('K_RELSTEP', c['relstep'])):
         lay.append((name, a, [fw(f32(v))])); a += 1
     for name, vals in (('T_ACCENT', c['accent']), ('T_OSC', c['osc']), ('T_MIX2', c['mix2']), ('T_DECAY', c['decay'])):
         lay.append((name, a, [fw(v) for v in vals])); a += len(vals)
     equ = [f'.equ {k}, {v}' for k, v in STATE.items()]
     equ += ['.equ S_OWNER, 0', '.equ S_LAST, 1', f'.equ P_SLOT, {P_SLOT}', f'.equ NSLOTS, {NSLOTS}',
             f'.equ NSTATE, {NSTATE}', f'.equ STALE, {STALE}']
-    equ += [f'.equ PERIOD, {c["period"]}', f'.equ GATE, {c["gate"]}', f'.equ MAXAGE, {c["max_age"]}']
+    equ += ['.equ BPM100_NUM, 2304000000', f'.equ PERIOD, {c["period"]}', f'.equ GATE, {c["gate"]}', f'.equ MAXAGE, {c["max_age"]}']
     equ += [f'.equ {name}, {addr:#x}' for name, addr, _ in lay]
     data = [f'.section dm {DATA:#x}'] + ['.word ' + ', '.join(f'{w:#010x}' for w in words) for _, _, words in lay]
     asm = open(os.path.join(HERE, 'click_kernel.asm')).read()
@@ -308,12 +308,12 @@ def check(seconds=2.0):
     nblk = int(seconds * SR) // 16
     print(f'code {CODE:#x}..{end:#x} ({end - CODE} instructions), data {data[0]:#x}..{data[1]:#x}')
     cases = [
-        dict(tempo=120, meter=4, accent=6, sound=0, level=0.5, subdiv=1),
-        dict(tempo=137.5, meter=3, accent=12, sound=1, level=1, subdiv=2),
-        dict(tempo=300, meter=5, accent=0, sound=2, level=0.75, subdiv=4),
-        dict(tempo=20, meter=2, accent=3, sound=1, level=0.3, subdiv=3),
-        dict(tempo=97.31, meter=4, accent=12, sound=0, level=0, subdiv=1),          # level 0: dry
-        dict(tempo=500, meter=9, accent=40, sound=7, level=2.5, subdiv=0),          # out of range: clamped
+        dict(time=0.5, meter=4, accent=6, sound=0, level=0.5, subdiv=1),
+        dict(time=60 / 137.5, meter=3, accent=12, sound=1, level=1, subdiv=2),
+        dict(time=0.2, meter=5, accent=0, sound=2, level=0.75, subdiv=4),
+        dict(time=3.0, meter=2, accent=3, sound=1, level=0.3, subdiv=3),
+        dict(time=60 / 97.31, meter=4, accent=12, sound=0, level=0, subdiv=1),          # level 0: dry
+        dict(time=9.0, meter=9, accent=40, sound=7, level=2.5, subdiv=0),          # out of range: clamped
     ]
     total = 0
     for n, kn in enumerate(cases):
@@ -338,9 +338,9 @@ def check(seconds=2.0):
     xa, xb = signal(nblk * 16, 11), signal(nblk * 16, 12)
     for b in range(nblk):
         if b % 300 == 0:
-            ka = dict(tempo=round(r.uniform(20, 300), 2), meter=r.randint(2, 5), accent=r.randint(0, 12),
+            ka = dict(time=r.uniform(0.05, 5.0), meter=r.randint(2, 5), accent=r.randint(0, 12),
                       sound=r.randint(0, 2), level=round(r.uniform(0, 1), 3), subdiv=r.randint(1, 4))
-            kb = dict(tempo=round(r.uniform(20, 300), 2), meter=r.randint(2, 5), accent=r.randint(0, 12),
+            kb = dict(time=r.uniform(0.05, 5.0), meter=r.randint(2, 5), accent=r.randint(0, 12),
                       sound=r.randint(0, 2), level=round(r.uniform(0, 1), 3), subdiv=r.randint(1, 4))
             rig.knobs(ia, ka)
             rig.knobs(ib, kb)
@@ -354,7 +354,7 @@ def check(seconds=2.0):
     print(f'  two instances, knobs moving every 100 ms: {2 * nblk * 16} samples identical')
 
     # a block deleted and re-created at the same place: zeroed block -> fresh slot state (reset)
-    kn = dict(tempo=150, meter=3, accent=9, sound=2, level=0.8, subdiv=2)
+    kn = dict(time=0.4, meter=3, accent=9, sound=2, level=0.8, subdiv=2)
     i0 = rig.inst(2)
     rig.knobs(i0, kn)
     x = signal(400 * 16, 21)
@@ -394,7 +394,7 @@ def check(seconds=2.0):
     print(f'  {NSLOTS} slots: a 9th block passes through; a stale slot goes to the next block')
 
     # DM(3) as the unit has it (non-zero while on, any value): ignored, never written
-    kn = dict(tempo=200, meter=4, accent=12, sound=1, level=0.9, subdiv=2)
+    kn = dict(time=0.3, meter=4, accent=12, sound=1, level=0.9, subdiv=2)
     rig3 = Rig(secs, syms, data, seed=9)
     i0 = rig3.inst(0)
     rig3.knobs(i0, kn)

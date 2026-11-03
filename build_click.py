@@ -24,7 +24,8 @@ the IR selector, which made a metronome unusable.)
 
   kernel  effects/metronome/sharc/click_kernel.asm (checked bit for bit against the C reference in
           the simulator first, unless --no-check)
-  knobs   Tempo (20.0..300.0 BPM), Beats/Bar (2/4..5/4), Accent (Off, 1..12 dB), Sound (Click, Wood,
+  knobs   Time (Mod/Chorus Echo's own: ms, or a note value synced to tap tempo / the global BPM;
+          default synced, 1/4), Beats/Bar (2/4..5/4), Accent (Off, 1..12 dB), Sound (Click, Wood,
           Beep), Level (0..100 %), Subdivision (1/4, 1/8, 1/8T, 1/16)
 
 This image has no NAM block. Rebuild with build_effects.py and flash that to go back.
@@ -55,9 +56,7 @@ DSP_COST = 300
 # Knob: (slot, pid = instance word, template model, template param, display, short, kind, range, default)
 LIST = 'list'
 CLICK_PARAMS = (
-    # Tempo as a float (one decimal shown) on NAM's Clarity 'Bass' record; as a 281-entry list
-    # (stock lists have at most 21 entries) the page holding it was not drawn
-    (1, 5,  'HD2_AmpLine6Clarity', 'Bass', 'Tempo', 'Tempo', 'tenths', (20.0, 300.0), 120.0),
+    # slot 1: Time (see SYNC_PARAMS), Mod/Chorus Echo's own, with its tempo sync
     (2, 6,  'HD2_DelayMultiPassMono', 'Pattern', 'Beats/Bar', 'Beats', LIST,
      {2: '2/4', 3: '3/4', 4: '4/4', 5: '5/4'}, 4),
     (3, 7,  'HD2_TremoloPatternMono', 'Step1', 'Accent', 'Accent', LIST,
@@ -68,27 +67,63 @@ CLICK_PARAMS = (
     (6, 10, 'HD2_DelayCrissCrossMono', 'Shape', 'Subdivision', 'Subdiv', LIST,
      {1: '1/4', 2: '1/8', 3: '1/8T', 4: '1/16'}, 1),
 )
+# The tempo: a delay's Time knob and its tempo sync, copied from Mod/Chorus Echo (the model Click
+# replaces). HX shows Time in ms, or as a note value (pressing the knob toggles Tempo Sync), and with
+# sync on it follows tap tempo and the global BPM. Stock delays compute the effective time in their
+# DSP parameter map (nodes 0x2a and 0x54); Click's map copies those two nodes and sends their output,
+# the beat length in seconds, to the kernel's word 5. The slot links (coupledIndex: the knob's other
+# half; toggleSelectIndex: the sync switch) are renumbered for Click's slots.
+SYNC_MODEL = 'HD2_DelayModChorusEchoMono'
+TIME_SLOT, SELECT_SLOT, SYNC_SLOT, TIME_PID = 1, 7, 8, 5
+SYNC_PARAMS = (   # slot, stock name, role, (min, max, default) or None to keep, metadata overrides
+    (TIME_SLOT, 'Time', 'time', (0.1, 4.0, 0.5), {'coupledIndex': str(SELECT_SLOT), 'toggleSelectIndex': str(SYNC_SLOT)}),
+    (SELECT_SLOT, 'SyncSelect1', 'select', (1, 19, 6), {'coupledIndex': str(TIME_SLOT), 'toggleSelectIndex': str(SYNC_SLOT)}),
+    (SYNC_SLOT, 'TempoSync1', 'sync', (0, 0, 1), {}),                  # default on: follow tap tempo, 1/4
+)
+SYNC_NODES = {'select_time': (0x2a, 4, [0, 0]),                         # op, state words, data (stock)
+              'pick_time': (0x54, 9, [0x39b78034, 0x41000000])}        # (0.00035 s, 8 s)
 
 
 def f2u(x):
     return struct.unpack('<I', struct.pack('<f', x))[0]
 
 
+def _state_of(pa, e3, info, m, pname):
+    S, d = info['strings'], m['words']
+    for k in range(d[6]):
+        _, _, ni, _, _ = struct.unpack_from('<5I', e3, d[10] + 20 * k)
+        if S[ni].split('.')[0] == pname + 'State':
+            return S[ni]
+    raise SystemExit(f'{m["name"]} has no state for {pname}')
+
+
 def click_params(pa, e3, info):
     """Like patch_amp.nam_params: per knob the template's record (type, state) with our range,
-    default and display metadata."""
+    default and display metadata; the Time/sync trio copied whole from Mod/Chorus Echo. Each has a
+    role for click_host_blob: 'direct' (written to its pid), 'time', 'select', 'sync'."""
     S = info['strings']
     out = []
+    sm = pa.find_model(info, SYNC_MODEL)
+    for slot, pname, role, rng, over in SYNC_PARAMS:
+        p = next(p for p in sm['params'] if p['name'] == pname)
+        raw = list(struct.unpack_from('<5I3I', e3, p['off']))
+        raw[4] = slot
+        if p['type'] == 3:
+            raw[5], raw[6], raw[7] = f2u(rng[0]), f2u(rng[1]), f2u(rng[2])
+        else:
+            raw[5], raw[6], raw[7] = rng
+        meta = []
+        for k in range(raw[0]):                       # the stock metadata records, in order
+            ks, kt, kv = struct.unpack_from('<3I', e3, raw[1] + 12 * k)
+            key = S[ks]
+            meta.append((key, kt, over.get(key, S[kv] if kt == 7 else kv)))
+        assert set(over) <= {k for k, _, _ in meta}, f'{pname}: no field to override'
+        out.append({'slot': slot, 'pid': None, 'role': role, 'name': pname, 'type': p['type'],
+                    'op': pa.NAM_INPUT_OP[p['type']], 'raw': raw, 'meta': meta,
+                    'state': _state_of(pa, e3, info, sm, pname), 'default_word': raw[7]})
     for slot, pid, mname, pname, disp, short, kind, rng, dflt in CLICK_PARAMS:
         m = pa.find_model(info, mname)
         p = next(p for p in m['params'] if p['name'] == pname)
-        d = m['words']
-        st = None
-        for k in range(d[6]):
-            _, _, ni, _, _ = struct.unpack_from('<5I', e3, d[10] + 20 * k)
-            if S[ni].split('.')[0] == pname + 'State':
-                st = S[ni]
-        assert st, f'{mname} has no state for {pname}'
         raw = list(struct.unpack_from('<5I3I', e3, p['off']))
         raw[4] = slot
         if kind == LIST:
@@ -100,10 +135,100 @@ def click_params(pa, e3, info):
             assert p['type'] == 3, f'{mname}.{pname} is not a float parameter'
             raw[5], raw[6], raw[7] = f2u(rng[0]), f2u(rng[1]), f2u(dflt)
             meta = [('displayType', 7, kind), ('displayName', 7, disp), ('displayNameShort', 7, short)]
-        out.append({'slot': slot, 'pid': pid, 'name': pname, 'type': p['type'], 'op': pa.NAM_INPUT_OP[p['type']],
-                    'raw': raw, 'meta': meta, 'state': st, 'default_word': raw[7]})
+        out.append({'slot': slot, 'pid': pid, 'role': 'direct', 'name': pname, 'type': p['type'],
+                    'op': pa.NAM_INPUT_OP[p['type']], 'raw': raw, 'meta': meta,
+                    'state': _state_of(pa, e3, info, m, pname), 'default_word': raw[7]})
+    out.sort(key=lambda p: p['slot'])
+    assert [p['slot'] for p in out] == list(range(1, len(out) + 1)), 'slots must run 1..n'
     assert len({p['name'] for p in out}) == len(out), 'two knobs share a parameter name'
     return out
+
+
+def click_host_blob(comp_id, params, extra=()):
+    """patch_amp.nam_host_blob's layout (see there), with Mod/Chorus Echo's tempo-sync step in the
+    parameter map: input k for params[k]; a writer per 'direct' knob (member 1, its pid);
+    sync -> 0x2a port 0, select -> 0x2a port 2; time -> 0x54 port 0, 0x2a -> 0x54 port 1;
+    0x54 -> a writer of word TIME_PID. Header sizes as nam_host_blob documents (and as the stock
+    Mod/Chorus Echo map has them)."""
+    n = len(params)
+    extra = list(extra)
+    members = sorted({m for m, _, _, _ in extra if m >= 0})
+    role = {p['role']: k for k, p in enumerate(params) if p['role'] != 'direct'}
+    nodes, data, edges = [], [], []                    # node: [op, n_out, state, data words, is_input]
+    for p in params:                                    # inputs 0 .. n-1
+        nodes.append([p['op'], 1, 2, [], 1])
+    writers = []                                        # (node, pid, default word)
+    for k, p in enumerate(params):
+        if p['role'] == 'direct':
+            nodes.append([1, 0, 3, [0x0e, p['pid'], 1], 0])
+            edges.append((k, len(nodes) - 1, 0, 0))
+            writers.append((len(nodes) - 1, p['pid'], p['default_word']))
+    op, st, dd = SYNC_NODES['select_time']
+    nodes.append([op, 1, st, dd, 0]); n_sel = len(nodes) - 1
+    op, st, dd = SYNC_NODES['pick_time']
+    nodes.append([op, 1, st, dd, 0]); n_pick = len(nodes) - 1
+    nodes.append([1, 0, 3, [0x0e, TIME_PID, 1], 0]); n_tw = len(nodes) - 1
+    edges += [(role['sync'], n_sel, 0, 0), (role['select'], n_sel, 0, 2),
+              (role['time'], n_pick, 0, 0), (n_sel, n_pick, 0, 1), (n_pick, n_tw, 0, 0)]
+    writers.append((n_tw, TIME_PID, params[role['time']]['default_word']))
+
+    a_off = 0x18
+    data_start = a_off + 10 * len(nodes)
+    rec, off = [], data_start
+    for i, (op, nout, st, dd, inp) in enumerate(nodes):
+        rec += [off if dd else data_start, 0, i, op, nout, st, len(dd), len(dd), inp, 0]
+        if dd:
+            data += dd
+            off += len(dd)
+    path_words = [data_start + (sum(len(nd[3]) for nd in nodes[:w])) for w, _, _ in writers]
+    c_off = data_start + len(data)
+    d_off = c_off + 4 * len(edges)
+    e_off = d_off + 4 * n
+    end = e_off + 4 * n
+    nA, nC = len(nodes), len(edges)
+    H = [sum(nd[2] for nd in nodes), nA, n + sum(nd[1] for nd in nodes) + n, nC + n + n, n, n]
+    pm = [a_off, 0, c_off, 0, c_off, 0, d_off, 0, e_off, 0, end, 0] + H + [nA, 0, nC, n, n, 0]
+    pm += rec + data
+    for fr, to, fp, tp in edges:
+        pm += [fr, to, fp, tp]
+    for k, p in sorted(enumerate(params), key=lambda kp: kp[1]['slot']):
+        pm += [k, k, p['slot'], 0]
+    for k in range(n):
+        pm += [k, k, k, 0]
+    assert len(pm) == end
+
+    path_of = {-1: 0x0c, 1: 0x0e}
+    for i, m in enumerate(members):
+        path_of[m] = 0x10 + 2 * i
+    v0 = 0x10 + 2 * len(members)
+    vals = [p['default_word'] for p in params] + [w for _, _, w in writers] + [v for _, _, v, _ in extra]
+    tree = v0 + 2 * len(vals)
+    pmo = tree + 4
+    pin = pmo + len(pm)
+    npin = n + len(writers) + len(extra)
+    ini = pin + 4 * npin
+    nini = len(writers) + npin
+    sub = ini + 2 * nini
+    b = [3, 2, tree, 1, ini, nini, pmo, len(pm), sub, 0, pin, npin]
+    b += [1, 0, 1, 2]
+    for m in members:
+        b += [1, m + 1]
+    for v in vals:
+        b += [1, v]
+    b += [0, comp_id, 0, 0]
+    b += pm
+    for k, p in enumerate(params):
+        b += [0x0c, p['slot'], v0 + 2 * k, 1]
+    for j, (_, pid, _) in enumerate(writers):
+        b += [path_of[1], pid, v0 + 2 * (n + j), 2]
+    for j, (m, pid, _, kind) in enumerate(extra):
+        b += [path_of[m], pid, v0 + 2 * (n + len(writers) + j), kind]
+    for w in path_words:
+        b += [1, pmo + w]
+    for k in range(npin):
+        b += [1, pin + 4 * k]
+    assert len(b) == sub
+    return b
 
 
 def run(*args):
@@ -166,10 +291,11 @@ def main():
     # Entry 3's new model copies the target's own metadata (category, subcategory, ...) except
     # for an IR target, where it copies the graph source's as NAM does
     meta_src, meta_set = (src_m, None) if diag else \
-        (tgt, {'displayNameShort': SHORT, 'displayParamCount': str(len(params))})
+        (tgt, {'displayNameShort': SHORT, 'displayParamCount': str(len(params) - 2)})   # sync knobs share Time's
 
     # 2. Entry 4: the host graph (the 2048 IR block's, member 1 -> primitive 0x9c75)
-    new_e4, blob, comp = pa.add_model_entry4(e4, src_m['blob_index'], params, 0)
+    new_e4, blob, comp = pa.add_model_entry4(e4, src_m['blob_index'], params, 0,
+                                             blob_fn=None if diag else click_host_blob)
     print(f'[+] Entry 4: host blob {blob} on composite {comp:#x}, a copy of {CLONE}\'s graph')
 
     # 3. Entry 2: Blob 0's buffer (the graph library grew) and Heap 6, as for NAM
@@ -196,7 +322,8 @@ def main():
 
     # 5. Entry 0: cost, counts, names, strip title
     new_e0, pid, cost, hits = pa.takeover_entry0_effects(e0, tgt['words'][2], display, short_name=display,
-                                                        dsp_cost=cost_decl, n_params=len(params), strip_title=title)
+                                                        dsp_cost=cost_decl, n_params=len(params), strip_title=title,
+                                                        n_display=None if diag else len(params) - 2)
     print(f'[+] Entry 0: preset_id={pid} kept; dsp_cost={cost}; browser slots {hits}; strip title "{title}"')
     l6ia_bytes, _, _ = l6ia.rebuild_archive(l6ia_bytes, {0: new_e0, 2: l6ia.swap32(e2_raw), 3: new_e3, 4: new_e4})
 

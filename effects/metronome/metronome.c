@@ -6,7 +6,7 @@
 #define PI 3.14159265358979323846
 
 static const FxParamDesc PARAMS[M_NPARAMS] = {
-    { "tempo",  "Tempo",       FX_CONTINUOUS, 20.0f, 300.0f, 120.0f, "BPM", "immediate (0.01 BPM steps)" },
+    { "time",   "Time",        FX_CONTINUOUS, 0.1f,  4.0f,   0.5f,   "s (one beat)", "immediate (BPM rounded to 0.01)" },
     { "meter",  "Beats/Bar",   FX_INTEGER,    2.0f,  5.0f,   4.0f,   "beats", "immediate" },
     { "accent", "Accent",      FX_INTEGER,    0.0f,  12.0f,  6.0f,   "dB", "immediate" },
     { "sound",  "Sound",       FX_INTEGER,    0.0f,  2.0f,   0.0f,   "", "immediate" },
@@ -34,6 +34,14 @@ static const float MAX_VOICE = 0.2f;                 /* no voice outlives this, 
    multiply-add (-ffp-contract=off), which the SHARC does not do. */
 const float click_silent = 1e-4f;
 #define SILENT click_silent                   /* -80 dB: the voice stops */
+
+uint32_t click_bpm100(float beat_seconds)
+{
+    /* The beat as a whole number of eighth-samples at 48 kHz, then BPM x 100 by rounded integer
+       division: exact and reproducible on the SHARC (no float divide there), 0.01 BPM steps. */
+    uint32_t p = (uint32_t)(beat_seconds * 384000.0f + 0.5f);
+    return (CLICK_BPM100_NUM + (p >> 1)) / p;
+}
 
 static void rotor(Rotor *r, float hz, float sr)
 {
@@ -114,13 +122,13 @@ static void process(void *st, const FxParams *p, const float *in, float *out, si
 {
     MetronomeState *m = st;
     const FxParamDesc *d = PARAMS;
-    float tempo = fx_param_clamp(&d[M_TEMPO], p->value[M_TEMPO]);
+    float beat = fx_param_clamp(&d[M_TIME], p->value[M_TIME]);
     int meter = (int)fx_param_clamp(&d[M_METER], p->value[M_METER]);
     float accent = (float)pow(10.0, (double)fx_param_clamp(&d[M_ACCENT], p->value[M_ACCENT]) / 20.0);
     int sound = (int)fx_param_clamp(&d[M_SOUND], p->value[M_SOUND]);
     float level = fx_param_clamp(&d[M_LEVEL], p->value[M_LEVEL]);   /* 0..1, as HX Mix/level knobs */
     int sub = (int)fx_param_clamp(&d[M_SUBDIV], p->value[M_SUBDIV]);
-    uint32_t inc = (uint32_t)(tempo * 100.0f + 0.5f) * (uint32_t)sub;
+    uint32_t inc = click_bpm100(beat) * (uint32_t)sub;
     size_t i;
 
     for (i = 0; i < n; i++) {

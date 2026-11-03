@@ -14,10 +14,11 @@ static int failures, checks;
 
 #define CHECK(cond, ...) do { checks++; if (!(cond)) { failures++; printf("FAIL %s:%d: ", __FILE__, __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
 
+/* tempo in BPM, given to the block as Time = one beat in seconds */
 static void set(FxParams *p, float tempo, int meter, float accent, int sound, float level, int sub)
 {
     memset(p, 0, sizeof *p);
-    p->value[M_TEMPO] = tempo; p->value[M_METER] = (float)meter; p->value[M_ACCENT] = accent;
+    p->value[M_TIME] = 60.0f / tempo; p->value[M_METER] = (float)meter; p->value[M_ACCENT] = accent;
     p->value[M_SOUND] = (float)sound; p->value[M_LEVEL] = level; p->value[M_SUBDIV] = (float)sub;
 }
 
@@ -51,8 +52,12 @@ static void test_tempo(void)
     for (b = 0; b < sizeof bpms / sizeof bpms[0]; b++) {
         FxParams p;
         size_t k, cnt;
-        double interval = SR * 60.0 / bpms[b], worst = 0;
+        double interval, worst = 0;
+        uint32_t bpm100;
         set(&p, bpms[b], 4, 6, 0, 0.5f, 1);
+        bpm100 = click_bpm100(p.value[M_TIME]);
+        CHECK(fabs(bpm100 / 100.0 - bpms[b]) <= 0.005, "%g BPM arrives as %.2f BPM", bpms[b], bpm100 / 100.0);
+        interval = SR * 6000.0 / bpm100;          /* exact: the scheduler's own rational period */
         cnt = ticks(&p, n, at, kind, 4000);
         CHECK(cnt == (size_t)floor((n - 1) / interval) + 1, "%g BPM: %zu ticks in 10 min, expected %zu",
               bpms[b], cnt, (size_t)floor((n - 1) / interval) + 1);
@@ -62,7 +67,8 @@ static void test_tempo(void)
             if (fabs(e) > worst) worst = fabs(e);
             if (e < 0 || e >= 1.0) break;
         }
-        printf("  %6.1f BPM: %4zu ticks in 10 min, worst offset %.3f samples, no drift\n", bpms[b], cnt, worst);
+        printf("  %6.1f BPM (Time %.6f s -> %.2f BPM): %4zu ticks in 10 min, worst offset %.3f samples, no drift\n",
+               bpms[b], p.value[M_TIME], bpm100 / 100.0, cnt, worst);
     }
     free(at); free(kind);
 }
@@ -146,7 +152,7 @@ static void test_robustness(void)
     for (i = 0; i < n; i += 16) {
         size_t j;
         if (i % 4800 == 0) {                             /* knobs move every 100 ms */
-            set(&p, 20 + 280 * (rng_uniform(&r) + 1) / 2, 2 + (int)(rng_u32(&r) % 4), 12 * (rng_uniform(&r) + 1) / 2,
+            set(&p, 15 + 585 * (rng_uniform(&r) + 1) / 2, 2 + (int)(rng_u32(&r) % 4), 12 * (rng_uniform(&r) + 1) / 2,
                 (int)(rng_u32(&r) % 3), (rng_uniform(&r) + 1) / 2, 1 + (int)(rng_u32(&r) % 4));
             if (rng_u32(&r) % 9 == 0) p.value[rng_u32(&r) % M_NPARAMS] = NAN;
             if (rng_u32(&r) % 50 == 0) fx_metronome.reset(&s1, SR);
@@ -156,7 +162,7 @@ static void test_robustness(void)
             fx_metronome.process(&s1, &p, in + i + j, a + i + j, 1);
             if (!isfinite(a[i + j]) || fabsf(a[i + j]) > 1.0f) ok = 0;
             if (s1.ticks != before) {
-                if (!first && s1.ticks != 1 && i + j - last_tick < 2399) dbl = 1;   /* (T - inc) / inc_max: 300 BPM x 4 */
+                if (!first && s1.ticks != 1 && i + j - last_tick < 1199) dbl = 1;   /* (T - inc) / inc_max: 600 BPM x 4 */
                 last_tick = i + j; first = 0;
             }
             if (s1.ticks < prev) last_tick = i + j;      /* a reset restarts the count */

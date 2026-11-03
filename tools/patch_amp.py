@@ -756,7 +756,8 @@ def _parse_e0_segments_any(e0):
     return segs
 
 
-def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp_cost=None, n_params=None, strip_title='NAM / IR_2048'):
+def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp_cost=None, n_params=None, strip_title='NAM / IR_2048',
+                            n_display=None):
     """HX Effects: the target model keeps its identity (name index, preset id, btype, list entry);
     only its Table 1 cost, Table 2 counts/short name and browser display name change, in place."""
     A = EFFECTS_E0
@@ -784,7 +785,8 @@ def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp
             row = bytearray(vread(va, 44))
             row[4:20] = (short_name or display_name).encode('latin1')[:16].ljust(16, b'\0')
             if n_params is not None:
-                struct.pack_into('<3I', row, 24, n_params, n_params, n_params)
+                # (knobs shown, parameters, parameters): a delay's sync controls share its Time knob
+                struct.pack_into('<3I', row, 24, n_params if n_display is None else n_display, n_params, n_params)
             vwrite(va, bytes(row)); done = True
     assert done, 'target model not in Table 2'
     # the browser item's display name, wherever it is listed
@@ -1328,7 +1330,7 @@ def pmap_slots_without_param(e4, blob_index, params):
     return sorted(slots - {p['slot'] for p in params})
 
 
-def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
+def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, blob_fn=None):
     """Entry 4 with one more blob, the NAM host: a copy of the model's composite
     (DEV.NAM_HOST_COMPOSITE) appended to Blob 0 (0x6001c6, 0x6001c7, ...;
     clone_composite_in_blob0) with its amp member made primitive 0x9c75
@@ -1370,7 +1372,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
         raise_amp_harness_sdram(b0_words, sdram_words)
     err = sharc_blob0_check(b0_words, DEV.BLOB0_MAX_WORDS)
     assert err is None, err
-    src_blob_words = nam_host_blob(new_comp_id, nam, extra)
+    src_blob_words = (blob_fn or nam_host_blob)(new_comp_id, nam, extra)
 
     added_blobs.append(src_blob_words)
     if dir_off > 6:

@@ -2,7 +2,7 @@
   "id": "metronome",
   "display_name": "Click",
   "parameters": [
-    {"id": "tempo", "display": "Tempo", "type": "continuous", "min": 20, "max": 300, "default": 120, "unit": "BPM", "smoothing": "immediate (0.01 BPM steps)"},
+    {"id": "time", "display": "Time", "type": "continuous", "min": 0.1, "max": 4, "default": 0.5, "unit": "s (one beat)", "smoothing": "immediate (BPM rounded to 0.01)"},
     {"id": "meter", "display": "Beats/Bar", "type": "integer", "min": 2, "max": 5, "default": 4, "unit": "beats", "smoothing": "immediate"},
     {"id": "accent", "display": "Accent", "type": "integer", "min": 0, "max": 12, "default": 6, "unit": "dB", "smoothing": "immediate"},
     {"id": "sound", "display": "Sound", "type": "integer", "min": 0, "max": 2, "default": 0, "unit": "", "smoothing": "immediate"},
