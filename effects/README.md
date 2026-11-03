@@ -54,14 +54,14 @@ A metronome as an ordinary **preset block**: it lives in a preset, takes one blo
 block's bypass/footswitch. Not a global metronome. The guitar passes at exactly unity gain; a
 synthesised click is added.
 
-Six parameters: Tempo (20..300 BPM, quarter-note beats, 0.01 BPM resolution), Beats/Bar (2..5: 2/4,
+Six parameters: Tempo (20..300 BPM in whole BPM, quarter-note beats), Beats/Bar (2..5: 2/4,
 3/4, 4/4, 5/4), Accent (0..12 dB on beat 1; 0 dB = no accent, same sound as other beats), Sound
 (click, wood, beep), Level (0..1, shown as % on the unit, linear, peak 1.0), Subdivision (1..4 per beat: quarters, eighths,
 triplets, sixteenths; subdivision clicks are lower and about 8 dB quieter).
 
 - **Timing is exact.** The tempo phase is an integer: it gains BPM x 100 x subdivision per sample and
-  ticks at sample rate x 6000, so tick k lands on the first sample at or after k x 60 / BPM s, for
-  ever. No floating-point drift (tested over 10 minutes at 20, 60, 120, 137.5 and 300 BPM).
+  ticks at sample rate x 6000 (the x 100 is kept from when Tempo had 0.01 BPM steps), so tick k lands on the first sample at or after k x 60 / BPM s, for
+  ever. No floating-point drift (tested over 10 minutes at 20, 60, 120, 137 and 300 BPM).
 - **Bar position:** the first sample after `reset()` is beat 1, accented ("restart on enable"). Whether
   the unit re-creates or resets a block when it is enabled is not known yet; if it does not, the block
   will resume its running count instead. Tempo changes keep the phase within the beat.
@@ -89,7 +89,7 @@ knobs moving every 100 ms. Each call is also held to the register contract the N
 (R0-R15, the alternate registers, the DAG registers and MODE1 unchanged; no loop or PC stack left),
 and every memory write must land in the output buffer, the instance's state words or the save area.
 
-Measured: bit-identical; 343 instructions; worst 1,478 and mean about 640 cycles per 16-sample call,
+Measured: bit-identical; 351 instructions; worst 1,483 and mean about 650 cycles per 16-sample call,
 under 1 % of the roughly 150,000 a call has at 450 MHz.
 
 For the match to be exact the reference avoids anything the port can't reproduce: constants are
@@ -97,17 +97,21 @@ computed in double and rounded once (the port's tables are generated the same wa
 (a 13-entry table), the beep's release is a fixed per-sample
 step, and the C build uses `-ffp-contract=off` (no fused multiply-add).
 
-The port's own ABI, which the firmware gives it (`build_click.py`): knob words DM(5) Tempo (float),
-DM(6) Beats/Bar (int), DM(7) Accent (int dB), DM(8) Sound (int), DM(9) Level (float 0..1), DM(10)
-Subdivision (int). Two conventions copied from the NAM kernel after the first hardware build froze the
-unit's controls (audio kept running; any knob or bypass change hung the panel):
+The port's own ABI, which the firmware gives it (`build_click.py`): knob words DM(5) Tempo (int
+BPM), DM(6) Beats/Bar (int), DM(7) Accent (int dB), DM(8) Sound (int), DM(9) Level (float 0..1),
+DM(10) Subdivision (int). What the hardware builds taught (2026-11-03):
 
-- **DM(3) is the stock knob writer's flag.** It sets it on every write; the kernel must clear it.
-  Click now clears it on every call; the check fails if it doesn't.
-- **The instance block is not the kernel's.** The hook copies stock primitive 0x822's record, whose
-  control functions own that block. Click now writes only DM(3) and DM(12) (its slot number, as NAM's
-  word 12) and keeps its state in one of 8 slots in Block 3, claimed per block as NAM claims its slots
+- **Put I1-I3 back on exit.** The NAM kernel does (restoring B1-B3 reloads them). Returning with
+  I1/I2 advanced past the buffers froze the unit's knobs and footswitches while audio carried on.
+  The check now requires every index register to come back unchanged; the old kernel fails it.
+- **DM(3) is the block's bypass flag.** Run in ssim, stock primitive 0x822 (whose control functions
+  the hook copies) copies its input to its output while DM(3) != 0 and never writes it. Click does the
+  same and restarts the bar at beat 1 when switched back on. The NAM kernel instead clears DM(3)
+  (it took it for a knob-write flag), which is why the footswitch lit but did not bypass Click; NAM's
+  bypass is probably defeated the same way.
+- **Leave the instance block alone.** Click writes only DM(12) (its slot number, as NAM's word 12)
+  and keeps its state in one of 8 slots in Block 3, claimed per block as NAM claims its slots
   (fresh or taken-over blocks claim a free slot, else one idle for 64 calls, and start from beat 1;
   a ninth simultaneous block passes its input through).
-
-Which of the two caused the hang is not known yet; both are fixed together.
+- **Tempo is a list knob (20..300 BPM).** As a float with the "tenths" display (borrowed from an EQ's
+  Q) it froze the unit's controls when turned; the four list knobs and the percent knob worked.

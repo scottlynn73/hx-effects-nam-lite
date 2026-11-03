@@ -40,10 +40,10 @@ static size_t ticks(const FxParams *p, size_t n, uint32_t *at, int *kind, size_t
     return k;
 }
 
-/* 1. Exact long-term tempo: ten minutes at 20, 60, 120, 137.5 and 300 BPM. */
+/* 1. Exact long-term tempo: ten minutes at 20, 60, 120, 137 and 300 BPM. */
 static void test_tempo(void)
 {
-    static const float bpms[] = { 20.0f, 60.0f, 120.0f, 137.5f, 300.0f };
+    static const float bpms[] = { 20.0f, 60.0f, 120.0f, 137.0f, 300.0f };
     const size_t n = (size_t)(600 * SR);
     size_t b;
     uint32_t *at = malloc(4000 * sizeof *at);
@@ -106,7 +106,7 @@ static void test_passthrough(void)
     for (i = 0; i < n; i += 16) fx_metronome.process(&m, &p, in + i, out + i, 16);
     CHECK(!memcmp(in, out, n * sizeof *in), "Level 0 changes the guitar");
     for (s = 0; s < SOUNDS; s++) {
-        set(&p, 137.5f, 3, 12, s, 1.0f, 3);
+        set(&p, 137.0f, 3, 12, s, 1.0f, 3);
         fx_metronome.reset(&m, SR);
         for (i = 0; i < n; i += 16) fx_metronome.process(&m, &p, in + i, out + i, 16);
         fx_metronome.reset(&m, SR);
@@ -168,7 +168,7 @@ static void test_robustness(void)
     CHECK(!dbl, "two ticks closer than the fastest possible interval");
     CHECK(worst_run <= (size_t)(0.2 * SR) + 1, "a voice stayed on for %zu samples after its trigger", worst_run);
 
-    set(&p1, 97.3f, 3, 6, 0, 0.8f, 2);                     /* two instances, interleaved */
+    set(&p1, 97.0f, 3, 6, 0, 0.8f, 2);                     /* two instances, interleaved */
     set(&p2, 211.0f, 5, 12, 1, 0.6f, 3);
     for (i = 0; i < n; i++) in[i] = 0.1f * sinf((float)i * 0.01f);
     fx_metronome.reset(&s1, SR);

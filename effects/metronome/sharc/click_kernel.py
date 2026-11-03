@@ -34,7 +34,7 @@ _ST = ['STARTED', 'FIRE', 'ACC', 'SUBIDX', 'BEAT', 'ACTIVE', 'SOUND', 'C0', 'S0'
 STATE = {f'ST_{n}': 2 + k for k, n in enumerate(_ST)}          # offsets in a slot, after OWNER and LAST
 NSLOTS, NSTATE, SLOTW, STALE, P_SLOT = 8, len(_ST), 2 + len(_ST), 64, 12
 KNOB = dict(tempo=5, meter=6, accent=7, sound=8, level=9, subdiv=10)
-INT_KNOBS = {'meter', 'accent', 'sound', 'subdiv'}
+INT_KNOBS = {'tempo', 'meter', 'accent', 'sound', 'subdiv'}
 PARAM_ORDER = ['tempo', 'meter', 'accent', 'sound', 'level', 'subdiv']    # = metronome.h M_*
 MAX_CYCLES = 3000                         # per 16-sample call; the NAM kernel's budget is 33,000
 
@@ -151,13 +151,15 @@ class Rig:
         i0 = 0xB3000 + 0x400 * k
         for a in range(145):
             self.sim.wr(i0 + a, 0)
-        self.sim.wr(i0 + 3, 1)
+        # DM(3) 0: enabled (the bypass flag, stock 0x822)
         return i0
 
     def knobs(self, i0, knobs):
         for k, v in knobs.items():
             self.sim.wr(i0 + KNOB[k], int(v) if k in INT_KNOBS else ssim.f2b(float(v)))
-        self.sim.wr(i0 + 3, 1)                       # as the stock knob writer does
+
+    def bypass(self, i0, on):
+        self.sim.wr(i0 + 3, 1 if on else 0)         # the host's bypass flag (stock 0x822's DM(3))
 
     def call(self, i0, block_words, label=''):
         sim, rnd = self.sim, self.rnd
@@ -203,10 +205,10 @@ class Rig:
             raise AssertionError(f'{label}: registers changed: {bad}')
         if sim.loops or sim.pcstk:
             raise AssertionError(f'{label}: returns with the loop or PC stack not empty')
-        if sim.rd(i0 + 3) != 0:
-            raise AssertionError(f'{label}: DM(3) (the knob writer\'s flag) not cleared')
+        if 3 + i0 in writes:
+            raise AssertionError(f'{label}: wrote DM(3), the host\'s bypass flag')
         lo = self.syms['SAVE']
-        allowed = [(BO, BO + 16), (i0 + 3, i0 + 4), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 22),       # SAVE (21) and G_CALLS
+        allowed = [(BO, BO + 16), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 22),       # SAVE (21) and G_CALLS
                    (self.syms['SLOTS'], self.syms['SLOTS'] + SLOTW * NSLOTS)]
         stray = [a for a in writes if not any(lo <= a < hi for lo, hi in allowed)]
         if stray:
@@ -235,10 +237,10 @@ def check(seconds=2.0):
     print(f'code {CODE:#x}..{end:#x} ({end - CODE} instructions), data {data[0]:#x}..{data[1]:#x}')
     cases = [
         dict(tempo=120, meter=4, accent=6, sound=0, level=0.5, subdiv=1),
-        dict(tempo=137.5, meter=3, accent=12, sound=1, level=1, subdiv=2),
+        dict(tempo=137, meter=3, accent=12, sound=1, level=1, subdiv=2),
         dict(tempo=300, meter=5, accent=0, sound=2, level=0.75, subdiv=4),
         dict(tempo=20, meter=2, accent=3, sound=1, level=0.3, subdiv=3),
-        dict(tempo=97.31, meter=4, accent=12, sound=0, level=0, subdiv=1),          # level 0: dry
+        dict(tempo=97, meter=4, accent=12, sound=0, level=0, subdiv=1),          # level 0: dry
         dict(tempo=500, meter=9, accent=40, sound=7, level=2.5, subdiv=0),          # out of range: clamped
     ]
     total = 0
@@ -264,9 +266,9 @@ def check(seconds=2.0):
     xa, xb = signal(nblk * 16, 11), signal(nblk * 16, 12)
     for b in range(nblk):
         if b % 300 == 0:
-            ka = dict(tempo=round(r.uniform(20, 300), 2), meter=r.randint(2, 5), accent=r.randint(0, 12),
+            ka = dict(tempo=r.randint(20, 300), meter=r.randint(2, 5), accent=r.randint(0, 12),
                       sound=r.randint(0, 2), level=round(r.uniform(0, 1), 3), subdiv=r.randint(1, 4))
-            kb = dict(tempo=round(r.uniform(20, 300), 2), meter=r.randint(2, 5), accent=r.randint(0, 12),
+            kb = dict(tempo=r.randint(20, 300), meter=r.randint(2, 5), accent=r.randint(0, 12),
                       sound=r.randint(0, 2), level=round(r.uniform(0, 1), 3), subdiv=r.randint(1, 4))
             rig.knobs(ia, ka)
             rig.knobs(ib, kb)
@@ -317,7 +319,30 @@ def check(seconds=2.0):
         raise AssertionError('a stale slot was not taken over by the waiting block')
     st0 = ref.new()                                        # the first one comes back: claims anew
     rig2.call(insts[0], x, 'returning block')
-    print(f'  {NSLOTS} slots: a 9th block passes through; a stale slot goes to the next block; DM(3) cleared every call')
+    print(f'  {NSLOTS} slots: a 9th block passes through; a stale slot goes to the next block')
+
+    # bypass: DM(3) set -> the input exactly, DM(3) untouched; on again -> beat 1 (a fresh reference)
+    kn = dict(tempo=200, meter=4, accent=12, sound=1, level=0.9, subdiv=2)
+    rig3 = Rig(secs, syms, data, seed=9)
+    i0 = rig3.inst(0)
+    rig3.knobs(i0, kn)
+    x = signal(900 * 16, 31)
+    st = ref.new()
+    for b in range(900):
+        blk = x[16 * b:16 * b + 16]
+        if b in (300, 650):
+            rig3.bypass(i0, True)
+        if b in (500, 800):
+            rig3.bypass(i0, False)
+            st = ref.new()
+        got = rig3.call(i0, blk, f'bypass block {b}')
+        if 300 <= b < 500 or 650 <= b < 800:
+            if got != blk or rig3.sim.rd(i0 + 3) != 1:
+                raise AssertionError(f'bypassed block {b}: output is not the input, or DM(3) changed')
+        elif got != ref.process(st, kn, [ssim.b2f(v) for v in blk]):
+            raise AssertionError(f'bypass test block {b}: differs from the reference')
+    total += 900 * 16
+    print('  bypass: input passed exactly, DM(3) never written; switched on again it restarts at beat 1')
     worst, mean = max(rig.cycles), sum(rig.cycles) / len(rig.cycles)
     print(f'{total} samples identical to the reference; cycles per 16-sample call: worst {worst}, mean {mean:.0f} '
           f'(budget {MAX_CYCLES}; about 150,000 per call at 450 MHz)')

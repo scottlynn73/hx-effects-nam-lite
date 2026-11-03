@@ -7,19 +7,22 @@
 // I1 = 16 input floats, I2 = 16 output floats. Preserves R0-R15, I1-I4 and MODE1;
 // leaves L1, L2, L4 at 0; uses no hardware loops or calls.
 //
-// Two conventions taken from the NAM kernel (the first hardware build hung the unit's
-// controls without them):
-// - DM(3, I0) is the stock knob writer's flag: it sets it on every knob write, and the
-//   kernel clears it. Every call clears it.
+// Lessons from the hardware builds:
+// - I1-I3 are put back on exit (the NAM kernel does, through B1-B3). Returning with I1/I2
+//   advanced froze the unit's controls.
+// - DM(3, I0) is the block's bypass flag. Stock primitive 0x822, whose control functions
+//   this hook copies, copies input to output while DM(3) != 0 and never writes it (run
+//   in ssim). So does Click; switching back on restarts the bar at beat 1. (NAM's kernel
+//   took DM(3) for a knob-write flag and cleared it, which defeats the footswitch.)
 // - The instance block is otherwise left alone: only the knob words are read, and only
-//   DM(3) and DM(P_SLOT = 12) are written (NAM's own words 12..14). The state lives in
+//   DM(P_SLOT = 12) is written (NAM's own words 12..14). The state lives in
 //   one of NSLOTS slots in Block 3, claimed as NAM claims its slots: a fresh block
 //   (P_SLOT 0) or one whose slot was taken over claims a free slot, else one whose owner
 //   has not run for STALE calls, and starts from reset; with none free it passes its input
 //   through. A slot is {owner I0, last call count, the state words}.
 //
 // Knob words (ABI of this port; the firmware's Entry 3 must match it):
-//   DM(5) Tempo float BPM   DM(6) Beats/Bar int    DM(7) Accent int dB
+//   DM(5) Tempo int BPM     DM(6) Beats/Bar int    DM(7) Accent int dB
 //   DM(8) Sound int         DM(9) Level float 0..1 DM(10) Subdivision int
 // State: DM(ST_.., I3), I3 = this instance's slot.
 
@@ -55,9 +58,7 @@ CLICK_ENTRY:
     DM(SAVE + 20) = I2;                 // (its B1/B2 restore reloads I1/I2), so must this one
     L1 = 0; L2 = 0; L3 = 0; L4 = 0;
 
-    // ---- acknowledge the knob writer; find this instance's slot (I3)
-    R8 = 0;
-    DM(3, I0) = R8;
+    // ---- find this instance's slot (I3)
     R9 = DM(G_CALLS);
     R9 = R9 + 1;
     DM(G_CALLS) = R9;                   // R9: this call's count
@@ -116,6 +117,15 @@ c_zero:
 c_have:
     DM(S_LAST, I3) = R9;
 
+    // ---- bypassed (DM(3) set by the host): pass through; start again at beat 1 after
+    R8 = DM(3, I0);
+    R8 = PASS R8;
+    IF EQ JUMP k_on;
+    R8 = 0;
+    DM(ST_STARTED, I3) = R8;
+    JUMP k_pass;
+k_on:
+
     // ---- first call of this instance: beat 1 on its first sample (reset())
     R8 = DM(ST_STARTED, I3);
     R8 = PASS R8;
@@ -132,16 +142,16 @@ c_have:
 
     // ---- knobs, clamped as fx_param_clamp does (finite values)
 k_knobs:
-    F0 = DM(5, I0);                     // Tempo
-    F8 = 20.0;
-    F0 = MAX(F0, F8);
-    F8 = 300.0;
-    F0 = MIN(F0, F8);
-    F8 = 100.0;
-    F0 = F0 * F8;
-    F8 = 0.5;
-    F0 = F0 + F8;
-    R0 = TRUNC F0;                      // BPM x 100
+    R0 = DM(5, I0);                     // Tempo, whole BPM 20..300
+    R8 = 20;
+    R0 = MAX(R0, R8);
+    R8 = 300;
+    R0 = MIN(R0, R8);
+    R8 = LSHIFT R0 BY 6;                // x 100 = x 64 + x 32 + x 4
+    R9 = LSHIFT R0 BY 5;
+    R8 = R8 + R9;
+    R9 = LSHIFT R0 BY 2;
+    R0 = R8 + R9;                       // BPM x 100
 
     R1 = DM(6, I0);                     // Beats/Bar 2..5
     R8 = 2;
