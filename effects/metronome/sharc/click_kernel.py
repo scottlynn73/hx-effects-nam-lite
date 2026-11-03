@@ -72,7 +72,7 @@ def constants():
 def source():
     c = constants()
     lay, a = [], DATA
-    lay.append(('SAVE', a, [0] * 19)); a += 19
+    lay.append(('SAVE', a, [0] * 21)); a += 21
     lay.append(('G_CALLS', a, [0])); a += 1
     slots = a + NSLOTS                         # SLOTS follows the table
     lay.append(('T_SLOTBASE', a, [slots + SLOTW * k for k in range(NSLOTS)])); a += NSLOTS
@@ -136,7 +136,9 @@ class Reference:
 # ------------------------------------------------------------------ the kernel in ssim
 
 class Rig:
-    KEEP = [c for c in range(0x10, 0x50) if c not in (0x11, 0x12, 0x13, 0x1F)]   # nam_multi.Rig's contract
+    # nam_multi.Rig's contract, plus I1-I3: the NAM kernel puts them back too (its B1-B3 restore),
+    # and leaving I1/I2 advanced froze the unit's controls in the first hardware builds
+    KEEP = [c for c in range(0x10, 0x50) if c != 0x1F]
 
     def __init__(self, secs, syms, data, seed=1):
         self.sim = ssim.Sim()
@@ -175,6 +177,7 @@ class Rig:
                 sim.set(c, rnd.getrandbits(32) & 0xFFFFF)
         for b, v in ((0x40, i0), (0x41, BI), (0x42, BO)):
             sim.set(b, v)
+        sim.set(0x13, rnd.getrandbits(32) & 0xFFFFF)        # I3: the call-list entry (unused here)
         sim.u[ssim.U_MODE1] |= 0x1000000
         mode1 = sim.u[ssim.U_MODE1]
         before = ([sim.R(r) for r in range(16)], list(sim.alt[:16]), {c: sim.get(c) for c in self.KEEP})
@@ -203,7 +206,7 @@ class Rig:
         if sim.rd(i0 + 3) != 0:
             raise AssertionError(f'{label}: DM(3) (the knob writer\'s flag) not cleared')
         lo = self.syms['SAVE']
-        allowed = [(BO, BO + 16), (i0 + 3, i0 + 4), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 20),
+        allowed = [(BO, BO + 16), (i0 + 3, i0 + 4), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 22),       # SAVE (21) and G_CALLS
                    (self.syms['SLOTS'], self.syms['SLOTS'] + SLOTW * NSLOTS)]
         stray = [a for a in writes if not any(lo <= a < hi for lo, hi in allowed)]
         if stray:

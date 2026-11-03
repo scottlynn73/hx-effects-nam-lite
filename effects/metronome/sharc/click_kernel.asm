@@ -4,7 +4,7 @@
 //
 // Calling convention as the NAM kernel uses it (docs/baseline-audit.md, "modelled"):
 // once per 16-sample block; I0 = the instance's DM block (zeroed at creation),
-// I1 = 16 input floats, I2 = 16 output floats. Preserves R0-R15, I3, I4 and MODE1;
+// I1 = 16 input floats, I2 = 16 output floats. Preserves R0-R15, I1-I4 and MODE1;
 // leaves L1, L2, L4 at 0; uses no hardware loops or calls.
 //
 // Two conventions taken from the NAM kernel (the first hardware build hung the unit's
@@ -51,6 +51,8 @@ CLICK_ENTRY:
     DM(SAVE + 16) = R15;
     DM(SAVE + 17) = I4;
     DM(SAVE + 18) = I3;
+    DM(SAVE + 19) = I1;                 // the caller's buffer pointers: NAM's exit puts them back
+    DM(SAVE + 20) = I2;                 // (its B1/B2 restore reloads I1/I2), so must this one
     L1 = 0; L2 = 0; L3 = 0; L4 = 0;
 
     // ---- acknowledge the knob writer; find this instance's slot (I3)
@@ -415,6 +417,8 @@ k_exit:
     R15 = DM(SAVE + 16);
     I4 = DM(SAVE + 17);
     I3 = DM(SAVE + 18);
+    I1 = DM(SAVE + 19);
+    I2 = DM(SAVE + 20);
     MODE1 = DM(SAVE + 0);
     NOP;
     RTS (LR);
