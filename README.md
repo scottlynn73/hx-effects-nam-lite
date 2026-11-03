@@ -120,6 +120,36 @@ you a block you might have fitted. When in doubt, leave it at 2700.
 **Note- you may find the software says there was a problem, just try again and it should work on the second try (this tends to be 
 more likely when recovering from scratch, not when updating an already working firmware.**
 
+### Flashing from the command line
+
+`tools/flash.py` does the same update as Line 6 Updater, over USB, and then checks that the unit boots
+back into its main app. Close HX Edit and Line 6 Updater first, then:
+
+```
+pip install pyusb libusb-package      # once, in the .venv
+python3 tools/flash.py flash build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf
+```
+
+It checks the file (product, MD5, every entry's checksum), asks you to type `flash`, then: restarts the
+main app into its USB DFU loader, loads the updater app from the `.hxf`, writes all 14 images (about
+100 seconds), and waits for the unit to answer as `F15Main`. It ends with `BOOTED` or `BOOT FAILED`
+(exit code 0 or 1), so it can follow a build in a script. If it stops partway, the unit is left in
+updater mode; run it again, or use Line 6 Updater. `python3 tools/flash.py info` shows what the unit is
+running without changing anything.
+
+Before writing, it lists images the unit flags. Image 4 is always listed: the updater app flags any
+image longer than its partition's declared size, and image 4's partition is declared as 10 MiB while
+stock 3.80.0's image 4 is already 12.4 MB (ours is 14.3 MB). The physical space before the next
+partition is 15.5 MiB, which is the limit the build checks against. Line 6 Updater rewrites flagged images
+first and so does this tool; it is not damage.
+
+"Booted" means the main app came up and answers on USB. It does not yet tell a clean boot from one that
+stops at a "Boot Failure" message, so glance at the screen as well.
+
+The protocol was taken from a USB capture of Line 6 Updater 1.28 (`tools/usb/`: `capture.sh` runs the
+Updater with a logging libusb shim, `decode.py` reads the log), and `python3 tools/flash.py replay
+<file.hxf> <log>` checks the tool against such a capture byte for byte. It is tested on 3.80.0 only.
+
 ## Use
 
 1. Convert a capture to a User IR:
@@ -249,6 +279,8 @@ captures/                 demo NAM A2 Lite captures, already converted to User I
 README.md                 this file
 build/                    the output (created by the build)
 tools/                    hxf.py, l6ia.py, l6ia_verify.py, patch_amp.py, nam2ir.py
+tools/flash.py            USB flasher with boot check (see Flashing from the command line)
+tools/usb/                usblog.c + build_shim.sh + capture.sh (log Line 6 Updater's USB traffic), decode.py
 tools/sharc/              the kernel (nam_multi.py, nam_multi_kernel.asm), nam_lite.py, nam_pack.py,
                           sasm.py and ssim.py (assembler, simulator), entry4_blob.py, recips_table.json
 src/sharc/nam_a2.asm      the reference NAM A2 implementation the simulator check compares against

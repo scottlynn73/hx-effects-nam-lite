@@ -7,3 +7,7 @@ __pycache__/
 *.hxf
 *.l6ia
 .DS_Store
+
+# USB traffic logs carry firmware bytes
+usblog/
+tools/usb/usblog.dylib
