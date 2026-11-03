@@ -7,7 +7,7 @@ touches firmware. See `docs/baseline-audit.md` for what is known about the real 
 ```
 cd effects
 make test        # every test; no hardware, no audio files needed
-make demo        # out/fixtures/*.wav (generated signals) and out/geiger/{crush,fold,radio}.wav
+make demo        # out/fixtures/*.wav (generated signals), out/geiger/*.wav, out/metronome/*.wav
 out/fxrender geiger in.wav out.wav gain=18 rate=4000 bits=5 curve=3   # any WAV, any settings
 out/fxrender describe geiger          # the parameter descriptor (= geiger/params.json)
 ```
@@ -47,3 +47,34 @@ extremes, with NaN/Inf/1e30 input and with random (and NaN) knob values each blo
 rate; the anti-alias mode cutting a known alias by more than 6 dB; the three variants different from
 dry and each other; and `golden.txt` metrics within 1e-4 (recorded on macOS/clang; re-record with
 `make golden` after an intended change).
+
+## Click (`metronome/`)
+
+A metronome as an ordinary **preset block**: it lives in a preset, takes one block, and follows the
+block's bypass/footswitch. Not a global metronome. The guitar passes at exactly unity gain; a
+synthesised click is added.
+
+Six parameters: Tempo (20..300 BPM, quarter-note beats, 0.01 BPM resolution), Beats/Bar (2..5: 2/4,
+3/4, 4/4, 5/4), Accent (0..12 dB on beat 1; 0 dB = no accent, same sound as other beats), Sound
+(click, wood, beep), Level (0..100 %, linear, peak 1.0), Subdivision (1..4 per beat: quarters, eighths,
+triplets, sixteenths; subdivision clicks are lower and about 8 dB quieter).
+
+- **Timing is exact.** The tempo phase is an integer: it gains BPM x 100 x subdivision per sample and
+  ticks at sample rate x 6000, so tick k lands on the first sample at or after k x 60 / BPM s, for
+  ever. No floating-point drift (tested over 10 minutes at 20, 60, 120, 137.5 and 300 BPM).
+- **Bar position:** the first sample after `reset()` is beat 1, accented ("restart on enable"). Whether
+  the unit re-creates or resets a block when it is enabled is not known yet; if it does not, the block
+  will resume its running count instead. Tempo changes keep the phase within the beat.
+- **Voices:** sine partials from a quadrature oscillator (no tables, no samples), exponential decay
+  (click 3 ms, wood 12 ms with a second partial at 2.71x) or a 40 ms gate with 5 ms release (beep).
+  A new tick replaces a sounding voice; no voice lasts more than 200 ms.
+- **Not in V1:** HX tap tempo, preset tempo or MIDI clock (needs evidence of how stock tempo-synced
+  blocks get their tempo), compound meters such as 6/8, and a separate click output.
+
+The tests (`metronome/test_metronome.c`, the brief's acceptance tests 1-4): exact tick count and every
+tick within one sample of its ideal time for 10 minutes at five tempos; downbeat at sample 0 and the
+accent/beat/subdivision pattern in all 16 meter x subdivision combinations; Level 0 gives exactly the
+input, otherwise output = input + click (within 1e-6) with a peak of at most 1.0 and the guitar
+untouched between clicks; random knob changes (including NaN) and resets for two minutes give only
+finite, bounded output, no two ticks closer than the fastest possible interval, and no voice longer
+than 200 ms; two interleaved instances equal each alone; identical output for block sizes 1/16/37/4096.

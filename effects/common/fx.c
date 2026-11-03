@@ -4,8 +4,9 @@
 #include <string.h>
 
 extern const FxAlgorithm fx_geiger;
+extern const FxAlgorithm fx_metronome;
 
-static const FxAlgorithm *const ALL[] = { &fx_geiger };
+static const FxAlgorithm *const ALL[] = { &fx_geiger, &fx_metronome };
 
 const FxAlgorithm *const *fx_all(size_t *n)
 {
