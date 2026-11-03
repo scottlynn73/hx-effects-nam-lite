@@ -11,8 +11,9 @@ usage: python3 build_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] 
                   from build_effects.py's image (the browser shows "NAM A2 Lite").
                   Writes build/HX_Effects_v3.80.0_Click_diag.hxf.
 --probe           a diagnostic kernel with Click's knobs that reports instance words by sound: Wood
-                  while DM(3) is 0, Beep while it is not (the Sound knob is ignored), and an
-                  immediate bar restart whenever any other non-knob instance word changes.
+                  clicks at 60 BPM while DM(3) is 0, 240 BPM while it is not (Tempo, Subdivision and
+                  Sound ignored), and an immediate bar restart whenever any other non-knob instance
+                  word changes.
                   Writes build/HX_Effects_v3.80.0_Click_probe.hxf.
 
 The same takeover as build_effects.py: Click becomes the 1024-sample IR block (IR > Single > "Click";
@@ -59,7 +60,8 @@ CLICK_PARAMS = (
     (3, 7,  'HD2_TremoloPatternMono', 'Step1', 'Accent', 'Accent', LIST,
      {k: ('Off' if k == 0 else f'{k} dB') for k in range(13)}, 6),
     (4, 8,  'HD2_FM4SynthOMatic', 'Wave', 'Sound', 'Sound', LIST, {0: 'Click', 1: 'Wood', 2: 'Beep'}, 0),
-    (5, 9,  'HD2_ChorusMono', 'Mix', 'Level', 'Level', 'percent', (0.0, 1.0), 0.5),
+    # Level on NAM's ChVol record (proven to reach the kernel); on Chorus 'Mix' it never arrived
+    (5, 9,  'HD2_AmpLine6Clarity', 'ChVol', 'Level', 'Level', 'percent', (0.0, 1.0), 0.5),
     (6, 10, 'HD2_DelayCrissCrossMono', 'Shape', 'Subdivision', 'Subdiv', LIST,
      {1: '1/4', 2: '1/8', 3: '1/8T', 4: '1/16'}, 1),
 )

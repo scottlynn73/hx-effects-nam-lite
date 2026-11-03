@@ -78,14 +78,11 @@ BYPASS = """    // ---- bypassed (DM(3) set by the host): pass through; start ag
     JUMP k_pass;
 k_on:
 """
-PROBE = """    // ---- PROBE (diagnostic build): Sound = Wood while DM(3) is 0, Beep while it is not;
-    // any change in the other instance words (all but the knobs 5..10 and P_SLOT 12)
-    // restarts the bar at once. Never writes DM(3).
+PROBE = """    // ---- PROBE (diagnostic build): Wood clicks at 60 BPM while DM(3) is 0, 240 BPM while it
+    // is not (Tempo, Subdivision and Sound ignored); any change in the other instance words
+    // (all but the knobs 5..10 and P_SLOT 12) restarts the bar at once. Never writes DM(3).
     R8 = DM(3, I0);
-    R8 = PASS R8;
-    R13 = 1;
-    IF NE R13 = R13 + 1;
-    DM(G_PSOUND) = R13;
+    DM(G_PSOUND) = R8;
     R14 = DM(0, I0);
     R15 = DM(1, I0);
     R14 = R14 + R15;
@@ -115,6 +112,17 @@ k_on:
 SOUND = """    R8 = 2;
     R3 = MIN(R3, R8);
 """
+SUBDIV = """    R8 = 4;
+    R2 = MIN(R2, R8);
+"""
+PROBE_TEMPO = """    R2 = 1;                             // PROBE: DM(3) 0 -> 60 BPM, else 240 BPM, quarters
+    R0 = 6000;
+    R8 = DM(G_PSOUND);
+    R8 = PASS R8;
+    IF EQ JUMP p_slow;
+    R0 = 24000;
+p_slow:
+"""
 
 
 def source(probe=False):
@@ -137,9 +145,10 @@ def source(probe=False):
     equ += [f'.equ {name}, {addr:#x}' for name, addr, _ in lay]
     data = [f'.section dm {DATA:#x}'] + ['.word ' + ', '.join(f'{w:#010x}' for w in words) for _, _, words in lay]
     asm = open(os.path.join(HERE, 'click_kernel.asm')).read()
-    assert asm.count('// EQUS') == 1 and asm.count(BYPASS) == 1 and asm.count(SOUND) == 1
+    assert asm.count('// EQUS') == 1 and asm.count(BYPASS) == 1 and asm.count(SOUND) == 1 and asm.count(SUBDIV) == 1
     if probe:
-        asm = asm.replace(BYPASS, PROBE).replace(SOUND, SOUND + "    R3 = DM(G_PSOUND);                  // PROBE: DM(3) picks the sound\n")
+        asm = asm.replace(BYPASS, PROBE).replace(SOUND, SOUND + "    R3 = 1;                             // PROBE: always Wood\n")
+        asm = asm.replace(SUBDIV, SUBDIV + PROBE_TEMPO)
     return asm.replace('// EQUS', '\n'.join(equ + data)), (DATA, a)
 
 
