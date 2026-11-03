@@ -10,10 +10,10 @@ usage: python3 build_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] 
                   Names, DSP cost and strip title are NAM's too, so only Entry 2's kernel differs
                   from build_effects.py's image (the browser shows "NAM A2 Lite").
                   Writes build/HX_Effects_v3.80.0_Click_diag.hxf.
---probe           a diagnostic kernel with Click's knobs that reports instance words by sound: Wood
-                  clicks at 60 BPM while DM(3) is 0, 240 BPM while it is not (Tempo, Subdivision and
-                  Sound ignored), and an immediate bar restart whenever any other non-knob instance
-                  word changes.
+--probe           a diagnostic kernel with Click's knobs that reports instance words by sound: the
+                  speed shows DM(3)'s value (0/1/2/other -> 60/120/180/240 BPM), and each change in
+                  any other non-knob instance word steps the sound Click -> Wood -> Beep (Tempo,
+                  Subdivision and Sound ignored).
                   Writes build/HX_Effects_v3.80.0_Click_probe.hxf.
 
 The same takeover as build_effects.py: Click becomes the 1024-sample IR block (IR > Single > "Click";
@@ -52,14 +52,15 @@ DSP_COST = 300
 # Knob: (slot, pid = instance word, template model, template param, display, short, kind, range, default)
 LIST = 'list'
 CLICK_PARAMS = (
-    # Tempo as a list: a float with the 'tenths' display (the EQ's Q) froze the unit's controls
-    (1, 5,  'HD2_DelayAdriaticDelayMono', 'BBD Size', 'Tempo', 'Tempo', LIST,
+    # Knob 1 of an IR-type block is drawn as the IR selector (shown large on page 1). Floats and a
+    # 281-entry list there froze the unit's controls, so it holds the short Sound list instead.
+    (1, 8,  'HD2_FM4SynthOMatic', 'Wave', 'Sound', 'Sound', LIST, {0: 'Click', 1: 'Wood', 2: 'Beep'}, 0),
+    (2, 5,  'HD2_DelayAdriaticDelayMono', 'BBD Size', 'Tempo', 'Tempo', LIST,
      {k: f'{k} BPM' for k in range(20, 301)}, 120),
-    (2, 6,  'HD2_DelayMultiPassMono', 'Pattern', 'Beats/Bar', 'Beats', LIST,
+    (3, 6,  'HD2_DelayMultiPassMono', 'Pattern', 'Beats/Bar', 'Beats', LIST,
      {2: '2/4', 3: '3/4', 4: '4/4', 5: '5/4'}, 4),
-    (3, 7,  'HD2_TremoloPatternMono', 'Step1', 'Accent', 'Accent', LIST,
+    (4, 7,  'HD2_TremoloPatternMono', 'Step1', 'Accent', 'Accent', LIST,
      {k: ('Off' if k == 0 else f'{k} dB') for k in range(13)}, 6),
-    (4, 8,  'HD2_FM4SynthOMatic', 'Wave', 'Sound', 'Sound', LIST, {0: 'Click', 1: 'Wood', 2: 'Beep'}, 0),
     # Level on NAM's ChVol record (proven to reach the kernel); on Chorus 'Mix' it never arrived
     (5, 9,  'HD2_AmpLine6Clarity', 'ChVol', 'Level', 'Level', 'percent', (0.0, 1.0), 0.5),
     (6, 10, 'HD2_DelayCrissCrossMono', 'Shape', 'Subdivision', 'Subdiv', LIST,

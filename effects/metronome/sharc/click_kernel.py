@@ -78,9 +78,10 @@ BYPASS = """    // ---- bypassed (DM(3) set by the host): pass through; start ag
     JUMP k_pass;
 k_on:
 """
-PROBE = """    // ---- PROBE (diagnostic build): Wood clicks at 60 BPM while DM(3) is 0, 240 BPM while it
-    // is not (Tempo, Subdivision and Sound ignored); any change in the other instance words
-    // (all but the knobs 5..10 and P_SLOT 12) restarts the bar at once. Never writes DM(3).
+PROBE = """    // ---- PROBE (diagnostic build), never writes DM(3):
+    // speed shows DM(3)'s value: 0 -> 60 BPM, 1 -> 120, 2 -> 180, else 240 (quarters);
+    // each change in the other instance words (all but the knobs 5..10 and P_SLOT 12)
+    // steps the sound Click -> Wood -> Beep -> Click (the Sound knob is ignored).
     R8 = DM(3, I0);
     DM(G_PSOUND) = R8;
     R14 = DM(0, I0);
@@ -105,8 +106,15 @@ p_sum:
     COMP(R14, R15);
     IF EQ JUMP k_on;
     DM(ST_CHK, I3) = R14;
-    R8 = 0;
-    DM(ST_STARTED, I3) = R8;
+    R15 = DM(ST_STARTED, I3);           // a fresh slot's first sum is not a change
+    R15 = PASS R15;
+    IF EQ JUMP k_on;
+    R15 = DM(G_PCOUNT);
+    R15 = R15 + 1;
+    R13 = 3;
+    COMP(R15, R13);
+    IF GE R15 = R15 - R13;
+    DM(G_PCOUNT) = R15;
 k_on:
 """
 SOUND = """    R8 = 2;
@@ -115,13 +123,21 @@ SOUND = """    R8 = 2;
 SUBDIV = """    R8 = 4;
     R2 = MIN(R2, R8);
 """
-PROBE_TEMPO = """    R2 = 1;                             // PROBE: DM(3) 0 -> 60 BPM, else 240 BPM, quarters
-    R0 = 6000;
+PROBE_TEMPO = """    R2 = 1;                             // PROBE: DM(3) 0/1/2/other -> 60/120/180/240 BPM
     R8 = DM(G_PSOUND);
+    R0 = 6000;
     R8 = PASS R8;
-    IF EQ JUMP p_slow;
+    IF EQ JUMP p_tempo;
+    R0 = 12000;
+    R9 = 1;
+    COMP(R8, R9);
+    IF EQ JUMP p_tempo;
+    R0 = 18000;
+    R9 = 2;
+    COMP(R8, R9);
+    IF EQ JUMP p_tempo;
     R0 = 24000;
-p_slow:
+p_tempo:
 """
 
 
@@ -131,6 +147,7 @@ def source(probe=False):
     lay.append(('SAVE', a, [0] * 21)); a += 21
     lay.append(('G_CALLS', a, [0])); a += 1
     lay.append(('G_PSOUND', a, [0])); a += 1
+    lay.append(('G_PCOUNT', a, [0])); a += 1
     slots = a + NSLOTS                         # SLOTS follows the table
     lay.append(('T_SLOTBASE', a, [slots + SLOTW * k for k in range(NSLOTS)])); a += NSLOTS
     lay.append(('SLOTS', a, [0] * (SLOTW * NSLOTS))); a += SLOTW * NSLOTS
@@ -147,7 +164,7 @@ def source(probe=False):
     asm = open(os.path.join(HERE, 'click_kernel.asm')).read()
     assert asm.count('// EQUS') == 1 and asm.count(BYPASS) == 1 and asm.count(SOUND) == 1 and asm.count(SUBDIV) == 1
     if probe:
-        asm = asm.replace(BYPASS, PROBE).replace(SOUND, SOUND + "    R3 = 1;                             // PROBE: always Wood\n")
+        asm = asm.replace(BYPASS, PROBE).replace(SOUND, SOUND + "    R3 = DM(G_PCOUNT);                  // PROBE: the change count picks the sound\n")
         asm = asm.replace(SUBDIV, SUBDIV + PROBE_TEMPO)
     return asm.replace('// EQUS', '\n'.join(equ + data)), (DATA, a)
 
@@ -268,7 +285,7 @@ class Rig:
         if 3 + i0 in writes:
             raise AssertionError(f'{label}: wrote DM(3), the host\'s bypass flag')
         lo = self.syms['SAVE']
-        allowed = [(BO, BO + 16), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 23),       # SAVE (21), G_CALLS, G_PSOUND
+        allowed = [(BO, BO + 16), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 24),       # SAVE (21), G_CALLS, G_PSOUND, G_PCOUNT
                    (self.syms['SLOTS'], self.syms['SLOTS'] + SLOTW * NSLOTS)]
         stray = [a for a in writes if not any(lo <= a < hi for lo, hi in allowed)]
         if stray:
