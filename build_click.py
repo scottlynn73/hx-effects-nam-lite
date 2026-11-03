@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Build HX Effects firmware 3.80.0 with the Click metronome block (instead of NAM), for a hardware test.
 
-usage: python3 build_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--no-check]
+usage: python3 build_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--no-check] [--diag-nam-knobs]
+
+--diag-nam-knobs  a diagnostic image: Click's kernel with NAM's eight knob records exactly (proven on
+                  the unit), to tell a kernel fault from a knob-definition fault. The kernel then reads
+                  NAM's words: Tempo = Input (0..1, so 20 BPM), Level = Mid, Accent = Model (1..12 dB),
+                  Sound = Bass (0 = Click, else Beep), Subdivision = Treble (0 = 1/4, else 1/16).
+                  Names, DSP cost and strip title are NAM's too, so only Entry 2's kernel differs
+                  from build_effects.py's image (the browser shows "NAM A2 Lite").
+                  Writes build/HX_Effects_v3.80.0_Click_diag.hxf.
 
 The same takeover as build_effects.py: Click becomes the 1024-sample IR block (IR > Single > "Click";
 the 2048 IR block stays), on a copy of the 2048 IR block's graph with its convolution replaced by
@@ -108,8 +116,9 @@ def main():
     md5 = hashlib.md5(open(stock, 'rb').read()).hexdigest()
     if md5 != STOCK_MD5:
         sys.exit(f'{stock}: MD5 {md5}, not the HX Effects 3.80.0 firmware (expected {STOCK_MD5}).')
+    diag = '--diag-nam-knobs' in argv
     out = os.path.abspath(argv[argv.index('-o') + 1]) if '-o' in argv else \
-        os.path.join(HERE, 'build', 'HX_Effects_v3.80.0_Click.hxf')
+        os.path.join(HERE, 'build', 'HX_Effects_v3.80.0_Click_diag.hxf' if diag else 'HX_Effects_v3.80.0_Click.hxf')
     build = os.path.join(HERE, 'build')
     os.makedirs(build, exist_ok=True)
     image = os.path.join(build, 'click.l6ia')
@@ -137,7 +146,10 @@ def main():
     info = pa.parse_entry3_full(e3)
     src_m = pa.find_model(info, CLONE)
     tgt = pa.find_model(info, TAKEOVER)
-    params = click_params(pa, e3, info)
+    params = pa.nam_params(e3, info) if diag else click_params(pa, e3, info)
+    # diagnostic: everything but the kernel exactly as build_effects.py makes it (names, cost, title)
+    name, display, cost_decl, title = ('HD2_AmpNAMLite', 'NAM A2 Lite', 2700, 'NAM / IR_2048') if diag else \
+        (NAME, DISPLAY, DSP_COST, STRIP_TITLE)
 
     # 2. Entry 4: the host graph (the 2048 IR block's, member 1 -> primitive 0x9c75)
     new_e4, blob, comp = pa.add_model_entry4(e4, src_m['blob_index'], params, 0)
@@ -149,7 +161,7 @@ def main():
     e2_raw, _ = pa.expand_sharc_blob0_buffer(e2_raw)
 
     # 4. Entry 3: the model, its descriptor copied over the takeover target's
-    new_e3, new_id, _ = pa.add_model_entry3(e3, src_m, NAME, DISPLAY, blob, params)
+    new_e3, new_id, _ = pa.add_model_entry3(e3, src_m, name, display, blob, params)
     new_e3 = bytearray(new_e3)
     ms = pa.parse_entry3_full(bytes(new_e3))['models']
     d_new = struct.unpack_from('<14I', new_e3, ms[new_id]['off'])
@@ -159,16 +171,16 @@ def main():
     struct.pack_into('<14I', new_e3, ms[tgt['model_id']]['off'], *d_tgt)
     new_e3 = bytes(new_e3)
     chk = pa.parse_entry3_full(new_e3)['models'][tgt['model_id']]
-    assert chk['displayName'] == DISPLAY and chk['blob_index'] == blob and len(chk['params']) == len(params)
-    for p, q in zip(sorted(chk['params'], key=lambda x: x['slot']), params):
+    assert chk['displayName'] == display and chk['blob_index'] == blob and len(chk['params']) == len(params)
+    for p, q in zip(sorted(chk['params'], key=lambda x: x['slot']), sorted(params, key=lambda x: x['slot'])):
         assert (p['name'], p['type'], p['slot']) == (q['name'], q['type'], q['slot'])
-    print(f'[+] Entry 3: {TAKEOVER} (model {tgt["model_id"]}) now carries {DISPLAY}: '
-          f'{", ".join(c[4] for c in CLICK_PARAMS)}')
+    print(f'[+] Entry 3: {TAKEOVER} (model {tgt["model_id"]}) now carries {display}: '
+          f'{len(params)} knobs{" (NAM\'s records, diagnostic)" if diag else ""}')
 
     # 5. Entry 0: cost, counts, names, strip title
-    new_e0, pid, cost, hits = pa.takeover_entry0_effects(e0, tgt['words'][2], DISPLAY, short_name=SHORT,
-                                                        dsp_cost=DSP_COST, n_params=len(params), strip_title=STRIP_TITLE)
-    print(f'[+] Entry 0: preset_id={pid} kept; dsp_cost={cost}; browser slots {hits}; strip title "{STRIP_TITLE}"')
+    new_e0, pid, cost, hits = pa.takeover_entry0_effects(e0, tgt['words'][2], display, short_name=display,
+                                                        dsp_cost=cost_decl, n_params=len(params), strip_title=title)
+    print(f'[+] Entry 0: preset_id={pid} kept; dsp_cost={cost}; browser slots {hits}; strip title "{title}"')
     l6ia_bytes, _, _ = l6ia.rebuild_archive(l6ia_bytes, {0: new_e0, 2: l6ia.swap32(e2_raw), 3: new_e3, 4: new_e4})
 
     # 6. Entry 2: the kernel and its data in, primitive 0x9c75 hooked to it
