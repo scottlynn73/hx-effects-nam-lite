@@ -56,7 +56,7 @@ synthesised click is added.
 
 Six parameters: Tempo (20..300 BPM, quarter-note beats, 0.01 BPM resolution), Beats/Bar (2..5: 2/4,
 3/4, 4/4, 5/4), Accent (0..12 dB on beat 1; 0 dB = no accent, same sound as other beats), Sound
-(click, wood, beep), Level (0..100 %, linear, peak 1.0), Subdivision (1..4 per beat: quarters, eighths,
+(click, wood, beep), Level (0..1, shown as % on the unit, linear, peak 1.0), Subdivision (1..4 per beat: quarters, eighths,
 triplets, sixteenths; subdivision clicks are lower and about 8 dB quieter).
 
 - **Timing is exact.** The tempo phase is an integer: it gains BPM x 100 x subdivision per sample and
@@ -94,11 +94,11 @@ about 620 cycles per 16-sample call, under 1 % of the roughly 150,000 a call has
 
 For the match to be exact the reference avoids anything the port can't reproduce: constants are
 computed in double and rounded once (the port's tables are generated the same way), Accent is whole dB
-(a 13-entry table), Level is scaled by x 0.01 (no division), the beep's release is a fixed per-sample
+(a 13-entry table), the beep's release is a fixed per-sample
 step, and the C build uses `-ffp-contract=off` (no fused multiply-add).
 
 The port's own ABI, which the firmware integration must give it: knob words DM(5) Tempo (float),
-DM(6) Beats/Bar (int), DM(7) Accent (int dB), DM(8) Sound (int), DM(9) Level (float %), DM(10)
+DM(6) Beats/Bar (int), DM(7) Accent (int dB), DM(8) Sound (int), DM(9) Level (float 0..1), DM(10)
 Subdivision (int); state in words 16..37 of the instance block (assumed free: the NAM kernel only used
 words up to 15); a zeroed block starts at beat 1. Code at PM 0xc4ef8, data at DM 0xe4850 (NAM's
 regions: Click replaces NAM in its own build). Not yet done: the Entry 3/4/0 changes for Click's

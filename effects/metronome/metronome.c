@@ -10,7 +10,7 @@ static const FxParamDesc PARAMS[M_NPARAMS] = {
     { "meter",  "Beats/Bar",   FX_INTEGER,    2.0f,  5.0f,   4.0f,   "beats", "immediate" },
     { "accent", "Accent",      FX_INTEGER,    0.0f,  12.0f,  6.0f,   "dB", "immediate" },
     { "sound",  "Sound",       FX_INTEGER,    0.0f,  2.0f,   0.0f,   "", "immediate" },
-    { "level",  "Level",       FX_CONTINUOUS, 0.0f,  100.0f, 50.0f,  "%", "immediate" },
+    { "level",  "Level",       FX_CONTINUOUS, 0.0f,  1.0f,   0.5f,   "x (shown as %)", "immediate" },
     { "subdiv", "Subdivision", FX_INTEGER,    1.0f,  4.0f,   1.0f,   "per beat", "immediate" },
 };
 
@@ -118,7 +118,7 @@ static void process(void *st, const FxParams *p, const float *in, float *out, si
     int meter = (int)fx_param_clamp(&d[M_METER], p->value[M_METER]);
     float accent = (float)pow(10.0, (double)fx_param_clamp(&d[M_ACCENT], p->value[M_ACCENT]) / 20.0);
     int sound = (int)fx_param_clamp(&d[M_SOUND], p->value[M_SOUND]);
-    float level = fx_param_clamp(&d[M_LEVEL], p->value[M_LEVEL]) * 0.01f;
+    float level = fx_param_clamp(&d[M_LEVEL], p->value[M_LEVEL]);   /* 0..1, as HX Mix/level knobs */
     int sub = (int)fx_param_clamp(&d[M_SUBDIV], p->value[M_SUBDIV]);
     uint32_t inc = (uint32_t)(tempo * 100.0f + 0.5f) * (uint32_t)sub;
     size_t i;

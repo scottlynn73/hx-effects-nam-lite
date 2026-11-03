@@ -50,9 +50,9 @@ demo: all
 	$(OUT)/fxrender geiger $(OUT)/fixtures/chord_e.wav $(OUT)/geiger/fold.wav gain=24 rate=48000 bits=16 curve=4 tone=0.9 output=-9 aa=1
 	$(OUT)/fxrender geiger $(OUT)/fixtures/chord_e.wav $(OUT)/geiger/radio.wav gain=18 rate=3000 bits=6 curve=13 tone=0.35 output=-3
 	mkdir -p $(OUT)/metronome
-	$(OUT)/fxrender metronome $(OUT)/fixtures/chord_e.wav $(OUT)/metronome/click_4-4.wav tempo=120 meter=4 level=40
-	$(OUT)/fxrender metronome $(OUT)/fixtures/silence.wav $(OUT)/metronome/wood_3-4_eighths.wav tempo=137.5 meter=3 sound=1 subdiv=2 level=70
-	$(OUT)/fxrender metronome $(OUT)/fixtures/silence.wav $(OUT)/metronome/beep_5-4.wav tempo=90 meter=5 sound=2 level=60
+	$(OUT)/fxrender metronome $(OUT)/fixtures/chord_e.wav $(OUT)/metronome/click_4-4.wav tempo=120 meter=4 level=0.4
+	$(OUT)/fxrender metronome $(OUT)/fixtures/silence.wav $(OUT)/metronome/wood_3-4_eighths.wav tempo=137.5 meter=3 sound=1 subdiv=2 level=0.7
+	$(OUT)/fxrender metronome $(OUT)/fixtures/silence.wav $(OUT)/metronome/beep_5-4.wav tempo=90 meter=5 sound=2 level=0.6
 	@echo "demo WAVs in $(OUT)/geiger and $(OUT)/metronome"
 
 clean:

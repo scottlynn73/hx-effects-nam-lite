@@ -9,7 +9,7 @@
 //
 // Knob words (ABI of this port; the firmware's Entry 3 must match it):
 //   DM(5) Tempo float BPM   DM(6) Beats/Bar int    DM(7) Accent int dB
-//   DM(8) Sound int         DM(9) Level float %    DM(10) Subdivision int
+//   DM(8) Sound int         DM(9) Level float 0..1 DM(10) Subdivision int
 // State: DM(ST_..) words 16..37 of the instance block (words the NAM kernel never used;
 // that the host leaves them alone is an assumption).
 
@@ -91,13 +91,11 @@ k_knobs:
     R8 = 2;
     R3 = MIN(R3, R8);
 
-    F4 = DM(9, I0);                     // Level 0..100 % -> x 0.01
+    F4 = DM(9, I0);                     // Level 0..1
     F8 = 0.0;
     F4 = MAX(F4, F8);
-    F8 = 100.0;
+    F8 = 1.0;
     F4 = MIN(F4, F8);
-    F8 = DM(K_HUNDREDTH);
-    F4 = F4 * F8;
 
     R2 = DM(10, I0);                    // Subdivision 1..4
     R8 = 1;

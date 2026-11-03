@@ -52,7 +52,7 @@ static void test_tempo(void)
         FxParams p;
         size_t k, cnt;
         double interval = SR * 60.0 / bpms[b], worst = 0;
-        set(&p, bpms[b], 4, 6, 0, 50, 1);
+        set(&p, bpms[b], 4, 6, 0, 0.5f, 1);
         cnt = ticks(&p, n, at, kind, 4000);
         CHECK(cnt == (size_t)floor((n - 1) / interval) + 1, "%g BPM: %zu ticks in 10 min, expected %zu",
               bpms[b], cnt, (size_t)floor((n - 1) / interval) + 1);
@@ -77,7 +77,7 @@ static void test_bar(void)
             FxParams p;
             size_t k, cnt;
             int ok = 1;
-            set(&p, 120, meter, 6, 0, 50, sub);
+            set(&p, 120, meter, 6, 0, 0.5f, sub);
             cnt = ticks(&p, (size_t)(20 * SR), at, kind, 200);
             CHECK(cnt > 0 && at[0] == 0 && kind[0] == CLICK_ACCENT, "%d/4 x%d: first tick not an accent at sample 0", meter, sub);
             for (k = 0; k < cnt; k++) {
@@ -101,12 +101,12 @@ static void test_passthrough(void)
     int s, same;
     double worst = 0, peak = 0;
     sig_chord(in, n, SR, CHORD, 6, 960, 1.6f);
-    set(&p, 120, 4, 12, 0, 0, 4);
+    set(&p, 120, 4, 12, 0, 0.0f, 4);
     fx_metronome.reset(&m, SR);
     for (i = 0; i < n; i += 16) fx_metronome.process(&m, &p, in + i, out + i, 16);
     CHECK(!memcmp(in, out, n * sizeof *in), "Level 0 changes the guitar");
     for (s = 0; s < SOUNDS; s++) {
-        set(&p, 137.5f, 3, 12, s, 100, 3);
+        set(&p, 137.5f, 3, 12, s, 1.0f, 3);
         fx_metronome.reset(&m, SR);
         for (i = 0; i < n; i += 16) fx_metronome.process(&m, &p, in + i, out + i, 16);
         fx_metronome.reset(&m, SR);
@@ -147,7 +147,7 @@ static void test_robustness(void)
         size_t j;
         if (i % 4800 == 0) {                             /* knobs move every 100 ms */
             set(&p, 20 + 280 * (rng_uniform(&r) + 1) / 2, 2 + (int)(rng_u32(&r) % 4), 12 * (rng_uniform(&r) + 1) / 2,
-                (int)(rng_u32(&r) % 3), 100 * (rng_uniform(&r) + 1) / 2, 1 + (int)(rng_u32(&r) % 4));
+                (int)(rng_u32(&r) % 3), (rng_uniform(&r) + 1) / 2, 1 + (int)(rng_u32(&r) % 4));
             if (rng_u32(&r) % 9 == 0) p.value[rng_u32(&r) % M_NPARAMS] = NAN;
             if (rng_u32(&r) % 50 == 0) fx_metronome.reset(&s1, SR);
         }
@@ -168,8 +168,8 @@ static void test_robustness(void)
     CHECK(!dbl, "two ticks closer than the fastest possible interval");
     CHECK(worst_run <= (size_t)(0.2 * SR) + 1, "a voice stayed on for %zu samples after its trigger", worst_run);
 
-    set(&p1, 97.3f, 3, 6, 0, 80, 2);                     /* two instances, interleaved */
-    set(&p2, 211.0f, 5, 12, 1, 60, 3);
+    set(&p1, 97.3f, 3, 6, 0, 0.8f, 2);                     /* two instances, interleaved */
+    set(&p2, 211.0f, 5, 12, 1, 0.6f, 3);
     for (i = 0; i < n; i++) in[i] = 0.1f * sinf((float)i * 0.01f);
     fx_metronome.reset(&s1, SR);
     for (i = 0; i < n; i += 16) fx_metronome.process(&s1, &p1, in + i, ra + i, 16);
@@ -188,7 +188,7 @@ static void test_robustness(void)
         CHECK(!memcmp(b, ra, n * sizeof *b), "block size %zu changes the output", blocks[k]);
     }
 
-    set(&p, 20, 4, 6, 2, 100, 1);                       /* the voice ends long before the next beat */
+    set(&p, 20, 4, 6, 2, 1.0f, 1);                       /* the voice ends long before the next beat */
     ok = 1;
     fx_metronome.reset(&s1, SR);
     for (i = 0; i < (size_t)(3 * SR) - 1; i += 1) {
