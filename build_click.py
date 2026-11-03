@@ -10,6 +10,10 @@ usage: python3 build_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] 
                   Names, DSP cost and strip title are NAM's too, so only Entry 2's kernel differs
                   from build_effects.py's image (the browser shows "NAM A2 Lite").
                   Writes build/HX_Effects_v3.80.0_Click_diag.hxf.
+--probe           a diagnostic kernel with Click's knobs that reports instance words by sound: Wood
+                  while DM(3) is 0, Beep while it is not (the Sound knob is ignored), and an
+                  immediate bar restart whenever any other non-knob instance word changes.
+                  Writes build/HX_Effects_v3.80.0_Click_probe.hxf.
 
 The same takeover as build_effects.py: Click becomes the 1024-sample IR block (IR > Single > "Click";
 the 2048 IR block stays), on a copy of the 2048 IR block's graph with its convolution replaced by
@@ -119,8 +123,10 @@ def main():
     if md5 != STOCK_MD5:
         sys.exit(f'{stock}: MD5 {md5}, not the HX Effects 3.80.0 firmware (expected {STOCK_MD5}).')
     diag = '--diag-nam-knobs' in argv
+    probe = '--probe' in argv
     out = os.path.abspath(argv[argv.index('-o') + 1]) if '-o' in argv else \
-        os.path.join(HERE, 'build', 'HX_Effects_v3.80.0_Click_diag.hxf' if diag else 'HX_Effects_v3.80.0_Click.hxf')
+        os.path.join(HERE, 'build', 'HX_Effects_v3.80.0_Click_diag.hxf' if diag else
+                     'HX_Effects_v3.80.0_Click_probe.hxf' if probe else 'HX_Effects_v3.80.0_Click.hxf')
     build = os.path.join(HERE, 'build')
     os.makedirs(build, exist_ok=True)
     image = os.path.join(build, 'click.l6ia')
@@ -133,7 +139,7 @@ def main():
             sys.exit(f'build_click.py: could not build {lib}:\n{r.stderr}')
         run(sys.executable, os.path.join(HERE, 'effects', 'metronome', 'sharc', 'click_kernel.py'), '--check')
     import click_kernel
-    src, secs, syms, code_end, data = click_kernel.assemble()
+    src, secs, syms, code_end, data = click_kernel.assemble(probe=probe)
     open(os.path.join(build, 'click.asm'), 'w').write(src)
 
     os.environ['NAM_DEVICE'] = 'effects'

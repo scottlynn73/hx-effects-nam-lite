@@ -1,13 +1,14 @@
 """Read build/HX_Effects_v3.80.0_Click.hxf back and check it: the kernel in Entry 2 is the
 assembled (simulator-checked) one, primitive 0x9c75 points at it, Entry 3 has the six knobs,
 Entry 4 maps each knob to its instance word, and every entry but 0/2/3/4 is stock.
-usage: python3 tools/verify/verify_click.py (after build_click.py)"""
+usage: python3 tools/verify/verify_click.py [--probe] (after build_click.py [--probe])"""
 import sys, os, struct
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', '.'): sys.path.insert(0, os.path.join(ROOT, p))
 os.environ['NAM_DEVICE'] = 'effects'
 import patch_amp as pa, l6ia, click_kernel, build_click
-img, _ = pa.load_l6ia_from_any(os.path.join(ROOT, 'build/HX_Effects_v3.80.0_Click.hxf'))
+PROBE = '--probe' in sys.argv
+img, _ = pa.load_l6ia_from_any(os.path.join(ROOT, 'build/HX_Effects_v3.80.0_Click_probe.hxf' if PROBE else 'build/HX_Effects_v3.80.0_Click.hxf'))
 stock, _ = pa.load_l6ia_from_any(os.path.join(ROOT, 'firmware/HX_Effects_v3.80.0_0xd97239907.hxf'))
 pa.select_device(img)
 ok = True
@@ -34,7 +35,7 @@ while i + 3 <= len(w):
     elif tag == 4 and cnt == 8 and addr == 0x200588:
         prim = list(body)
     i += 3 + NW.get(tag, lambda c: 0)(cnt)
-src, secs, syms, end, data = click_kernel.assemble()
+src, secs, syms, end, data = click_kernel.assemble(probe=PROBE)
 want_pm = {s.addr + k: v for s in secs if s.kind == 'pm' for k, v in enumerate(s.words)}
 want_dm = {s.addr + k: v for s in secs if s.kind == 'dm' for k, v in enumerate(s.words)}
 check(all(pm.get(a) == v for a, v in want_pm.items()) and len(want_pm) > 200, f'kernel code in the image = assembled ({len(want_pm)} instructions at {min(want_pm):#x})')

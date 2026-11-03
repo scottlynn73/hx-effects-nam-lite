@@ -29,7 +29,7 @@ import ssim  # noqa: E402
 SR = 48000.0
 CODE, CODE_END = 0xC4EF8, 0xC5554
 DATA = 0xE4850
-_ST = ['STARTED', 'FIRE', 'ACC', 'SUBIDX', 'BEAT', 'ACTIVE', 'SOUND', 'C0', 'S0', 'WC0', 'WS0', 'C1', 'S1',
+_ST = ['CHK', 'STARTED', 'FIRE', 'ACC', 'SUBIDX', 'BEAT', 'ACTIVE', 'SOUND', 'C0', 'S0', 'WC0', 'WS0', 'C1', 'S1',
        'WC1', 'WS1', 'AMP', 'ENV', 'DECAY', 'MIX2', 'AGE', 'TICKS', 'KIND']
 STATE = {f'ST_{n}': 2 + k for k, n in enumerate(_ST)}          # offsets in a slot, after OWNER and LAST
 NSLOTS, NSTATE, SLOTW, STALE, P_SLOT = 8, len(_ST), 2 + len(_ST), 64, 12
@@ -69,11 +69,60 @@ def constants():
                 accent=[f32(10.0 ** (k / 20.0)) for k in range(13)], mix2=[0.0, f32(WOOD_MIX), 0.0])
 
 
-def source():
+BYPASS = """    // ---- bypassed (DM(3) set by the host): pass through; start again at beat 1 after
+    R8 = DM(3, I0);
+    R8 = PASS R8;
+    IF EQ JUMP k_on;
+    R8 = 0;
+    DM(ST_STARTED, I3) = R8;
+    JUMP k_pass;
+k_on:
+"""
+PROBE = """    // ---- PROBE (diagnostic build): Sound = Wood while DM(3) is 0, Beep while it is not;
+    // any change in the other instance words (all but the knobs 5..10 and P_SLOT 12)
+    // restarts the bar at once. Never writes DM(3).
+    R8 = DM(3, I0);
+    R8 = PASS R8;
+    R13 = 1;
+    IF NE R13 = R13 + 1;
+    DM(G_PSOUND) = R13;
+    R14 = DM(0, I0);
+    R15 = DM(1, I0);
+    R14 = R14 + R15;
+    R15 = DM(2, I0);
+    R14 = R14 + R15;
+    R15 = DM(4, I0);
+    R14 = R14 + R15;
+    R15 = DM(11, I0);
+    R14 = R14 + R15;
+    R15 = 13;
+    R15 = R10 + R15;
+    I4 = R15;
+    R12 = 132;
+p_sum:
+    R15 = DM(I4, 1);
+    R14 = R14 + R15;
+    R12 = R12 - 1;
+    IF NE JUMP p_sum;
+    R15 = DM(ST_CHK, I3);
+    COMP(R14, R15);
+    IF EQ JUMP k_on;
+    DM(ST_CHK, I3) = R14;
+    R8 = 0;
+    DM(ST_STARTED, I3) = R8;
+k_on:
+"""
+SOUND = """    R8 = 2;
+    R3 = MIN(R3, R8);
+"""
+
+
+def source(probe=False):
     c = constants()
     lay, a = [], DATA
     lay.append(('SAVE', a, [0] * 21)); a += 21
     lay.append(('G_CALLS', a, [0])); a += 1
+    lay.append(('G_PSOUND', a, [0])); a += 1
     slots = a + NSLOTS                         # SLOTS follows the table
     lay.append(('T_SLOTBASE', a, [slots + SLOTW * k for k in range(NSLOTS)])); a += NSLOTS
     lay.append(('SLOTS', a, [0] * (SLOTW * NSLOTS))); a += SLOTW * NSLOTS
@@ -88,12 +137,14 @@ def source():
     equ += [f'.equ {name}, {addr:#x}' for name, addr, _ in lay]
     data = [f'.section dm {DATA:#x}'] + ['.word ' + ', '.join(f'{w:#010x}' for w in words) for _, _, words in lay]
     asm = open(os.path.join(HERE, 'click_kernel.asm')).read()
-    assert asm.count('// EQUS') == 1
+    assert asm.count('// EQUS') == 1 and asm.count(BYPASS) == 1 and asm.count(SOUND) == 1
+    if probe:
+        asm = asm.replace(BYPASS, PROBE).replace(SOUND, SOUND + "    R3 = DM(G_PSOUND);                  // PROBE: DM(3) picks the sound\n")
     return asm.replace('// EQUS', '\n'.join(equ + data)), (DATA, a)
 
 
-def assemble():
-    src, data = source()
+def assemble(probe=False):
+    src, data = source(probe)
     secs, syms = sasm.assemble(src, 'click_kernel.asm')
     pm = [s for s in secs if s.kind == 'pm']
     end = max(s.addr + len(s.words) for s in pm)
@@ -208,7 +259,7 @@ class Rig:
         if 3 + i0 in writes:
             raise AssertionError(f'{label}: wrote DM(3), the host\'s bypass flag')
         lo = self.syms['SAVE']
-        allowed = [(BO, BO + 16), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 22),       # SAVE (21) and G_CALLS
+        allowed = [(BO, BO + 16), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 23),       # SAVE (21), G_CALLS, G_PSOUND
                    (self.syms['SLOTS'], self.syms['SLOTS'] + SLOTW * NSLOTS)]
         stray = [a for a in writes if not any(lo <= a < hi for lo, hi in allowed)]
         if stray:
