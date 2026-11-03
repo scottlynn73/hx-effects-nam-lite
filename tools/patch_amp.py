@@ -1190,7 +1190,7 @@ def nam_params(e3, info):
     return out
 
 
-def nam_host_member(b0, comp_id, sdram_words=0):
+def nam_host_member(b0, comp_id, sdram_words=0, prim_id=0x9c75):
     """Make member 1 of composite `comp_id` (a clone of DEV.NAM_HOST_COMPOSITE) the
     primitive 0x9c75 (dm 145, pm 13, SDRAM sdram_words), keeping its ports (1 in, 1 out)."""
     ct = b0[0x10]
@@ -1202,7 +1202,7 @@ def nam_host_member(b0, comp_id, sdram_words=0):
         assert hdr[2] == 3, f'{comp_id:#x} has {hdr[2]} members, the NAM host wants 3'
         assert 0x600000 <= b0[r + 6] < 0x601000, 'member 1 is not a composite'
     assert b0[r + 7] == 1 and b0[r + 9] == 1, 'member 1 is not 1-in 1-out'
-    b0[r + 6] = 0x9c75
+    b0[r + 6] = prim_id
     b0[r + 11] = 0                  # no static init parameters
     for k in range(15, 20):         # sub-arena sizes: 0 for a primitive, as stock primitive members have
         b0[r + k] = 0
@@ -1330,7 +1330,7 @@ def pmap_slots_without_param(e4, blob_index, params):
     return sorted(slots - {p['slot'] for p in params})
 
 
-def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, blob_fn=None):
+def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, blob_fn=None, prim_id=0x9c75):
     """Entry 4 with one more blob, the NAM host: a copy of the model's composite
     (DEV.NAM_HOST_COMPOSITE) appended to Blob 0 (0x6001c6, 0x6001c7, ...;
     clone_composite_in_blob0) with its amp member made primitive 0x9c75
@@ -1356,7 +1356,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, blob_fn=None):
     assert src_comp_id == DEV.NAM_HOST_COMPOSITE, \
         f'the NAM host wants a model on composite {DEV.NAM_HOST_COMPOSITE:#x} (HD2_AmpLine6Clarity), not {src_comp_id:#x}'
     b0_words, new_comp_id = clone_composite_in_blob0(b0_words, src_comp_id)
-    nam_host_member(b0_words, new_comp_id, sdram_words)
+    nam_host_member(b0_words, new_comp_id, sdram_words, prim_id)
     extra = []
     if DEV.HOST_SWAP:        # the other members keep their stock inits; root ctrl records stay too
         pin, cnt = src_blob_words[10], src_blob_words[11]

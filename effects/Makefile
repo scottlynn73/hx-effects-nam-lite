@@ -33,6 +33,7 @@ $(OUT)/libfx.so: $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
 
 sharc-check: $(OUT)/libfx.so
 	../.venv/bin/python3 metronome/sharc/click_kernel.py --check
+	../.venv/bin/python3 metronome/sharc/click_kernel.py --check --place b3 --seconds 0.5
 
 test: all
 	$(OUT)/test_geiger geiger/golden.txt

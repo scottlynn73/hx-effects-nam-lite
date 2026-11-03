@@ -55,7 +55,9 @@ DDR2_END = 0x328000
 IR_FLAG, IR_TOP = 0x2AB56E, 0x2ABDED
 if __import__('os').environ.get('NAM_DEVICE') == 'effects':
     IR_FLAG, IR_TOP = 0x2A912C, 0x2A99AB      # the HX Effects: the same store, 0x2442 words lower
-    FIX_SDR = 0x294400 - 0x5000               # slot k (1..3) at 0x294400 + 0x5000 * (k - 1), DDR2 freed by moving Heap 6
+    # slot k (1..3) at base + 0x5000 * (k - 1), in DDR2 freed by moving Heap 6; base 0x294400 is the end of
+    # the Blob 0 buffer as build_effects.py enlarges it (NAM_SDR_BASE: a build that enlarges it further)
+    FIX_SDR = int(__import__('os').environ.get('NAM_SDR_BASE', '0x294400'), 16) - 0x5000
 else:
     FIX_SDR = 0
 

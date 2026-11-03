@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """click_kernel.py - build and check the Click kernel (click_kernel.asm) for the HX Effects SHARC.
 
-usage: click_kernel.py [-o out.asm] [--check] [--seconds S]
+usage: click_kernel.py [-o out.asm] [--check] [--seconds S] [--place b2|b3]
 
   -o out.asm   write the assembled-ready source (the .equ block and tables filled in)
   --check      run it in ssim (tools/sharc) against the C reference (effects/metronome,
@@ -29,6 +29,16 @@ import ssim  # noqa: E402
 SR = 48000.0
 CODE, CODE_END = 0xC4EF8, 0xC5554
 DATA = 0xE4850
+# Where the kernel goes. 'b2': NAM's regions (a Click-only image). 'b3': beside NAM, in the top of
+# Block 3 that NAM leaves free (its slots end at 0xe7c14): data from 0xe7c20 (normal words), code from
+# 48-bit address 0xe5390 (= normal word 0xe7d58) to the block's end 0xe5554 (= 0xe8000). The stock
+# boot stream initialises Block 3 only up to 0xe47d2; the stacks are in Block 2.
+PLACES = {'b2': (CODE, CODE_END, DATA), 'b3': (0xE5390, 0xE5554, 0xE7C20)}
+
+
+def normal_of(addr48, block_base):
+    """The normal-word address where a 48-bit instruction address starts (same block)."""
+    return block_base + (addr48 - block_base) * 3 // 2
 _ST = ['CHK', 'STARTED', 'FIRE', 'ACC', 'SUBIDX', 'BEAT', 'ACTIVE', 'SOUND', 'C0', 'S0', 'WC0', 'WS0', 'C1', 'S1',
        'WC1', 'WS1', 'AMP', 'ENV', 'DECAY', 'MIX2', 'AGE', 'TICKS', 'KIND']
 STATE = {f'ST_{n}': 2 + k for k, n in enumerate(_ST)}          # offsets in a slot, after OWNER and LAST
@@ -136,9 +146,10 @@ p_tempo:
 """
 
 
-def source(probe=False):
+def source(probe=False, place='b2'):
     c = constants()
-    lay, a = [], DATA
+    code, _, data0 = PLACES[place]
+    lay, a = [], data0
     lay.append(('SAVE', a, [0] * 21)); a += 21
     lay.append(('G_CALLS', a, [0])); a += 1
     lay.append(('G_PSOUND', a, [0])); a += 1
@@ -155,21 +166,26 @@ def source(probe=False):
             f'.equ NSTATE, {NSTATE}', f'.equ STALE, {STALE}']
     equ += ['.equ BPM100_NUM, 2304000000', f'.equ PERIOD, {c["period"]}', f'.equ GATE, {c["gate"]}', f'.equ MAXAGE, {c["max_age"]}']
     equ += [f'.equ {name}, {addr:#x}' for name, addr, _ in lay]
-    data = [f'.section dm {DATA:#x}'] + ['.word ' + ', '.join(f'{w:#010x}' for w in words) for _, _, words in lay]
+    data = [f'.section dm {data0:#x}'] + ['.word ' + ', '.join(f'{w:#010x}' for w in words) for _, _, words in lay]
     asm = open(os.path.join(HERE, 'click_kernel.asm')).read()
     assert asm.count('// EQUS') == 1 and asm.count(BYPASS) == 1 and asm.count(SOUND) == 1 and asm.count(SUBDIV) == 1
     if probe:
         asm = asm.replace(BYPASS, PROBE).replace(SOUND, SOUND + "    R3 = DM(G_PCOUNT);                  // PROBE: the change count picks the sound\n")
         asm = asm.replace(SUBDIV, SUBDIV + PROBE_TEMPO)
-    return asm.replace('// EQUS', '\n'.join(equ + data)), (DATA, a)
+    asm = asm.replace('.section pm 0x0c4ef8', f'.section pm {code:#08x}')
+    return asm.replace('// EQUS', '\n'.join(equ + data)), (data0, a)
 
 
-def assemble(probe=False):
-    src, data = source(probe)
+def assemble(probe=False, place='b2'):
+    src, data = source(probe, place)
     secs, syms = sasm.assemble(src, 'click_kernel.asm')
     pm = [s for s in secs if s.kind == 'pm']
     end = max(s.addr + len(s.words) for s in pm)
-    assert end <= CODE_END, f'code ends at {end:#x}, past {CODE_END:#x}'
+    code, code_end, _ = PLACES[place]
+    assert min(s.addr for s in pm) == code and end <= code_end, f'code {code:#x}..{end:#x}, past {code_end:#x}'
+    base = code & ~0xFFFF
+    if data[0] & ~0xFFFF == base:                 # same block: the data must end below the code
+        assert data[1] <= normal_of(code, base), f'data to {data[1]:#x} runs into the code at {normal_of(code, base):#x}'
     return src, secs, syms, end, data
 
 
@@ -301,12 +317,13 @@ def signal(n, seed):
     return out
 
 
-def check(seconds=2.0):
-    src, secs, syms, end, data = assemble()
+def check(seconds=2.0, place='b2'):
+    src, secs, syms, end, data = assemble(place=place)
     ref = Reference()
     rig = Rig(secs, syms, data)
     nblk = int(seconds * SR) // 16
-    print(f'code {CODE:#x}..{end:#x} ({end - CODE} instructions), data {data[0]:#x}..{data[1]:#x}')
+    code = PLACES[place][0]
+    print(f'[{place}] code {code:#x}..{end:#x} ({end - code} instructions), data {data[0]:#x}..{data[1]:#x}')
     cases = [
         dict(time=0.5, meter=4, accent=6, sound=0, level=0.5, subdiv=1),
         dict(time=60 / 137.5, meter=3, accent=12, sound=1, level=1, subdiv=2),
@@ -411,7 +428,7 @@ def check(seconds=2.0):
     print(f'{total} samples identical to the reference; cycles per 16-sample call: worst {worst}, mean {mean:.0f} '
           f'(budget {MAX_CYCLES}; about 150,000 per call at 450 MHz)')
     assert worst <= MAX_CYCLES, f'worst case {worst} cycles over the budget {MAX_CYCLES}'
-    return dict(worst=worst, mean=mean, code=end - CODE)
+    return dict(worst=worst, mean=mean, code=end - code)
 
 
 def main():
@@ -421,8 +438,9 @@ def main():
         open(a[a.index('-o') + 1], 'w').write(src)
     if '--check' in a:
         secs = float(a[a.index('--seconds') + 1]) if '--seconds' in a else 2.0
+        place = a[a.index('--place') + 1] if '--place' in a else 'b2'
         try:
-            check(secs)
+            check(secs, place)
         except AssertionError as ex:
             sys.exit(f'click_kernel.py: CHECK FAILED: {ex}')
         print('CHECK OK')

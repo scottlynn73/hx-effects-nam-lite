@@ -78,8 +78,14 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
      host gets ordinary pages, and its bypass works.
   4. Knob records: floats on Clarity's records (Bass, ChVol…) reach the kernel; a chorus "Mix" record
      did not. Lists must stay short (stock max 21 entries); a 281-entry list broke page drawing.
-- Next: **NAM + Click in one image** (needs PM space beside NAM, a second free primitive, slot data in
-  Block 3).
+- **NAM + Click in one image** (built, verified offline, **not yet tried on the unit**):
+  `python3 build_nam_click.py` → `build/HX_Effects_v3.80.0_NAM_Click.hxf`; check it with
+  `python3 tools/verify/verify_nam_click.py` (needs the NAM-only and Click-only images built first).
+  NAM as before (1024 IR, primitive 0x9c75, Block 2 tail); Click on primitive 0x0128 (zero uses in stock
+  graphs) with code/data in the top of Block 3 (data 0xe7c20.., code 48-bit 0xe5390..0xe54fa; the stock
+  boot stream stops at 0xe47d2 and the stacks are in Block 2). Two host graphs need a bigger Blob 0 buffer:
+  0x79000 words (0x21c400..0x295400), so NAM's DDR2 slots move up to 0x295400 (`NAM_SDR_BASE`) — the
+  one NAM instruction that differs from the proven NAM image. That buffer size is the main untested change.
 
 ## Why the takeover approach
 
