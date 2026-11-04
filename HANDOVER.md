@@ -156,6 +156,9 @@ stock's end and ours (not in the partition table; presets and IRs live elsewhere
 5. Edge tests not yet done (each build can now be flashed with `tools/flash.py`): changing Model
    while playing with two blocks; a preset with every heavy effect alongside; power‑cycle with a NAM
    block in the startup preset.
+6. **Check NAM's footswitch bypass.** NAM's kernel clears instance word 3 every time it is set (it took it
+   for a knob‑write flag); with Click that defeated nothing (bypass is applied in the graph on a delay
+   host), but NAM's own bypass on its IR host has never been checked.
 
 ## Don'ts
 

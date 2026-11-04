@@ -21,6 +21,9 @@ runs NAM captures on the unit's own SHARC DSP. This is the HX Effects port of
 simulator and firmware tools it uses (copied into `tools/` and `src/`, with the HX Effects support
 added).
 
+It can also add **Click**, a metronome block of our own (see [Click: a metronome block](#click-a-metronome-block)),
+either on its own or in the same image as NAM.
+
 **You do this at your own risk! Do not attempt it if you are not comfortable with running command line tools and 
 potentially having to recover your unit yourself!**
 
@@ -46,6 +49,8 @@ potentially having to recover your unit yourself!**
 - The IR category's default scribble‑strip title becomes **"NAM / IR_2048"**. The NAM block shows the
   capture's name once a slot is selected; the 2048 IR block shows the IR's name once one is selected.
 - Everything else in the firmware stays stock 3.80.0.
+- Optionally, with `build_nam_click.py` instead of `build_effects.py`: the **Click** metronome as well,
+  in place of the mono Mod/Chorus Echo delay (below).
 
 ## What you need
 
@@ -84,6 +89,34 @@ python3 build_effects.py
 `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf` in about 30 seconds. The build checks the firmware's MD5 and
 refuses any other file; the kernel is first run in the SHARC simulator and must match the reference bit
 for bit (`--no-check` skips that).
+
+## Click: a metronome block
+
+Click is a metronome that lives in a preset as an ordinary block: the guitar passes through unchanged
+and a synthesised click is added. It takes over the **mono Mod/Chorus Echo** delay, so it is found
+under **Delay → Mono → "Click"**; the stereo Mod/Chorus Echo and every other delay stay.
+
+| Knob | What it does |
+|---|---|
+| **Time** | The delay's own Time knob: one beat in ms, or (press the knob) a note value synced to **tap tempo / the global BPM**. Default synced, 1/4. 15–600 BPM. |
+| **Beats/Bar** | 2/4, 3/4, 4/4, 5/4 |
+| **Accent** | Off, 1–12 dB louder (and higher) on beat 1 |
+| **Sound** | Click, Wood, Beep |
+| **Level** | Click level, 0–100 % (the guitar is never changed) |
+| **Subdivision** | 1/4, 1/8, 1/8T, 1/16 (subdivisions lower and quieter) |
+
+The footswitch bypasses it as any block. Timing is drift‑free (exact integer arithmetic on the DSP).
+
+Two ways to build it (each also needs a C compiler, `cc`, for the simulator check of the kernel):
+
+```
+python3 build_click.py        # build/HX_Effects_v3.80.0_Click.hxf: Click only (no NAM)
+python3 build_nam_click.py    # build/HX_Effects_v3.80.0_NAM_Click.hxf: NAM and Click together
+```
+
+Both have been flashed and work on an HX Effects. Install the file the same way as the NAM build. The
+effect itself (a C reference, tests and the hand‑written SHARC kernel) is in `effects/`; see
+[effects/README.md](effects/README.md).
 
 ## Tuning the declared DSP cost
 
@@ -268,11 +301,19 @@ None of these change the firmware; a boot failure needs the Updater flash above.
   level 0 dB). Those inits are the `{(member, pid): value}` overrides in `tools/patch_amp.py`.
 - The app's boot self‑test rejects any model it doesn't already know, so the NAM block takes over the
   1024‑sample IR block's identity (name, preset id, browser entry) rather than adding a new one.
+- Click works the same way on the mono Mod/Chorus Echo's identity, on a copy of the IR block's graph with
+  its own primitive (0x0128 in the combined image). A delay host matters: HX draws a delay with ordinary
+  knob pages, where an IR block's pages treat knob 1 as the IR selector. Its tempo sync is the stock
+  delay's own: the two parameter‑map steps that turn Time, the note value and the global tempo into a
+  beat length are copied from Mod/Chorus Echo.
+- In the combined image Click's kernel sits in the top of DSP memory block 3, above NAM's, and the DSP's
+  graph buffer is 0x1000 words larger (so NAM's DDR2 working memory starts at `0x295400` instead).
 
 ## Layout
 
 ```
-build_effects.py          the one-step build
+build_effects.py          the one-step build (NAM)
+build_click.py            Click only; build_nam_click.py: NAM and Click in one image
 firmware/                 where you put the stock .hxf (git-ignored, never committed)
 captures/                 demo NAM A2 Lite captures, already converted to User IR .wav files
 .gitignore                keeps firmware/, build/ and every .hxf out of version control
@@ -284,6 +325,9 @@ tools/usb/                usblog.c + build_shim.sh + capture.sh (log Line 6 Upda
 tools/sharc/              the kernel (nam_multi.py, nam_multi_kernel.asm), nam_lite.py, nam_pack.py,
                           sasm.py and ssim.py (assembler, simulator), entry4_blob.py, recips_table.json
 src/sharc/nam_a2.asm      the reference NAM A2 implementation the simulator check compares against
+tools/verify/             read-back checks of the Click and NAM + Click images
+effects/                  custom effects: C reference, tests, renderer, Click's SHARC kernel (effects/README.md)
+docs/baseline-audit.md    the primitive ABI and memory map, marked observed / modelled / unknown
 ```
 
 ## Copyright notice

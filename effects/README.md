@@ -84,7 +84,8 @@ than 200 ms; two interleaved instances equal each alone; identical output for bl
 
 **Works on the unit (2026-11-03):** `build_click.py` → Delay > Mono > "Click" (the mono Mod/Chorus
 Echo's slot): all knobs shown and working, footswitch bypass working, timing and sounds as in the
-reference. That image has no NAM block; NAM + Click in one image is a separate step.
+reference. That image has no NAM block; `build_nam_click.py` makes one with both (works on the unit,
+2026-11-04: Click's kernel at Block 3 addresses, `click_kernel.py --check --place b3`).
 
 **Tempo from the delay's own Time knob (works on the unit, 2026-11-03: tap tempo, global BPM, ms mode):** Click now uses Mod/Chorus
 Echo's Time, note-value and Tempo Sync parameters. HX shows Time in ms, or as a note value when synced

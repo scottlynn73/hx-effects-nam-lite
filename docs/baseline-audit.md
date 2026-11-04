@@ -1,6 +1,7 @@
 # Baseline audit (M0)
 
-Recorded 2026‑11‑03 on branch `custom-effects`, from `main` at `88b403c`. Every row says where it comes
+Recorded 2026‑11‑03 on branch `custom-effects`, from `main` at `88b403c`; updated 2026‑11‑04 with what
+the Click hardware builds showed (rows marked **observed on the unit**). Every row says where it comes
 from: **observed** (measured or read in this checkout, or seen on the unit), **modelled** (what the
 simulator rig assumes and the NAM kernel relies on; working on hardware, never traced in the stock
 firmware), or **unknown**.
@@ -41,15 +42,20 @@ firmware), or **unknown**.
 | Sample rate | 48 kHz assumed: 450 MHz / 48 kHz × 16 ≈ 150,000 cycles per call | assumed, not measured on the unit |
 | Audio buffers | `I1` = 16 input floats, `I2` = 16 output floats (separate buffers in the rig; in‑place untested) | modelled |
 | Channels | mono in, mono out (host graph is the IR block's mono graph) | modelled |
-| Instance DM block | `I0`: 145 words (0x91), zeroed at creation, `DM(3)` set to 1 by the host when knobs change | modelled |
+| Instance DM block | `I0`: 145 words (0x91), zeroed at creation | modelled |
+| `DM(3, I0)` | **non‑zero the whole time the block is on**, unchanged by the footswitch; not a knob‑write flag (as the NAM kernel assumed) nor a usable bypass flag. Stock 0x822's kernel passes audio through while it is non‑zero. Never write it. | observed on the unit (probe builds) |
+| Other instance words | knob writes change only their own words; nothing else in words 0–144 changed on knob turns or bypass. Write only your own state word (Click: 12) and keep state elsewhere. | observed on the unit (probe builds) |
 | Instance PM block | `I8`: 13 words (0x0d) | modelled |
 | Instance struct | `I3` → call‑list entry; `DM(2, I3)` → instance struct; words 6/7 = its SDRAM block start/end | modelled |
 | Knob words | `DM(5..11, I0)` and `DM(15, I0)` (pid order in `patch_amp.NAM_PARAMS`): floats, or an integer for Model (User IR slot 1..128) and a bool for Polarity | modelled + observed (knobs work on the unit) |
 | Free state words | the kernel uses `DM(12..14, I0)` for its own state (`P_SLOT`, `P_SEEN`, `P_MET`) | observed (source) |
-| Registers | the rig randomises R0–R15, the alternate set and DAG registers, and fails the check if any is changed on return; MODE1 is saved/restored, CBUFEN set on entry | modelled |
+| Registers | R0–R15, the alternate set, the DAG registers **including I1–I3**, and MODE1 must come back unchanged (NAM restores I1–I3 through B1–B3). A kernel that returned with I1/I2 advanced froze the unit's knobs and footswitches while audio carried on. The rig now checks I1–I3 too. | observed on the unit |
 | Per‑call budget | the check enforces ≤ 33,000 instructions steady (`MAX_STEADY`); `DSP_COST` 2700 is the host's bookkeeping, not a measurement | observed (source) |
 | Parameter smoothing | none by the host as far as known; the NAM kernel crossfades captures itself | unknown for other knob types |
-| Bypass / preset change | no explicit callback seen; the kernel detects re‑creation by comparing `I0` and a call counter | modelled |
+| Bypass | applied in the graph, not through the instance block: on a delay host (Click on Mod/Chorus Echo) the footswitch bypasses the block; on the 1024 IR host it lit but did not bypass Click | observed on the unit |
+| Preset change / re‑creation | no explicit callback seen; kernels detect re‑creation by comparing `I0` and a call counter | modelled |
+| Knob records | floats on Clarity amp records (Bass, ChVol) reach the kernel; a chorus "Mix" record did not; list knobs must stay short (stock has at most 21 entries; a 281‑entry list stopped its page drawing); an IR‑type host draws knob 1 as the IR selector | observed on the unit |
+| Tempo sync | a delay's synced Time is computed in its DSP parameter map (ops 0x2a, 0x54); copying those nodes delivers tap tempo / global BPM to a custom kernel as a beat length in seconds | observed on the unit |
 | Multiple instances | separate `I0`/`I8`/SDRAM per instance; NAM shares 3 internal slots between up to 3 blocks | observed on the unit (two NAM blocks in one preset) |
 
 ## Memory left (with the NAM kernel in)
@@ -62,17 +68,27 @@ firmware), or **unknown**.
 | DDR2 `0x324500..0x328000` | tone‑stack table | used to `0x324ce5` | observed |
 | DDR2 `0x294400 + 0x5000 × slot` | per‑instance long rings (freed by moving Heap 6) | 3 × 0x5000 words, NAM‑specific | observed |
 
-Consequence: **a second kernel cannot sit beside NAM** in the current memory plan. Phase A (one effect
-per build, replacing NAM's kernel and its memory) can reuse the whole region; Phase B (several
-effects in one image) needs a new memory plan first.
+A second kernel **can** sit beside NAM (done: `build_nam_click.py`, works on the unit):
+
+| Region | Use in the NAM + Click image |
+|---|---|
+| Block 3 normal words `0xe7c20..0xe7d43` | Click's data (tables, save area, 8 slots) |
+| Block 3 48‑bit `0xe5390..0xe54fa` (= normal `0xe7d58..0xe7ff7`) | Click's code (the stock boot stream stops at `0xe47d2`; the stacks are in Block 2) |
+| Primitive `0x0128` | Click's hook (zero uses in the stock graphs; `0x2aa8`/`0x2aaa` are used by the root graph) |
+| DDR2 `0x21c400..0x295400` | the Blob 0 buffer, enlarged to `0x79000` words for two host graphs |
+| DDR2 `0x295400 + 0x5000 × slot` | NAM's slots, moved up by `0x1000` (`NAM_SDR_BASE`) |
+
+What is left after both: about 90 instructions in Block 2's tail and about 90 at the top of Block 3.
+A third kernel needs memory found elsewhere, or NAM's slot count reduced.
 
 ## Tested vs untested
 
 - Tested: the build is byte‑reproducible; NAM output matches the reference bit for bit in the simulator;
   the image boots and the block works on the unit; two NAM blocks coexist.
-- Untested: in‑place buffers; how often the host rewrites knob words; behaviour on bypass (whether the
-  primitive is still called); any knob type other than float/int/bool; tempo or MIDI clock reaching a
-  primitive; any frame count other than 16.
+- Tested since (Click): a second kernel in Block 3 on its own primitive; bypass on a delay host; tap
+  tempo and the global BPM reaching a kernel; the register and instance‑block rules above.
+- Untested: in‑place buffers; how often the host rewrites knob words; whether a bypassed block's
+  primitive is still called; MIDI clock; any frame count other than 16; NAM's own footswitch bypass.
 
 ## Already done from the plan's flasher track (F0–F4)
 
