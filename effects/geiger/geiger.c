@@ -12,7 +12,7 @@ static const FxParamDesc PARAMS[G_NPARAMS] = {
     { "curve",  "Curve",       FX_INTEGER,    0.0f,  15.0f,    0.0f,     "", "immediate" },
     { "tone",   "Tone",        FX_CONTINUOUS, 0.0f,  1.0f,     0.8f,     "", "immediate" },
     { "output", "Output",      FX_CONTINUOUS, -36.0f, 12.0f,   -6.0f,    "dB", "per-sample" },
-    { "mix",    "Mix",         FX_CONTINUOUS, 0.0f,  100.0f,   100.0f,   "%", "per-sample" },
+    { "mix",    "Mix",         FX_CONTINUOUS, 0.0f,  1.0f,     1.0f,     "x (shown as %)", "per-sample" },
     { "aa",     "Anti-Alias",  FX_TOGGLE,     0.0f,  1.0f,     0.0f,     "", "immediate" },
 };
 
@@ -114,12 +114,31 @@ float geiger_quantize(float x, int bits)
     if (x < -1.0f) x = -1.0f;
     if (x > 1.0f) x = 1.0f;
     q = (float)(1L << (bits - 1));
-    return floorf(x * q + 0.5f) / q;               /* mid-tread: 2^bits + 1 levels at most */
+    return floorf(x * q + 0.5f) * (1.0f / q);      /* mid-tread: 2^bits + 1 levels at most; 1/q exact */
 }
 
 /* ------------------------------------------------------------------ the effect */
 
-static float db(float v) { return powf(10.0f, v / 20.0f); }
+float geiger_exp(float y)
+{
+    float z = y * 0.0625f, p;
+    p = 1.0f / 720.0f;
+    p = p * z + 1.0f / 120.0f;
+    p = p * z + 1.0f / 24.0f;
+    p = p * z + 1.0f / 6.0f;
+    p = p * z + 0.5f;
+    p = p * z + 1.0f;
+    p = p * z + 1.0f;
+    p = p * p;
+    p = p * p;
+    p = p * p;
+    return p * p;
+}
+
+#define LN10_20 0.115129255f                       /* ln(10) / 20: dB -> exp argument */
+#define LN100 4.60517019f                          /* ln(100) */
+
+static float db(float v) { return geiger_exp(v * LN10_20); }
 
 static void reset(void *st, float sr)
 {
@@ -128,7 +147,9 @@ static void reset(void *st, float sr)
     build_tables();
     s->sr = sr;
     s->dc_r = 1.0f - (float)(2 * PI * 10.0 / sr);
-    s->smooth_k = 1.0f - expf(-1.0f / (0.005f * sr));
+    s->smooth_k = (float)(1.0 - exp(-1.0 / (0.005 * sr)));
+    s->inv_sr = (float)(1.0 / sr);
+    s->neg_w = (float)(-2 * PI / sr);
     s->aa_rate = -1.0f;
     s->tone_val = -1.0f;
 }
@@ -150,22 +171,23 @@ static void process(void *st, const FxParams *p, const float *in, float *out, si
     int curve = (int)fx_param_clamp(&d[G_CURVE], p->value[G_CURVE]);
     float tone = fx_param_clamp(&d[G_TONE], p->value[G_TONE]);
     float outg = db(fx_param_clamp(&d[G_OUTPUT], p->value[G_OUTPUT]));
-    float mix = fx_param_clamp(&d[G_MIX], p->value[G_MIX]) / 100.0f;
+    float mix = fx_param_clamp(&d[G_MIX], p->value[G_MIX]);
     int aa = (int)fx_param_clamp(&d[G_AA], p->value[G_AA]);
     float inc, k = s->smooth_k;
     size_t i;
 
     if (rate > s->sr) rate = s->sr;
-    inc = rate / s->sr;
+    inc = rate * s->inv_sr;
     if (rate != s->aa_rate) {                      /* coefficients only when a knob moves */
         float fc = 0.4f * rate;
-        s->aa_a = 1.0f - expf((float)(-2 * PI) * fc / s->sr);
+        s->aa_a = 1.0f - geiger_exp(fc * s->neg_w);
         s->aa_rate = rate;
     }
     if (tone != s->tone_val) {
-        float fc = 200.0f * powf(100.0f, tone);    /* 200 Hz .. 20 kHz */
-        if (fc > 0.45f * s->sr) fc = 0.45f * s->sr;
-        s->tone_a = 1.0f - expf((float)(-2 * PI) * fc / s->sr);
+        float fc = 200.0f * geiger_exp(tone * LN100);   /* 200 Hz .. 20 kHz */
+        float top = 0.45f * s->sr;
+        if (fc > top) fc = top;
+        s->tone_a = 1.0f - geiger_exp(fc * s->neg_w);
         s->tone_val = tone;
     }
     if (!s->primed) {

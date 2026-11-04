@@ -29,18 +29,18 @@ in the spirit of wavetable-distortion pedals.
 
 ```
 in -> DC block -> Gain -> [Anti-Alias: 2 one-pole lowpasses at 0.4 x Rate] -> sample-and-hold at Rate
-   -> quantise to Bits -> Curve (257-point table, linear interpolation) -> Tone lowpass (200 Hz..20 kHz)
+   -> quantise to Bits -> Curve (129-point table, linear interpolation) -> Tone lowpass (200 Hz..20 kHz)
    -> DC block -> Output -> Mix with the dry input
 ```
 
 Eight parameters, to fit the host model's eight knob words: Gain (0..36 dB), Sample Rate
-(250..48,000 Hz), Bit Depth (1..16), Curve (0..15), Tone (0..1), Output (-36..+12 dB), Mix (0..100 %),
+(250..48,000 Hz), Bit Depth (1..16), Curve (0..15), Tone (0..1), Output (-36..+12 dB), Mix (0..1, shown as %),
 Anti-Alias (off/on). Gain, Output and Mix are smoothed per sample (5 ms one-pole); the rest act at once.
 The curves: linear, soft, hard, sinefold, trifold, fullwave, halfwave, steps, asym, cheby3, cheby5, sine,
 root, spline, ring, gate.
 
-The tests (`geiger/test_geiger.c`) check: every curve finite, within ±1, table within 0.01 of its
-function (0.025 for the two with corners or an infinite slope) and different from every other curve;
+The tests (`geiger/test_geiger.c`) check: every curve finite, within ±1, the 128-segment table within 0.012 of its
+function (0.035 for the two with corners or an infinite slope) and different from every other curve;
 the quantiser's level count; Mix 0 is exactly the dry input; identical output across runs and block
 sizes 1/16/37/4096; two interleaved instances equal each alone; finite, bounded output at every curve's
 extremes, with NaN/Inf/1e30 input and with random (and NaN) knob values each block; the sample-and-hold
