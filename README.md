@@ -143,7 +143,7 @@ python3 build_all.py          # build/HX_Effects_v3.80.0_All.hxf: NAM A2 Lite + 
 ```
 
 In this image NAM runs **two** blocks at once instead of three (a third NAM block passes its input
-through): that is the DSP memory Geiger uses. **Not yet tried on the unit.**
+through): that is the DSP memory Geiger uses. Flashed and working on an HX Effects (2026‑11‑04).
 
 ## Tuning the declared DSP cost
 
