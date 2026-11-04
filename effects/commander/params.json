@@ -1,0 +1,14 @@
+{
+  "id": "commander",
+  "display_name": "Commander",
+  "parameters": [
+    {"id": "fuzz", "display": "Fuzz", "type": "continuous", "min": 0, "max": 1, "default": 0.7, "unit": "x (shown as %)", "smoothing": "per-sample"},
+    {"id": "sub1", "display": "Sub -1 Oct", "type": "continuous", "min": 0, "max": 1, "default": 0.5, "unit": "x (shown as %)", "smoothing": "per-sample"},
+    {"id": "sub2", "display": "Sub -2 Oct", "type": "continuous", "min": 0, "max": 1, "default": 0, "unit": "x (shown as %)", "smoothing": "per-sample"},
+    {"id": "up", "display": "Octave Up", "type": "continuous", "min": 0, "max": 1, "default": 0, "unit": "x (shown as %)", "smoothing": "per-sample"},
+    {"id": "tone", "display": "Tone", "type": "continuous", "min": 0, "max": 1, "default": 0.5, "unit": "", "smoothing": "immediate"},
+    {"id": "gate", "display": "Gate", "type": "integer", "min": 0, "max": 10, "default": 3, "unit": "0 off, k: -90 + 6k dB", "smoothing": "per-sample"},
+    {"id": "dry", "display": "Dry", "type": "integer", "min": 0, "max": 10, "default": 0, "unit": "k x 10 %", "smoothing": "per-sample"},
+    {"id": "output", "display": "Output", "type": "continuous", "min": -36, "max": 12, "default": -6, "unit": "dB", "smoothing": "per-sample"}
+  ]
+}

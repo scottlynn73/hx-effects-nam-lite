@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """NAM A2 Lite's kernel: up to three blocks at once, each with its own capture.
 
-usage: nam_multi.py [model.nam] [-o out.asm] [--slots 2|3] [--staging b2|b3] [--check]
+usage: nam_multi.py [model.nam] [-o out.asm] [--slots 2|3] [--staging b2|b3] [--far-d 17|41] [--check]
 
 There is no built-in model: Model 1..128 is a User IR slot, anything else
 silence. model.nam (or nam_lite.placeholder) is the check's test model, in IR
@@ -150,11 +150,11 @@ def equs(v):
 class Layout:
     """Every address of the kernel's memory, for `slots` slots."""
 
-    def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2"):
+    def __init__(self, slots=3, n_code=None, backoff=BACKOFF_N, staging="b2", far_d=None):
         """staging: "b2" puts the staging buffers in Block 2 after the code (the far layers'
         tap reads then never meet their weights' block); "b3" in Block 3, which leaves
         Block 2 free after the code for another kernel."""
-        self.slots, self.far_d, self.staging = slots, FAR_D[slots], staging
+        self.slots, self.far_d, self.staging = slots, far_d or FAR_D[slots], staging
         self.n_code = code_size() if n_code is None else n_code
         n = self.n_code
         self.b2_data = NW0 + (CODE - NW0) * 3 // 2 + -(-(n + (n & 1)) * 3 // 2)
@@ -388,9 +388,9 @@ class Layout:
                 "DDR2": f"{DDR2:#x}..{self.ddr2_to:#x}"}
 
 
-def build(slots=3, backoff=BACKOFF_N, staging="b2"):
+def build(slots=3, backoff=BACKOFF_N, staging="b2", far_d=None):
     """(asm, layout): the kernel with its addresses and tables."""
-    lay = Layout(slots, backoff=backoff, staging=staging)
+    lay = Layout(slots, backoff=backoff, staging=staging, far_d=far_d)
     src = _kernel_src()
     src = src.replace("// EQUS (nam_multi.py puts the layout here)\n", equs(lay.v))
     secs, _ = sasm.assemble(src, "nam_multi_kernel.asm")
@@ -1035,7 +1035,7 @@ def main():
     slots = int(sys.argv[sys.argv.index("--slots") + 1]) if "--slots" in sys.argv else 3
     args = sys.argv[1:]
     opt = lambda k: args[args.index(k) + 1] if k in args else None
-    skip = {opt(k) for k in ("-o", "--slots", "--staging")}
+    skip = {opt(k) for k in ("-o", "--slots", "--staging", "--far-d")}
     src = [a for a in args if not a.startswith("-") and a not in skip]
     if src:
         w, c = nam_lite.nam_pack.load(src[0], channels=C)
@@ -1043,7 +1043,8 @@ def main():
             sys.exit(f"{src[0]}: {c} channels, NAM A2 Lite has {C}")
     else:
         w = nam_lite.placeholder()
-    asm, lay = build(slots, staging=opt("--staging") or "b2")
+    far_d = int(opt("--far-d")) if opt("--far-d") else None   # 17 with 2 slots: more rings in SDRAM, Block 3 freed
+    asm, lay = build(slots, staging=opt("--staging") or "b2", far_d=far_d)
     if "-o" in sys.argv:
         open(sys.argv[sys.argv.index("-o") + 1], "w").write(asm)
     for k, v in lay.report().items():

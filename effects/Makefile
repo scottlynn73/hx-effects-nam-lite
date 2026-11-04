@@ -9,11 +9,11 @@ CFLAGS ?= -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Wpedantic -Werror -Wshad
 LDLIBS = -lm
 
 COMMON = common/fx.c common/wav.c common/signals.c
-EFFECTS = geiger/geiger.c metronome/metronome.c
-HEADERS = common/*.h geiger/*.h metronome/*.h
+EFFECTS = geiger/geiger.c metronome/metronome.c commander/commander.c corrupt/corrupt.c
+HEADERS = common/*.h geiger/*.h metronome/*.h commander/*.h corrupt/*.h
 OUT = out
 
-all: $(OUT)/fxrender $(OUT)/test_geiger $(OUT)/test_metronome
+all: $(OUT)/fxrender $(OUT)/test_geiger $(OUT)/test_metronome $(OUT)/test_commander $(OUT)/test_corrupt
 
 $(OUT):
 	mkdir -p $(OUT)
@@ -27,6 +27,12 @@ $(OUT)/test_geiger: geiger/test_geiger.c $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT
 $(OUT)/test_metronome: metronome/test_metronome.c $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) -o $@ metronome/test_metronome.c $(COMMON) $(EFFECTS) $(LDLIBS)
 
+$(OUT)/test_commander: commander/test_commander.c $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
+	$(CC) $(CFLAGS) -o $@ commander/test_commander.c $(COMMON) $(EFFECTS) $(LDLIBS)
+
+$(OUT)/test_corrupt: corrupt/test_corrupt.c $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
+	$(CC) $(CFLAGS) -o $@ corrupt/test_corrupt.c $(COMMON) $(EFFECTS) $(LDLIBS)
+
 # the reference as a shared library, for the SHARC kernels' checks (ctypes)
 $(OUT)/libfx.so: $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) -shared -fPIC -o $@ $(COMMON) $(EFFECTS) $(LDLIBS)
@@ -39,6 +45,10 @@ sharc-check: $(OUT)/libfx.so
 test: all
 	$(OUT)/test_geiger geiger/golden.txt
 	$(OUT)/test_metronome
+	$(OUT)/test_commander
+	$(OUT)/test_corrupt
+	$(OUT)/fxrender describe corrupt | diff -u corrupt/params.json - && echo "corrupt params.json up to date"
+	$(OUT)/fxrender describe commander | diff -u commander/params.json - && echo "commander params.json up to date"
 	$(OUT)/fxrender describe metronome | diff -u metronome/params.json - && echo "metronome params.json up to date"
 	$(OUT)/fxrender describe geiger | diff -u geiger/params.json - && echo "params.json up to date"
 

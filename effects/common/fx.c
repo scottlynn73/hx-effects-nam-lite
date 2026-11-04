@@ -3,10 +3,12 @@
 #include <math.h>
 #include <string.h>
 
+extern const FxAlgorithm fx_commander;
+extern const FxAlgorithm fx_corrupt;
 extern const FxAlgorithm fx_geiger;
 extern const FxAlgorithm fx_metronome;
 
-static const FxAlgorithm *const ALL[] = { &fx_geiger, &fx_metronome };
+static const FxAlgorithm *const ALL[] = { &fx_commander, &fx_corrupt, &fx_geiger, &fx_metronome };
 
 const FxAlgorithm *const *fx_all(size_t *n)
 {
