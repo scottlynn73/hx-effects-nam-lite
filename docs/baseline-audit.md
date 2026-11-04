@@ -78,8 +78,22 @@ A second kernel **can** sit beside NAM (done: `build_nam_click.py`, works on the
 | DDR2 `0x21c400..0x295400` | the Blob 0 buffer, enlarged to `0x79000` words for two host graphs |
 | DDR2 `0x295400 + 0x5000 × slot` | NAM's slots, moved up by `0x1000` (`NAM_SDR_BASE`) |
 
-What is left after both: about 90 instructions in Block 2's tail and about 90 at the top of Block 3.
-A third kernel needs memory found elsewhere, or NAM's slot count reduced.
+A third kernel fits too once NAM runs 2 slots (done: `build_all.py`, NAM + Click + Geiger, works on
+the unit; addresses in `build/all_manifest.json`):
+
+| Region | Use in the NAM + Click + Geiger image |
+|---|---|
+| Block 3 normal words `0xe4850..0xe73cb` | NAM with 2 slots (was to `0xe7c14` with 3) |
+| Block 3 normal words `0xe73d0..0xe78f6` | Geiger's data (16 × 65‑point curve tables, save area, 8 slots) |
+| Block 3 48‑bit `0xe50a4..0xe5215` (= normal `0xe78f6..0xe7b1f`) | Geiger's code |
+| Block 3 from `0xe7c20` | Click's data and code, as above |
+| Primitive `0x012e` | Geiger's hook (zero uses in the stock graphs) |
+| DDR2 `0x21c400..0x296400` | the Blob 0 buffer, `0x7a000` words for three host graphs |
+| DDR2 `0x296400 + 0x5000 × slot` | NAM's two slots (they must end below the IR store at `0x2a912c`; asserted) |
+
+What is left after all three: about 90 instructions in Block 2's tail, about 170 between Geiger's code and
+Click's data, and about 90 above Click's code. A fourth kernel needs memory freed first (for example NAM's
+staging buffers moved to Block 3 with `nam_multi.py --staging b3`, which frees Block 2's tail).
 
 ## Tested vs untested
 

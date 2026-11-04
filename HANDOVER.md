@@ -68,8 +68,9 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   copied into Click's map; the kernel gets the beat length in seconds.
 - Code: C99 reference + tests in `effects/` (`make -C effects test`), SHARC kernel in
   `effects/metronome/sharc/` (`make -C effects sharc-check`: bit-exact against the C reference in ssim),
-  image read-back check `tools/verify/verify_click.py`. Geiger (bitcrusher) exists as a C reference only.
-  Baseline audit: `docs/baseline-audit.md`.
+  image read-back check `tools/verify/verify_click.py`. Geiger: C reference + tests in `effects/geiger/`,
+  SHARC kernel in `effects/geiger/sharc/` (also in `make -C effects sharc-check`; its tables come from the
+  C library, which the tooling rebuilds before loading). Baseline audit: `docs/baseline-audit.md`.
 - **NAM + Click + Geiger** (`python3 build_all.py` → `build/HX_Effects_v3.80.0_All.hxf`, verified offline
   with `tools/verify/verify_all.py` and `build/all_manifest.json`; **works on the unit**, 2026-11-04). Geiger
   (bit crusher, 8 knobs) takes over the mono Megaphone on primitive 0x012e; NAM runs 2 slots (frees Block 3
@@ -94,6 +95,11 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   boot stream stops at 0xe47d2 and the stacks are in Block 2). Two host graphs need a bigger Blob 0 buffer:
   0x79000 words (0x21c400..0x295400), so NAM's DDR2 slots move up to 0x295400 (`NAM_SDR_BASE`) — the
   one NAM instruction that differs from the NAM-only image.
+- **Next effects** (from the plan): Corrupt (PLL synth), Stutter (glitch repeater), Ottobit (crusher +
+  sequencer). Each replaces a stock block the user picks. A fourth kernel in the all-in-one image needs
+  memory: about 90 instructions are free in Block 2's tail, about 170 between Geiger's code and Click's
+  data and about 90 above Click's code (see `docs/baseline-audit.md`). Options: NAM's staging buffers into
+  Block 3 (`nam_multi.py --staging b3`, frees Block 2's tail), smaller tables, or NAM down to one slot.
 
 ## Why the takeover approach
 

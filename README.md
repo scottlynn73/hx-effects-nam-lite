@@ -51,7 +51,8 @@ potentially having to recover your unit yourself!**
   capture's name once a slot is selected; the 2048 IR block shows the IR's name once one is selected.
 - Everything else in the firmware stays stock 3.80.0.
 - Optionally, with `build_nam_click.py` instead of `build_effects.py`: the **Click** metronome as well,
-  in place of the mono Mod/Chorus Echo delay (below).
+  in place of the mono Mod/Chorus Echo delay; or with `build_all.py`: Click and the **Geiger** bit crusher
+  (in place of the mono Megaphone), with NAM limited to two blocks at once (below).
 
 ## What you need
 
