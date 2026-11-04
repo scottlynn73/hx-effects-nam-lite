@@ -194,8 +194,7 @@ To make room, NAM keeps its two blocks but moves more of its working memory to D
 --far-d 17`), and the DSP's boot stream loads the kernels' zeroed state with zero‑fill records instead
 of stored zeros: that stream must fit a 512 KiB partition, and with all five blocks it has about 800 bytes
 left. In the image with both, Commander and Corrupt share one kernel (one copy of the common parts).
-Built and checked in the simulator and offline; **both images boot on the unit** (2026‑11‑04). How the
-two effects sound on the unit is still to be checked.
+Built and checked in the simulator and offline; **both images work on the unit** (2026‑11‑04).
 
 ## Tuning the declared DSP cost
 

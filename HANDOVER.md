@@ -95,8 +95,8 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   boot stream stops at 0xe47d2 and the stacks are in Block 2). Two host graphs need a bigger Blob 0 buffer:
   0x79000 words (0x21c400..0x295400), so NAM's DDR2 slots move up to 0x295400 (`NAM_SDR_BASE`) — the
   one NAM instruction that differs from the NAM-only image.
-- **Commander and Corrupt** (branch `commander-corrupt`, 2026-11-04; **both images boot on the unit
-  (2026-11-04); the effects' sounds not yet checked on the unit**): `python3 build_all.py --with commander` → `build/HX_Effects_v3.80.0_All_Commander.hxf`
+- **Commander and Corrupt** (merged to `main` 2026-11-04; **both images work on the unit**: they boot
+  and both effects sound right): `python3 build_all.py --with commander` → `build/HX_Effects_v3.80.0_All_Commander.hxf`
   (NAM + Click + Geiger + Commander on the mono Xenomorph Fuzz, primitive 0x0100) and
   `--with commander,corrupt` → `..._All_Commander_Corrupt.hxf` (+ Corrupt on Octave Fuzz, Distortion >
   Legacy, primitive 0x0838); check with `python3 tools/verify/verify_all.py build/all_commander[_corrupt]_manifest.json`.
