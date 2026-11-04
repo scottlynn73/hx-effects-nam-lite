@@ -194,7 +194,8 @@ To make room, NAM keeps its two blocks but moves more of its working memory to D
 --far-d 17`), and the DSP's boot stream loads the kernels' zeroed state with zero‑fill records instead
 of stored zeros: that stream must fit a 512 KiB partition, and with all five blocks it has about 800 bytes
 left. In the image with both, Commander and Corrupt share one kernel (one copy of the common parts).
-Built and checked in the simulator and offline; **not yet tried on a unit** (2026‑11‑04).
+Built and checked in the simulator and offline; **both images boot on the unit** (2026‑11‑04). How the
+two effects sound on the unit is still to be checked.
 
 ## Tuning the declared DSP cost
 
@@ -238,14 +239,14 @@ back into its main app. Close HX Edit and Line 6 Updater first, then:
 
 ```
 pip install pyusb libusb-package      # once, in the .venv
-python3 tools/flash.py flash build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf
+.venv/bin/python tools/flash.py flash build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf
 ```
 
 It checks the file (product, MD5, every entry's checksum), asks you to type `flash`, then: restarts the
 main app into its USB DFU loader, loads the updater app from the `.hxf`, writes all 14 images (about
 100 seconds), and waits for the unit to answer as `F15Main`. It ends with `BOOTED` or `BOOT FAILED`
 (exit code 0 or 1), so it can follow a build in a script. If it stops partway, the unit is left in
-updater mode; run it again, or use Line 6 Updater. `python3 tools/flash.py info` shows what the unit is
+updater mode; run it again, or use Line 6 Updater. `.venv/bin/python tools/flash.py info` shows what the unit is
 running without changing anything.
 
 Before writing, it lists images the unit flags. Image 4 is always listed: the updater app flags any
@@ -258,7 +259,7 @@ first and so does this tool; it is not damage.
 stops at a "Boot Failure" message, so glance at the screen as well.
 
 The protocol was taken from a USB capture of Line 6 Updater 1.28 (`tools/usb/`: `capture.sh` runs the
-Updater with a logging libusb shim, `decode.py` reads the log), and `python3 tools/flash.py replay
+Updater with a logging libusb shim, `decode.py` reads the log), and `.venv/bin/python tools/flash.py replay
 <file.hxf> <log>` checks the tool against such a capture byte for byte. It is tested on 3.80.0 only.
 
 ## Use
