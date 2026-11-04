@@ -48,6 +48,18 @@ rate; the anti-alias mode cutting a known alias by more than 6 dB; the three var
 dry and each other; and `golden.txt` metrics within 1e-4 (recorded on macOS/clang; re-record with
 `make golden` after an intended change).
 
+### Geiger on the SHARC (`geiger/sharc/`)
+
+`geiger_kernel.asm`, a hand port of `geiger.c` with Click's conventions (slots, I1-I3 restored, DM(3)
+left alone). `geiger_kernel.py --check` (part of `make sharc-check`) requires every output word to equal
+the C reference's: the three variants, all 16 curves, the extremes, Mix 0, out-of-range knobs, two
+interleaved instances with every knob moving, and re-creation. The curve tables are read from the C
+library, so they are the reference's to the bit. 369 instructions, about 2,340 data words (mostly the
+16 x 129 curve tables); worst 2,528 cycles per 16-sample call.
+
+Knob words: DM(5) Gain dB, DM(6) Rate Hz, DM(7) Bits, DM(8) Curve, DM(9) Tone 0..1, DM(10) Output dB,
+DM(11) Mix 0..1, DM(13) Anti-Alias (12 is the slot word).
+
 ## Click (`metronome/`)
 
 A metronome as an ordinary **preset block**: it lives in a preset, takes one block, and follows the
