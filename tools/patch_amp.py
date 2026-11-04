@@ -756,7 +756,8 @@ def _parse_e0_segments_any(e0):
     return segs
 
 
-def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp_cost=None, n_params=None, strip_title='NAM / IR_2048'):
+def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp_cost=None, n_params=None, strip_title='NAM / IR_2048',
+                            n_display=None):
     """HX Effects: the target model keeps its identity (name index, preset id, btype, list entry);
     only its Table 1 cost, Table 2 counts/short name and browser display name change, in place."""
     A = EFFECTS_E0
@@ -784,7 +785,8 @@ def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp
             row = bytearray(vread(va, 44))
             row[4:20] = (short_name or display_name).encode('latin1')[:16].ljust(16, b'\0')
             if n_params is not None:
-                struct.pack_into('<3I', row, 24, n_params, n_params, n_params)
+                # (knobs shown, parameters, parameters): a delay's sync controls share its Time knob
+                struct.pack_into('<3I', row, 24, n_params if n_display is None else n_display, n_params, n_params)
             vwrite(va, bytes(row)); done = True
     assert done, 'target model not in Table 2'
     # the browser item's display name, wherever it is listed
@@ -798,9 +800,10 @@ def takeover_entry0_effects(e0, tgt_name_idx, display_name, short_name=None, dsp
                 it[14:40] = display_name.encode('latin1')[:25].ljust(26, b'\0')
                 vwrite(va, bytes(it)); hits.append(slot)
     assert hits, 'target model in no browser list'
-    title = b'Impulse Response\0'                 # the IR category's default strip title (one string)
-    assert bytes(e0).count(title) == 1, 'the IR title string is not where expected'
-    e0[e0.index(title): e0.index(title) + len(title)] = strip_title.encode('latin1')[:16].ljust(len(title), b'\0')
+    if strip_title is not None:                   # None: leave the IR category's title alone
+        title = b'Impulse Response\0'             # the IR category's default strip title (one string)
+        assert bytes(e0).count(title) == 1, 'the IR title string is not where expected'
+        e0[e0.index(title): e0.index(title) + len(title)] = strip_title.encode('latin1')[:16].ljust(len(title), b'\0')
     return bytes(l6ia.fix_internal_crcs(bytes(e0))), pid, cost, hits
 
 
@@ -1187,7 +1190,7 @@ def nam_params(e3, info):
     return out
 
 
-def nam_host_member(b0, comp_id, sdram_words=0):
+def nam_host_member(b0, comp_id, sdram_words=0, prim_id=0x9c75):
     """Make member 1 of composite `comp_id` (a clone of DEV.NAM_HOST_COMPOSITE) the
     primitive 0x9c75 (dm 145, pm 13, SDRAM sdram_words), keeping its ports (1 in, 1 out)."""
     ct = b0[0x10]
@@ -1199,7 +1202,7 @@ def nam_host_member(b0, comp_id, sdram_words=0):
         assert hdr[2] == 3, f'{comp_id:#x} has {hdr[2]} members, the NAM host wants 3'
         assert 0x600000 <= b0[r + 6] < 0x601000, 'member 1 is not a composite'
     assert b0[r + 7] == 1 and b0[r + 9] == 1, 'member 1 is not 1-in 1-out'
-    b0[r + 6] = 0x9c75
+    b0[r + 6] = prim_id
     b0[r + 11] = 0                  # no static init parameters
     for k in range(15, 20):         # sub-arena sizes: 0 for a primitive, as stock primitive members have
         b0[r + k] = 0
@@ -1327,7 +1330,7 @@ def pmap_slots_without_param(e4, blob_index, params):
     return sorted(slots - {p['slot'] for p in params})
 
 
-def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
+def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, blob_fn=None, prim_id=0x9c75):
     """Entry 4 with one more blob, the NAM host: a copy of the model's composite
     (DEV.NAM_HOST_COMPOSITE) appended to Blob 0 (0x6001c6, 0x6001c7, ...;
     clone_composite_in_blob0) with its amp member made primitive 0x9c75
@@ -1353,7 +1356,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
     assert src_comp_id == DEV.NAM_HOST_COMPOSITE, \
         f'the NAM host wants a model on composite {DEV.NAM_HOST_COMPOSITE:#x} (HD2_AmpLine6Clarity), not {src_comp_id:#x}'
     b0_words, new_comp_id = clone_composite_in_blob0(b0_words, src_comp_id)
-    nam_host_member(b0_words, new_comp_id, sdram_words)
+    nam_host_member(b0_words, new_comp_id, sdram_words, prim_id)
     extra = []
     if DEV.HOST_SWAP:        # the other members keep their stock inits; root ctrl records stay too
         pin, cnt = src_blob_words[10], src_blob_words[11]
@@ -1369,7 +1372,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
         raise_amp_harness_sdram(b0_words, sdram_words)
     err = sharc_blob0_check(b0_words, DEV.BLOB0_MAX_WORDS)
     assert err is None, err
-    src_blob_words = nam_host_blob(new_comp_id, nam, extra)
+    src_blob_words = (blob_fn or nam_host_blob)(new_comp_id, nam, extra)
 
     added_blobs.append(src_blob_words)
     if dir_off > 6:
@@ -1403,7 +1406,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0):
     return out, new_blob_idx, new_comp_id
 
 
-def add_model_entry3(e3, src, new_name, display_name, blob_index, nam):
+def add_model_entry3(e3, src, new_name, display_name, blob_index, nam, meta_set=None):
     """Entry 3 with one more model: a copy of `src` (a parse_entry3_full model)
     under a new internal name and displayName, with the next model ID and the
     parameters `nam` (nam_params).
@@ -1468,6 +1471,15 @@ def add_model_entry3(e3, src, new_name, display_name, blob_index, nam):
         if ks == i_key:
             assert kt == 7, 'displayName is not a string record'
             struct.pack_into('<3I', meta, 12 * k, ks, kt, i_disp)
+    for key, val in (meta_set or {}).items():           # other string fields of src's metadata
+        hit = False
+        for k in range(d[0]):
+            ks, kt, kv = struct.unpack_from('<3I', meta, 12 * k)
+            if ks == names.get(key):
+                assert kt == 7, f'{key} is not a string record'
+                struct.pack_into('<3I', meta, 12 * k, ks, kt, string(val))
+                hit = True
+        assert hit, f'{src["name"]} has no metadata field {key}'
 
     # one state per parameter map input node (nam_host_blob: node k for nam[k])
     m_states = b''.join(struct.pack('<5I', 0, 0x80b98, string(p['state']), p['type'], k)
