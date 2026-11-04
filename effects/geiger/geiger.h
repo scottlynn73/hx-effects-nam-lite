@@ -18,7 +18,8 @@
 enum { G_GAIN, G_RATE, G_BITS, G_CURVE, G_TONE, G_OUTPUT, G_MIX, G_AA, G_NPARAMS };
 
 #define GEIGER_CURVES 16
-#define GEIGER_TABLE 128                 /* segments; GEIGER_TABLE + 1 points over [-1, 1] */
+#define GEIGER_TABLE 64                  /* segments; GEIGER_TABLE + 1 points over [-1, 1] (sized to fit
+                                            beside NAM and Click in the DSP's memory) */
 
 typedef struct {
     float sr;

@@ -188,7 +188,7 @@ c_have:
     R3 = MAX(R3, R8);
     R8 = 15;
     R3 = MIN(R3, R8);
-    R8 = LSHIFT R3 BY 7;                // x 129
+    R8 = LSHIFT R3 BY TSHIFT;           // x (TABLE + 1)
     R3 = R8 + R3;
     R8 = T_CURVES;
     R3 = R3 + R8;
@@ -291,16 +291,16 @@ s_noh:
 s_fl:
     F10 = DM(ST_QI, I3);
     F9 = F11 * F10;
-    // the curve: 129-point table, linear interpolation
+    // the curve: (TABLE + 1)-point table, linear interpolation
     F10 = -1.0;
     F9 = MAX(F9, F10);
     F10 = 1.0;
     F9 = MIN(F9, F10);
     F9 = F9 + F10;
-    F10 = 64.0;
+    F10 = DM(K_HALFT);                  // TABLE / 2
     F9 = F9 * F10;                      // p
     R11 = TRUNC F9;                     // i
-    R12 = 127;
+    R12 = TABLE - 1;
     R11 = MIN(R11, R12);
     F12 = FLOAT R11;
     F9 = F9 - F12;                      // f

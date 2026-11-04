@@ -71,10 +71,10 @@ static void test_curves(void)
             CHECK(isfinite(y) && y >= -1.0f && y <= 1.0f, "curve %d out of range at %g: %g", c, x, y);
             if (c != 7 && fabs(t - y) > worst) worst = fabs(t - y);     /* 7 "steps" has jumps */
         }
-        /* 128 segments (the size the DSP holds) track smooth curves within 0.012 (ring, the most
-           curved, is the limit); the folds' corners (4) and root's infinite slope at 0 (12) within
-           0.035. The table is what the effect plays; this checks it stays faithful to its function. */
-        CHECK(worst < ((c == 4 || c == 12) ? 0.035 : 0.012), "curve %d (%s): table error %g", c, geiger_curve_name(c), worst);
+        /* 64 segments (the size the DSP holds beside NAM and Click) track smooth curves within 0.045
+           (ring, the most curved, is the limit); the folds' corners (4) and root's infinite slope at
+           0 (12) within 0.06. The table is what the effect plays; this checks it stays faithful. */
+        CHECK(worst < ((c == 4 || c == 12) ? 0.06 : 0.045), "curve %d (%s): table error %g", c, geiger_curve_name(c), worst);
         for (d = 0; d < c; d++) {
             double m = 0;
             for (i = 0; i <= 2000; i++) {

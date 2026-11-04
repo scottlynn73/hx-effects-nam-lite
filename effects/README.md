@@ -29,7 +29,7 @@ in the spirit of wavetable-distortion pedals.
 
 ```
 in -> DC block -> Gain -> [Anti-Alias: 2 one-pole lowpasses at 0.4 x Rate] -> sample-and-hold at Rate
-   -> quantise to Bits -> Curve (129-point table, linear interpolation) -> Tone lowpass (200 Hz..20 kHz)
+   -> quantise to Bits -> Curve (65-point table, linear interpolation) -> Tone lowpass (200 Hz..20 kHz)
    -> DC block -> Output -> Mix with the dry input
 ```
 
@@ -39,8 +39,8 @@ Anti-Alias (off/on). Gain, Output and Mix are smoothed per sample (5 ms one-pole
 The curves: linear, soft, hard, sinefold, trifold, fullwave, halfwave, steps, asym, cheby3, cheby5, sine,
 root, spline, ring, gate.
 
-The tests (`geiger/test_geiger.c`) check: every curve finite, within ±1, the 128-segment table within 0.012 of its
-function (0.035 for the two with corners or an infinite slope) and different from every other curve;
+The tests (`geiger/test_geiger.c`) check: every curve finite, within ±1, the 64-segment table within 0.045 of its
+function (0.06 for the two with corners or an infinite slope) and different from every other curve;
 the quantiser's level count; Mix 0 is exactly the dry input; identical output across runs and block
 sizes 1/16/37/4096; two interleaved instances equal each alone; finite, bounded output at every curve's
 extremes, with NaN/Inf/1e30 input and with random (and NaN) knob values each block; the sample-and-hold
@@ -54,8 +54,8 @@ dry and each other; and `golden.txt` metrics within 1e-4 (recorded on macOS/clan
 left alone). `geiger_kernel.py --check` (part of `make sharc-check`) requires every output word to equal
 the C reference's: the three variants, all 16 curves, the extremes, Mix 0, out-of-range knobs, two
 interleaved instances with every knob moving, and re-creation. The curve tables are read from the C
-library, so they are the reference's to the bit. 369 instructions, about 2,340 data words (mostly the
-16 x 129 curve tables); worst 2,528 cycles per 16-sample call.
+library, so they are the reference's to the bit. about 370 instructions, about 1,320 data words (mostly the
+16 x 65 curve tables, sized to fit beside NAM and Click); worst 2,528 cycles per 16-sample call.
 
 Knob words: DM(5) Gain dB, DM(6) Rate Hz, DM(7) Bits, DM(8) Curve, DM(9) Tone 0..1, DM(10) Output dB,
 DM(11) Mix 0..1, DM(13) Anti-Alias (12 is the slot word).

@@ -22,7 +22,8 @@ simulator and firmware tools it uses (copied into `tools/` and `src/`, with the 
 added).
 
 It can also add **Click**, a metronome block of our own (see [Click: a metronome block](#click-a-metronome-block)),
-either on its own or in the same image as NAM.
+either on its own or in the same image as NAM, and **Geiger**, a bit crusher (see
+[Geiger: a bit crusher](#geiger-a-bit-crusher)), in an image with all three.
 
 **You do this at your own risk! Do not attempt it if you are not comfortable with running command line tools and 
 potentially having to recover your unit yourself!**
@@ -117,6 +118,32 @@ python3 build_nam_click.py    # build/HX_Effects_v3.80.0_NAM_Click.hxf: NAM and 
 Both have been flashed and work on an HX Effects. Install the file the same way as the NAM build. The
 effect itself (a C reference, tests and the hand‑written SHARC kernel) is in `effects/`; see
 [effects/README.md](effects/README.md).
+
+## Geiger: a bit crusher
+
+Geiger reduces the sample rate and bit depth and then shapes the result through one of 16 curves
+(original ones: folds, rectifiers, Chebyshev, steps, a spline…). It takes over the **mono Megaphone**
+(Distortion → Mono → "Geiger"; the stereo Megaphone stays).
+
+| Knob | What it does |
+|---|---|
+| **Gain** | Drive into the crusher, 0–36 dB |
+| **Sample Rate** | 250 Hz – 48 kHz (sample‑and‑hold; aliasing is part of the sound) |
+| **Bit Depth** | 1–16 bits |
+| **Curve** | Linear, Soft, Hard, Sine Fold, Tri Fold, Full Wave, Half Wave, Steps, Asym, Cheby 3, Cheby 5, Sine, Root, Spline, Ring, Gate |
+| **Tone** | Low‑pass after the curve, 200 Hz – 20 kHz |
+| **Output** | −36 to +12 dB |
+| **Mix** | Dry/wet |
+| **Anti‑Alias** | On filters before the sample‑and‑hold |
+
+It comes in one image with NAM and Click:
+
+```
+python3 build_all.py          # build/HX_Effects_v3.80.0_All.hxf: NAM A2 Lite + Click + Geiger
+```
+
+In this image NAM runs **two** blocks at once instead of three (a third NAM block passes its input
+through): that is the DSP memory Geiger uses. **Not yet tried on the unit.**
 
 ## Tuning the declared DSP cost
 
@@ -313,7 +340,7 @@ None of these change the firmware; a boot failure needs the Updater flash above.
 
 ```
 build_effects.py          the one-step build (NAM)
-build_click.py            Click only; build_nam_click.py: NAM and Click in one image
+build_click.py            Click only; build_nam_click.py: NAM and Click; build_all.py: NAM, Click and Geiger
 firmware/                 where you put the stock .hxf (git-ignored, never committed)
 captures/                 demo NAM A2 Lite captures, already converted to User IR .wav files
 .gitignore                keeps firmware/, build/ and every .hxf out of version control

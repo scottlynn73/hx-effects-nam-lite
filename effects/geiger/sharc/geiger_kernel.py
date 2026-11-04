@@ -36,7 +36,7 @@ _ST = ['PRIMED', 'GAINT', 'OUTT', 'MIXT', 'INC', 'AAA', 'TONEA', 'Q', 'QI', 'TAB
        'GMIX', 'DCINX', 'DCINY', 'DCOUTX', 'DCOUTY', 'AA1', 'AA2', 'PHASE', 'HELD', 'TONEZ']
 STATE = {f'ST_{n}': 2 + k for k, n in enumerate(_ST)}
 NSLOTS, NSTATE, SLOTW, STALE, P_SLOT = 8, len(_ST), 2 + len(_ST), 64, 12
-TABLE = 128
+TABLE = 64                                  # = geiger.h GEIGER_TABLE (a power of 2)
 MAX_CYCLES = 4000
 
 
@@ -48,11 +48,21 @@ def fw(x):
     return struct.unpack('<I', struct.pack('<f', x))[0]
 
 
+_LIB = None
+
+
 def lib():
-    path = os.path.join(ROOT, 'effects', 'out', 'libfx.so')
-    if not os.path.exists(path):
-        raise SystemExit(f'{path} missing: make -C effects out/libfx.so')
-    return ctypes.CDLL(path)
+    """The C reference library, rebuilt first if a source changed: the curve tables and the
+    reference both come from it, so a stale library (say, built with another table size) would
+    make the kernel and the check agree with the wrong effect."""
+    global _LIB
+    if _LIB is None:
+        import subprocess
+        r = subprocess.run(['make', '-s', '-C', os.path.join(ROOT, 'effects'), 'out/libfx.so'], capture_output=True, text=True)
+        if r.returncode:
+            raise SystemExit(f'could not build effects/out/libfx.so:\n{r.stderr}')
+        _LIB = ctypes.CDLL(os.path.join(ROOT, 'effects', 'out', 'libfx.so'))
+    return _LIB
 
 
 def tables():
@@ -70,7 +80,7 @@ def constants():
     return dict(
         K_LN10_20=f32(0.115129255), K_LN100=f32(4.60517019), K_INV_SR=f32(1.0 / SR), K_NEG_W=f32(-2 * math.pi / SR),
         K_04=f32(0.4), K_TOP=f32(f32(0.45) * SR), K_DC_R=f32(1.0 - f32(2 * math.pi * 10.0 / SR)), K_EPS=f32(1e-6),
-        K_SMK=f32(1.0 - math.exp(-1.0 / (0.005 * SR))),
+        K_SMK=f32(1.0 - math.exp(-1.0 / (0.005 * SR))), K_HALFT=float(TABLE // 2),
         K_C6=float(one / np.float32(720.0)), K_C5=float(one / np.float32(120.0)),
         K_C4=float(one / np.float32(24.0)), K_C3=float(one / np.float32(6.0)))
 
@@ -91,6 +101,7 @@ def source(place='b2'):
     lay.append(('T_SLOTBASE', a, [slots + SLOTW * k for k in range(NSLOTS)])); a += NSLOTS
     lay.append(('SLOTS', a, [0] * (SLOTW * NSLOTS))); a += SLOTW * NSLOTS
     equ = [f'.equ {k}, {v}' for k, v in STATE.items()]
+    equ += [f'.equ TABLE, {TABLE}', f'.equ TSHIFT, {TABLE.bit_length() - 1}']
     equ += ['.equ S_OWNER, 0', '.equ S_LAST, 1', f'.equ P_SLOT, {P_SLOT}', f'.equ NSLOTS, {NSLOTS}',
             f'.equ NSTATE, {NSTATE}', f'.equ STALE, {STALE}']
     equ += [f'.equ {name}, {addr:#x}' for name, addr, _ in lay]
