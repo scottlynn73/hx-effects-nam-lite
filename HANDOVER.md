@@ -95,11 +95,18 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   boot stream stops at 0xe47d2 and the stacks are in Block 2). Two host graphs need a bigger Blob 0 buffer:
   0x79000 words (0x21c400..0x295400), so NAM's DDR2 slots move up to 0x295400 (`NAM_SDR_BASE`) — the
   one NAM instruction that differs from the NAM-only image.
-- **Next effects** (from the plan): Corrupt (PLL synth), Stutter (glitch repeater), Ottobit (crusher +
-  sequencer). Each replaces a stock block the user picks. A fourth kernel in the all-in-one image needs
-  memory: about 90 instructions are free in Block 2's tail, about 170 between Geiger's code and Click's
-  data and about 90 above Click's code (see `docs/baseline-audit.md`). Options: NAM's staging buffers into
-  Block 3 (`nam_multi.py --staging b3`, frees Block 2's tail), smaller tables, or NAM down to one slot.
+- **Commander and Corrupt** (branch `commander-corrupt`, 2026-11-04; **built and verified offline, not
+  yet flashed**): `python3 build_all.py --with commander` → `build/HX_Effects_v3.80.0_All_Commander.hxf`
+  (NAM + Click + Geiger + Commander on the mono Xenomorph Fuzz, primitive 0x0100) and
+  `--with commander,corrupt` → `..._All_Commander_Corrupt.hxf` (+ Corrupt on Octave Fuzz, Distortion >
+  Legacy, primitive 0x0838); check with `python3 tools/verify/verify_all.py build/all_commander[_corrupt]_manifest.json`.
+  C references and tests in `effects/commander`, `effects/corrupt`; kernels bit-exact in ssim
+  (`effects/common/kernel_rig.py` is the shared builder/rig). Memory: NAM `--far-d 17` frees ~1,600
+  Block 3 words; the binding limit is now **Entry 2's 512 KiB partition** (zero-fill LDR records save
+  ~5.3 KB; the five-kernel image has 812 bytes left, with Commander and Corrupt merged into one kernel,
+  `effects/corrupt/sharc/commander_corrupt_kernel.asm`). Details: `docs/baseline-audit.md`.
+- **Next effects** (from the plan): Stutter (glitch repeater), Ottobit (crusher + sequencer). Each would
+  need Entry 2 space first (see above), and the buffer effects DDR2 for their samples.
 
 ## Why the takeover approach
 

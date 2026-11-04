@@ -23,7 +23,9 @@ added).
 
 It can also add **Click**, a metronome block of our own (see [Click: a metronome block](#click-a-metronome-block)),
 either on its own or in the same image as NAM, and **Geiger**, a bit crusher (see
-[Geiger: a bit crusher](#geiger-a-bit-crusher)), in an image with all three.
+[Geiger: a bit crusher](#geiger-a-bit-crusher)), in an image with all three. Two more blocks,
+**Commander** (an octave fuzz) and **Corrupt** (a tracking square synth), can join them (see
+[Commander and Corrupt](#commander-and-corrupt-octave-fuzz-and-tracking-synth)).
 
 **You do this at your own risk! Do not attempt it if you are not comfortable with running command line tools and 
 potentially having to recover your unit yourself!**
@@ -52,7 +54,9 @@ potentially having to recover your unit yourself!**
 - Everything else in the firmware stays stock 3.80.0.
 - Optionally, with `build_nam_click.py` instead of `build_effects.py`: the **Click** metronome as well,
   in place of the mono Mod/Chorus Echo delay; or with `build_all.py`: Click and the **Geiger** bit crusher
-  (in place of the mono Megaphone), with NAM limited to two blocks at once (below).
+  (in place of the mono Megaphone), with NAM limited to two blocks at once (below); with
+  `build_all.py --with commander[,corrupt]`, also **Commander** (in place of the mono Xenomorph Fuzz) and
+  **Corrupt** (in place of Octave Fuzz).
 
 ## What you need
 
@@ -145,6 +149,52 @@ python3 build_all.py          # build/HX_Effects_v3.80.0_All.hxf: NAM A2 Lite + 
 
 In this image NAM runs **two** blocks at once instead of three (a third NAM block passes its input
 through): that is the DSP memory Geiger uses. Flashed and working on an HX Effects (2026‑11‑04).
+
+## Commander and Corrupt: octave fuzz and tracking synth
+
+**Commander** is a square‑wave octave fuzz: it turns the note you play into a square wave and mixes in
+squares one and two octaves below and one octave above. It takes over the **mono Xenomorph Fuzz**
+(Distortion → Mono → "Commander"; the stereo Xenomorph stays).
+
+| Knob | What it does |
+|---|---|
+| **Fuzz** | The square at the note you play |
+| **Sub -1 Oct** | A square an octave below |
+| **Sub -2 Oct** | A square two octaves below |
+| **Octave Up** | A square an octave above |
+| **Tone** | Low‑pass, 100 Hz – 10 kHz |
+| **Output** | −36 to +12 dB |
+| **Gate** | Off, or −84 to −30 dB: below it the fuzz fades out (default −72 dB) |
+| **Dry** | 0–100 % of the clean signal mixed back in |
+
+**Corrupt** is a monophonic synth that follows your playing: it measures the pitch of each note and runs
+its own square‑wave oscillator at that pitch (or an interval of it), with glide between notes. It takes
+over **Octave Fuzz** (Distortion → Legacy → "Corrupt").
+
+| Knob | What it does |
+|---|---|
+| **Square** | The input squared up, as a fuzz (the raw tracking signal) |
+| **Master** | The oscillator |
+| **Sub** | A square an octave below the oscillator |
+| **Glide** | 0 = jumps to each new note; up to a slow slide |
+| **Tone** | Low‑pass, 100 Hz – 10 kHz |
+| **Output** | −36 to +12 dB |
+| **Root** | The oscillator at −2 Oct, −1 Oct, Unison or +1 Oct |
+| **Harmonic** | 1x–8x the root: 2x an octave, 3x a fifth above that, 5x a third, … |
+
+Both like single notes, the neck pickup and the tone rolled back a little; chords make them glitch
+(that is part of the sound). They come in two images, each with everything above:
+
+```
+python3 build_all.py --with commander           # build/HX_Effects_v3.80.0_All_Commander.hxf
+python3 build_all.py --with commander,corrupt   # build/HX_Effects_v3.80.0_All_Commander_Corrupt.hxf
+```
+
+To make room, NAM keeps its two blocks but moves more of its working memory to DDR2 (`nam_multi.py
+--far-d 17`), and the DSP's boot stream loads the kernels' zeroed state with zero‑fill records instead
+of stored zeros: that stream must fit a 512 KiB partition, and with all five blocks it has about 800 bytes
+left. In the image with both, Commander and Corrupt share one kernel (one copy of the common parts).
+Built and checked in the simulator and offline; **not yet tried on a unit** (2026‑11‑04).
 
 ## Tuning the declared DSP cost
 
@@ -342,6 +392,7 @@ None of these change the firmware; a boot failure needs the Updater flash above.
 ```
 build_effects.py          the one-step build (NAM)
 build_click.py            Click only; build_nam_click.py: NAM and Click; build_all.py: NAM, Click and Geiger
+                          (--with commander[,corrupt]: and Commander, Corrupt)
 firmware/                 where you put the stock .hxf (git-ignored, never committed)
 captures/                 demo NAM A2 Lite captures, already converted to User IR .wav files
 .gitignore                keeps firmware/, build/ and every .hxf out of version control
@@ -353,8 +404,8 @@ tools/usb/                usblog.c + build_shim.sh + capture.sh (log Line 6 Upda
 tools/sharc/              the kernel (nam_multi.py, nam_multi_kernel.asm), nam_lite.py, nam_pack.py,
                           sasm.py and ssim.py (assembler, simulator), entry4_blob.py, recips_table.json
 src/sharc/nam_a2.asm      the reference NAM A2 implementation the simulator check compares against
-tools/verify/             read-back checks of the Click and NAM + Click images
-effects/                  custom effects: C reference, tests, renderer, Click's SHARC kernel (effects/README.md)
+tools/verify/             read-back checks of the Click, NAM + Click and all-in-one images
+effects/                  custom effects: C references, tests, renderer, SHARC kernels (effects/README.md)
 docs/baseline-audit.md    the primitive ABI and memory map, marked observed / modelled / unknown
 ```
 

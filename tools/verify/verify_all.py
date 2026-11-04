@@ -1,17 +1,18 @@
-"""Read build/HX_Effects_v3.80.0_All.hxf back and check it, using build/all_manifest.json (written by
-build_all.py) for the addresses and the single-effect images for comparison:
+"""Read an all-in-one image back and check it, using its manifest (written by build_all.py; default
+build/all_manifest.json, or e.g. build/all_commander_corrupt_manifest.json) for the addresses and the
+single-effect images for comparison:
 
 - NAM (model 72) and Click (model 48): parameters, metadata, states and Entry 0 rows as in their own
   images (build_effects.py, build_click.py); host blobs word for word but for the composite id;
-- Geiger (model 7, the mono Megaphone): its eight knobs as build_all.py defines them, in Distortion >
-  Mono, its map writing instance words 5..11 and 13;
+- Geiger (model 7, the mono Megaphone), and Commander / Corrupt when built in: the eight knobs as
+  build_all.py defines them, in Distortion > Mono, the map writing instance words 5..11 and 13;
 - Entry 2: each kernel's code and data are what its assembler makes for its place (NAM from
-  build/nam_lite_2slots.asm), each hook record points at its kernel, Blob 0's size word and Heap 6;
+  build/nam_lite_2slots[_fd17].asm), each hook record points at its kernel, Blob 0's size word and Heap 6;
 - Blob 0: the three host composites, member 1 of each on its own primitive, within the buffer;
 - no byte of internal memory used by two kernels (from the image's own load blocks);
 - every other entry identical to stock.
 
-usage: python3 tools/verify/verify_all.py   (after build_effects.py, build_click.py and build_all.py)
+usage: python3 tools/verify/verify_all.py [manifest.json]   (after build_effects.py, build_click.py and build_all.py)
 """
 import json
 import os
@@ -19,12 +20,12 @@ import struct
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', 'effects/geiger/sharc', '.'):
+for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', 'effects/geiger/sharc', 'effects/common',
+          'effects/commander/sharc', 'effects/corrupt/sharc', '.'):
     sys.path.insert(0, os.path.join(ROOT, p))
 os.environ['NAM_DEVICE'] = 'effects'
 import build_all  # noqa: E402
 import click_kernel  # noqa: E402
-import geiger_kernel as gk  # noqa: E402
 import l6ia  # noqa: E402
 import patch_amp as pa  # noqa: E402
 import sasm  # noqa: E402
@@ -38,7 +39,8 @@ def check(c, msg):
     ok &= bool(c)
 
 
-man = json.load(open(os.path.join(ROOT, 'build', 'all_manifest.json')))
+man = json.load(open(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'all_manifest.json')))
+FX = ['geiger'] + man.get('extras', [])
 
 
 def load(name):
@@ -105,35 +107,38 @@ for key, single in (('nam', nam_img), ('click', click_img)):
           f'  host blob {ma["blob_index"]} word for word as in its image, composite {ba[tree + 1]:#x}')
     check(e0_rows(allimg, name) == e0_rows(single, name), '  Entry 0 rows as in its image')
 
-# Geiger: the eight knobs as defined
-g, mg = model(allimg, man['geiger']['model'])
-gmeta = dict(g['meta'])
-check(g['display'] == 'Geiger' and gmeta.get('category') == 'distortion' and gmeta.get('subcategory') == 'mono',
-      f'{man["geiger"]["model"]} (model {mg["model_id"]}) is Geiger, Distortion > Mono')
-spec = build_all.GEIGER_PARAMS
-got = [(p[2], p[0], dict(p[4]).get('displayName')) for p in g['params']]
-check(got == [(s[0], s[3], s[4]) for s in spec], f'eight knobs: {[x[2] for x in got]}')
-for p in g['params']:
-    lab = [v for k, v in p[4] if k.isdigit()]
-    if lab:
-        print(f'      {dict(p[4]).get("displayName")}: {lab[:4]}{" ..." if len(lab) > 4 else ""} ({len(lab)})')
-bg = blob(allimg, mg['blob_index'])
-pin, npin = bg[10], bg[11]
-writes = sorted(bg[pin + 4 * k + 1] for k in range(npin) if bg[pin + 4 * k + 3] == 2 and bg[pin + 4 * k] == 0x0e)
-check(writes == [5, 6, 7, 8, 9, 10, 11, 13], f'  its map writes instance words {writes}')
-check(pa.pmap_slots_without_param(pa.get_entry_swapped(allimg, 4), mg['blob_index'], mg['params']) == [], '  every mapped slot has a knob')
-t1, t2 = e0_rows(allimg, man['geiger']['model'])
-check(t1[3] == man['geiger']['dsp_cost'] and struct.unpack_from('<3I', t2, 24) == (8, 8, 8) and t2[4:10] == b'Geiger',
-      f'  Entry 0: dsp_cost {t1[3]}, counts {struct.unpack_from("<3I", t2, 24)}, short name {t2[4:20].rstrip(bytes(1))!r}')
+# Geiger, Commander, Corrupt: the eight knobs as defined
+for k in FX:
+    E = build_all.EFFECTS[k]
+    g, mg = model(allimg, man[k]['model'])
+    gmeta = dict(g['meta'])
+    check(g['display'] == E['display'] and gmeta.get('category') == 'distortion' and gmeta.get('subcategory') == 'mono',
+          f'{man[k]["model"]} (model {mg["model_id"]}) is {g["display"]}, {gmeta.get("category")} > {gmeta.get("subcategory")}')
+    got = [(p[2], p[0], dict(p[4]).get('displayName')) for p in g['params']]
+    check(got == [(s[0], s[3], s[4]) for s in E['params']], f'  eight knobs: {[x[2] for x in got]}')
+    for p in g['params']:
+        lab = [v for kk, v in p[4] if kk.isdigit()]
+        if lab:
+            print(f'      {dict(p[4]).get("displayName")}: {lab[:4]}{" ..." if len(lab) > 4 else ""} ({len(lab)})')
+    bg = blob(allimg, mg['blob_index'])
+    pin, npin = bg[10], bg[11]
+    writes = sorted(bg[pin + 4 * j + 1] for j in range(npin) if bg[pin + 4 * j + 3] == 2 and bg[pin + 4 * j] == 0x0e)
+    check(writes == [5, 6, 7, 8, 9, 10, 11, 13], f'  its map writes instance words {writes}')
+    check(pa.pmap_slots_without_param(pa.get_entry_swapped(allimg, 4), mg['blob_index'], mg['params']) == [], '  every mapped slot has a knob')
+    t1, t2 = e0_rows(allimg, man[k]['model'])
+    short = E['display'].encode()
+    check(t1[3] == man[k]['dsp_cost'] and struct.unpack_from('<3I', t2, 24) == (8, 8, 8) and t2[4:4 + len(short)] == short,
+          f'  Entry 0: dsp_cost {t1[3]}, counts {struct.unpack_from("<3I", t2, 24)}, short name {t2[4:20].rstrip(bytes(1))!r}')
 
 # Blob 0
 b0 = blob(allimg, 0)
 ctab = b0[0x10]
 prims = {}
-for cid in (0x6001c1, 0x6001c2, 0x6001c3):
+order = ['nam', 'click'] + FX
+for cid in range(0x6001c1, 0x6001c1 + len(order)):
     hdr = b0[ctab + 7 * (cid - 0x600000): ctab + 7 * (cid - 0x600000) + 7]
     prims[cid] = b0[hdr[3] + 20 + 6]
-want = {0x6001c1: man['nam']['primitive'], 0x6001c2: man['click']['primitive'], 0x6001c3: man['geiger']['primitive']}
+want = {0x6001c1 + j: man[k]['primitive'] for j, k in enumerate(order)}
 check(prims == want, f'Blob 0 host composites on primitives { {hex(k): hex(v) for k, v in prims.items()} }')
 err = pa.sharc_blob0_check(list(b0), man['blob0_words'])
 check(err is None, f'Blob 0 ({len(b0):#x} words) fits the {man["blob0_words"]:#x}-word buffer{"" if err is None else ": " + err}')
@@ -159,24 +164,36 @@ def blocks(img):
         elif tag == 4:
             for k in range(cnt):
                 dm[addr + k] = body[k]
+        elif tag == 1:                                # ZERO_LDATA
+            for k in range(cnt):
+                dm[addr + k] = 0
         i += 3 + NW.get(tag, lambda c: 0)(cnt)
     return pm, dm, w
 
 
 apm, adm, aw = blocks(allimg)
 spm, sdm, _ = blocks(stock)
-n_secs, n_syms = sasm.assemble(open(os.path.join(ROOT, 'build', 'nam_lite_2slots.asm')).read(), 'nam_lite_2slots.asm')
+nam_asm = 'nam_lite_2slots.asm' if 'far_d' not in man['nam'] else f'nam_lite_2slots_fd{man["nam"]["far_d"]}.asm'
+n_secs, n_syms = sasm.assemble(open(os.path.join(ROOT, 'build', nam_asm)).read(), nam_asm)
 _, c_secs, c_syms, _, _ = click_kernel.assemble(place='b3')
-gk.PLACES['b3g'] = tuple(man['geiger']['place'])
-_, g_secs, g_syms, _, _ = gk.assemble('b3g')
+owners = [('NAM', n_secs, n_syms['CUSTOM_AMP_ENTRY'], man['nam']['primitive']),
+          ('Click', c_secs, c_syms['CLICK_ENTRY'], man['click']['primitive'])]
+done = set()
+for k in FX:
+    b = man[k].get('kernel', k)                       # Commander and Corrupt may share one kernel
+    kern = build_all.Kernel(b)
+    kern.set_place(*man[k]['place'])
+    _, k_secs, k_syms, _, _ = kern.assemble()
+    owners.append((build_all.EFFECTS[k]['display'] + (f' ({b})' if b != k else ''), [] if b in done else k_secs,
+                   k_syms[build_all.EFFECTS[k]['entry']], man[k]['primitive']))
+    done.add(b)
 used = {}                                             # byte -> owner, for the overlap check
-for who, secs, ent, prim in (('NAM', n_secs, n_syms['CUSTOM_AMP_ENTRY'], man['nam']['primitive']),
-                             ('Click', c_secs, c_syms['CLICK_ENTRY'], man['click']['primitive']),
-                             ('Geiger', g_secs, g_syms['GEIGER_ENTRY'], man['geiger']['primitive'])):
+for who, secs, ent, prim in owners:
     pmw = {s.addr + k: v for s in secs if s.kind == 'pm' for k, v in enumerate(s.words)}
     dmw = {s.addr + k: v for s in secs if s.kind == 'dm' for k, v in enumerate(s.words)}
-    check(all(apm.get(a) == v for a, v in pmw.items()) and all(adm.get(a) == v for a, v in dmw.items()),
-          f'{who}: {len(pmw)} instructions at {min(pmw):#x} and {len(dmw)} data words as assembled for its place')
+    if pmw:
+        check(all(apm.get(a) == v for a, v in pmw.items()) and all(adm.get(a) == v for a, v in dmw.items()),
+              f'{who}: {len(pmw)} instructions at {min(pmw):#x} and {len(dmw)} data words as assembled for its place')
     table, _ = pa.sharc_prim_table(entry(allimg, 2))
     rec = [adm.get(table[prim] + k) for k in range(8)]
     check(rec[0] == prim and rec[5] == ent and rec[6:] == [0x91, 0x0d], f'  primitive {prim:#06x} -> {ent:#x}')
@@ -198,6 +215,8 @@ D = pa.EFFECTS_DSP
 check(aw[D.BLOB0_SIZE[1]] == man['blob0_words'] and (aw[D.HEAP6_WORDS[0]], aw[D.HEAP6_WORDS[1]]) == D.HEAP6_MOVED,
       f'Blob 0 buffer size word {aw[D.BLOB0_SIZE[1]]:#x}, Heap 6 moved to {aw[D.HEAP6_WORDS[0]]:#x}')
 
+e2_bytes = len(entry(allimg, 2))
+check(e2_bytes <= 0x80000, f'Entry 2: {e2_bytes} bytes, within its 512 KiB partition ({0x80000 - e2_bytes} free)')
 others = [k for k in range(len(l6ia.parse(allimg))) if k not in (0, 2, 3, 4)]
 check(all(entry(allimg, k) == entry(stock, k) for k in others), f'entries {others} identical to stock')
 print('ALL OK' if ok else 'PROBLEMS')

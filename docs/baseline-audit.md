@@ -91,9 +91,31 @@ the unit; addresses in `build/all_manifest.json`):
 | DDR2 `0x21c400..0x296400` | the Blob 0 buffer, `0x7a000` words for three host graphs |
 | DDR2 `0x296400 + 0x5000 × slot` | NAM's two slots (they must end below the IR store at `0x2a912c`; asserted) |
 
-What is left after all three: about 90 instructions in Block 2's tail, about 170 between Geiger's code and
-Click's data, and about 90 above Click's code. A fourth kernel needs memory freed first (for example NAM's
-staging buffers moved to Block 3 with `nam_multi.py --staging b3`, which frees Block 2's tail).
+What is left after all three: 8 words in Block 2's tail (NAM's staging buffers fill it to `0xc7ff8`),
+about 256 words between Geiger's code and Click's data and about 137 above Click's code. (An earlier
+version of this note said "about 90 instructions in Block 2's tail"; that was wrong.)
+
+Four and five kernels (`build_all.py --with commander[,corrupt]`; built and checked offline, not yet run
+on a unit; addresses in `build/all_commander[_corrupt]_manifest.json`):
+
+| Region | Use |
+|---|---|
+| Block 3 normal words `0xe4850..0xe6d68` | NAM with 2 slots and the 3‑slot layout's far layers (`nam_multi.py --far-d 17`: the d = 17 rings go to DDR2 too; slot 3,755 words instead of 4,673; checked bit for bit) |
+| Block 3 normal `0xe6d70..0xe7296`, 48‑bit `0xe4c64..0xe4dd5` | Geiger's data and code |
+| Block 3 normal `0xe74d0..0xe75de`, 48‑bit `0xe4e94..0xe5004` | Commander's (four‑kernel image) |
+| Block 3 normal `0xe74d0..0xe7631`, 48‑bit `0xe4ecc..0xe50ea` | Commander + Corrupt as one kernel (five‑kernel image), entries `0xe4ecc` and `0xe4ed1` |
+| Block 3 from `0xe7c20` | Click, as before |
+| Primitives `0x0100`, `0x0838` | Commander's and Corrupt's hooks (zero uses in the stock graphs) |
+| DDR2 `0x21c400..0x297400` | the Blob 0 buffer, `0x7b000` words for five host graphs (`0x7ac3f` used) |
+| DDR2 `0x297400 + 0x5000 × slot` | NAM's two slots |
+
+The next limit is **Entry 2's size**: the DSP boot stream must fit its 512 KiB eMMC partition
+(`inject_sharc_ldr_blocks` asserts it). Stock is 490,392 bytes; NAM + Click + Geiger leaves 260 bytes.
+The four‑ and five‑kernel images load the kernels' zeroed areas (NAM's staging buffers, every save area
+and slot pool) with ZERO_LDATA records (tag 1, a 3‑word header; the stock stream already has 81), which
+saves about 5.3 KB: 1,912 bytes free with Commander, 812 with Commander and Corrupt sharing one kernel.
+Anything more needs a smaller boot stream (Geiger's 4 KB of curve tables computed at start‑up instead,
+or NAM's 8 KB tone‑stack table) before it needs DSP memory.
 
 ## Tested vs untested
 

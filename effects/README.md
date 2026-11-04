@@ -60,6 +60,69 @@ library, so they are the reference's to the bit. about 370 instructions, about 1
 Knob words: DM(5) Gain dB, DM(6) Rate Hz, DM(7) Bits, DM(8) Curve, DM(9) Tone 0..1, DM(10) Output dB,
 DM(11) Mix 0..1, DM(13) Anti-Alias (12 is the slot word).
 
+## Commander (`commander/`)
+
+A square-wave octave fuzz: an original algorithm in the spirit of comparator/divider octave fuzz pedals.
+
+```
+in -> DC block -> 2 one-pole lowpasses at 300 Hz (the tracking signal t) -> envelope (instant attack, 50 ms release)
+   -> Schmitt comparator on t, hysteresis 50 % of the envelope: the square at the note (Fuzz)
+   -> /2 on each rising edge (Sub -1 Oct), /2 again (Sub -2 Oct); |t| > envelope/2: twice the note (Octave Up)
+   -> mix x min(4 x envelope, 1) x gate (smoothed; opens above Gate) -> Tone (2 one-poles, 100 Hz..10 kHz)
+   -> Output, plus Dry x the input
+```
+
+Eight parameters: Fuzz, Sub -1 Oct, Sub -2 Oct, Octave Up (0..1, shown as %), Tone (0..1), Gate (list:
+Off, -84..-30 dB in 6 dB steps), Dry (list: 0..100 % in 10 % steps), Output (-36..+12 dB). The voice levels,
+Dry and Output are smoothed per sample (5 ms). The tracking filter and hysteresis were chosen on plucked
+test notes (Karplus-Strong, low E to high B): 300 Hz / 50 % measures every period right, where 800 Hz /
+15 % jumped octaves on the low strings.
+
+Tests (`commander/test_commander.c`): each voice alone on a 110 Hz note puts its octave on top (27.5,
+55, 110, 220 Hz); the -1 octave tracks a plucked note; silence with the gate on is exactly silent; Dry
+100 % with the voices off is exactly the input; identical output for block sizes 1/16/49/97; finite and
+bounded with NaN/Inf/1e30 input and out-of-range knobs; the gate steps are 6 dB apart.
+
+### Commander on the SHARC (`commander/sharc/`)
+
+`commander_kernel.asm` (Click's and Geiger's conventions). `commander_kernel.py --check` runs it in ssim
+against the C reference, word for word, through `common/kernel_rig.py` (the shared builder and rig for the
+newer kernels: data layout, the reference via ctypes, register contract, allowed writes, cycle budget).
+About 370 instructions, about 320 data words (8 slots); worst about 3,440 cycles per 16-sample call.
+
+Knob words: DM(5) Fuzz, DM(6) Sub -1, DM(7) Sub -2, DM(8) Octave Up, DM(9) Tone, DM(10) Output dB,
+DM(11) Gate (int 0..10), DM(13) Dry (int 0..10).
+
+## Corrupt (`corrupt/`)
+
+A monophonic pitch-tracking square synth: an original algorithm in the spirit of PLL synth pedals.
+
+```
+the same front end as Commander (DC block, 300 Hz tracking lowpasses, envelope, Schmitt comparator: Square)
+   -> the period P (samples between rising edges); if 16 <= P <= 2400: rate target = (Harmonic << (22 + Root)) / P
+      as an exact integer quotient, x 2^-24 cycles a sample, at most 0.5
+   -> Glide (one-pole on the rate, k = exp(Glide x ln 1e-4)) -> phase accumulator: Master square, and Sub (toggled
+      each cycle: an octave below Master)
+   -> mix x min(4 x envelope, 1) x gate (-66 dB, smoothed) -> Tone (2 one-poles) -> DC block -> Output
+```
+
+Eight parameters: Square, Master, Sub (0..1, shown as %), Glide (0..1), Tone (0..1), Output (-36..+12 dB),
+Root (list: -2 Oct, -1 Oct, Unison, +1 Oct), Harmonic (list: 1x..8x the note). The quotient is integer
+arithmetic so the SHARC (no divide instruction; a 29-step restoring division) gets the same rate to the bit.
+
+Tests (`corrupt/test_corrupt.c`): on a 110 Hz note, Master at each Root and at Harmonic 3 lands on the
+expected frequency (27.5 / 55 / 110 / 220 / 330 Hz), Sub an octave below, Square at the note; a plucked low E
+is tracked; Glide 1 is still away from a new note 50 ms after a jump where Glide 0 is on it; silence is
+exactly silent; block sizes; hostile input and knobs; the top of the range capped.
+
+### Corrupt on the SHARC (`corrupt/sharc/`)
+
+`corrupt_kernel.asm`, checked by `corrupt_kernel.py --check` as Commander's. About 405 instructions,
+about 300 data words; worst about 3,550 cycles per call.
+
+Knob words: DM(5) Square, DM(6) Master, DM(7) Sub, DM(8) Glide, DM(9) Tone, DM(10) Output dB,
+DM(11) Root (int 0..3), DM(13) Harmonic (int 1..8).
+
 ## Click (`metronome/`)
 
 A metronome as an ordinary **preset block**: it lives in a preset, takes one block, and follows the

@@ -41,6 +41,9 @@ sharc-check: $(OUT)/libfx.so
 	../.venv/bin/python3 metronome/sharc/click_kernel.py --check
 	../.venv/bin/python3 metronome/sharc/click_kernel.py --check --place b3 --seconds 0.5
 	../.venv/bin/python3 geiger/sharc/geiger_kernel.py --check --seconds 0.25
+	../.venv/bin/python3 commander/sharc/commander_kernel.py --check --seconds 0.25
+	../.venv/bin/python3 corrupt/sharc/corrupt_kernel.py --check --seconds 0.25
+	../.venv/bin/python3 corrupt/sharc/commander_corrupt_kernel.py --check --seconds 0.25
 
 test: all
 	$(OUT)/test_geiger geiger/golden.txt
