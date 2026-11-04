@@ -40,6 +40,7 @@ NAM_PRIM, CLICK_PRIM = 0x9c75, 0x0128
 # Two host graphs need more: 0x79000 words (to 0x295400), NAM's slots moved up to match, still inside
 # the region freed by moving Heap 6 (to 0x2a8df6).
 BLOB0_BASE, BLOB0_WORDS = 0x21C400, 0x79000
+BLOB0_WORDS_ALL = 0x7A000                         # three host graphs (build_all.py)
 NAM_SDR_BASE = BLOB0_BASE + BLOB0_WORDS
 CLICK_PLACE = 'b3'
 

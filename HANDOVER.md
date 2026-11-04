@@ -70,6 +70,13 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   `effects/metronome/sharc/` (`make -C effects sharc-check`: bit-exact against the C reference in ssim),
   image read-back check `tools/verify/verify_click.py`. Geiger (bitcrusher) exists as a C reference only.
   Baseline audit: `docs/baseline-audit.md`.
+- **NAM + Click + Geiger** (`python3 build_all.py` → `build/HX_Effects_v3.80.0_All.hxf`, verified offline
+  with `tools/verify/verify_all.py` and `build/all_manifest.json`; **works on the unit**, 2026-11-04). Geiger
+  (bit crusher, 8 knobs) takes over the mono Megaphone on primitive 0x012e; NAM runs 2 slots (frees Block 3
+  for Geiger: data 0xe73d0..0xe78f6, code 48-bit 0xe50a4..0xe5215); the Blob 0 buffer is 0x7a000 words so
+  NAM's DDR2 slots start at 0x296400. Geiger's curve tables are 64 steps (16 x 65 words) to fit.
+  The NAM simulator check needed one rig fix: a test block without a slot must not fill the simulated
+  IR store (the real slots end below it, now asserted).
 - Hard-won rules for any custom kernel (details in `effects/README.md`):
   1. Restore **I1–I3** on exit (NAM does via B1–B3). Leaving I1/I2 advanced froze knobs and footswitches.
   2. **DM(3) of the instance block is not ours**: non-zero whenever the block is on; never write it,

@@ -71,10 +71,10 @@ static void test_curves(void)
             CHECK(isfinite(y) && y >= -1.0f && y <= 1.0f, "curve %d out of range at %g: %g", c, x, y);
             if (c != 7 && fabs(t - y) > worst) worst = fabs(t - y);     /* 7 "steps" has jumps */
         }
-        /* 256 segments track smooth curves within 0.01; the folds' corners (4) and root's
-           infinite slope at 0 (12) within 0.025. The table is what the effect (and a SHARC
-           port) uses; this checks it stays faithful to the defining function. */
-        CHECK(worst < ((c == 4 || c == 12) ? 0.025 : 0.01), "curve %d (%s): table error %g", c, geiger_curve_name(c), worst);
+        /* 64 segments (the size the DSP holds beside NAM and Click) track smooth curves within 0.045
+           (ring, the most curved, is the limit); the folds' corners (4) and root's infinite slope at
+           0 (12) within 0.06. The table is what the effect plays; this checks it stays faithful. */
+        CHECK(worst < ((c == 4 || c == 12) ? 0.06 : 0.045), "curve %d (%s): table error %g", c, geiger_curve_name(c), worst);
         for (d = 0; d < c; d++) {
             double m = 0;
             for (i = 0; i <= 2000; i++) {
@@ -112,7 +112,7 @@ static void test_dry(const float *chord, const float *noise)
     float *out = malloc(N * sizeof *out);
     size_t i;
     int same = 1;
-    set(&p, 36, 250, 1, 4, 0, 12, 0, 0);                  /* everything extreme, Mix 0 */
+    set(&p, 36, 250, 1, 4, 0, 12, 0.0f, 0);                  /* everything extreme, Mix 0 */
     render(&p, chord, out, N, 16);
     for (i = 0; i < N; i++) if (out[i] != chord[i]) same = 0;
     CHECK(same, "Mix 0 is not exactly the dry input (chord)");
@@ -129,7 +129,7 @@ static void test_determinism_and_blocks(const float *chord)
     static const size_t blocks[] = { 1, 16, 37, 4096 };
     float *a = malloc(N * sizeof *a), *b = malloc(N * sizeof *b);
     size_t k;
-    set(&p, 18, 7000, 5, 13, 0.6f, -6, 80, 1);
+    set(&p, 18, 7000, 5, 13, 0.6f, -6, 0.8f, 1);
     render(&p, chord, a, N, 16);
     render(&p, chord, b, N, 16);
     CHECK(!memcmp(a, b, N * sizeof *a), "two renders differ");
@@ -146,8 +146,8 @@ static void test_instances(const float *chord, const float *noise)
     GeigerState s1, s2;
     float *a = malloc(N * sizeof *a), *b = malloc(N * sizeof *b), *ra = malloc(N * sizeof *ra), *rb = malloc(N * sizeof *rb);
     size_t i;
-    set(&p1, 12, 3000, 4, 3, 0.4f, -6, 100, 0);
-    set(&p2, 24, 16000, 10, 9, 0.9f, -12, 60, 1);
+    set(&p1, 12, 3000, 4, 3, 0.4f, -6, 1.0f, 0);
+    set(&p2, 24, 16000, 10, 9, 0.9f, -12, 0.6f, 1);
     render(&p1, chord, ra, N, 16);
     render(&p2, noise, rb, N, 16);
     fx_geiger.reset(&s1, SR);
@@ -169,14 +169,14 @@ static void test_robustness(const float *chord)
     size_t i;
     int c, ok = 1;
     for (c = 0; c < GEIGER_CURVES; c++) {                 /* every curve at the extremes */
-        set(&p, 36, 250, 1, c, 0, 12, 100, 0);   render(&p, chord, out, N, 16); ok &= all_finite_bounded(out, N);
-        set(&p, 0, 48000, 16, c, 1, -36, 100, 1); render(&p, chord, out, N, 16); ok &= all_finite_bounded(out, N);
+        set(&p, 36, 250, 1, c, 0, 12, 1.0f, 0);   render(&p, chord, out, N, 16); ok &= all_finite_bounded(out, N);
+        set(&p, 0, 48000, 16, c, 1, -36, 1.0f, 1); render(&p, chord, out, N, 16); ok &= all_finite_bounded(out, N);
     }
     CHECK(ok, "non-finite or unbounded output at extreme settings");
     memcpy(in, chord, N * sizeof *in);                    /* hostile input */
     in[100] = NAN; in[200] = INFINITY; in[300] = -INFINITY; in[400] = 1e30f; in[500] = -1e30f;
     for (i = 1000; i < 2000; i++) in[i] = 1e20f;
-    set(&p, 36, 1000, 3, 10, 0.5f, 12, 100, 1);
+    set(&p, 36, 1000, 3, 10, 0.5f, 12, 1.0f, 1);
     render(&p, in, out, N, 16);
     CHECK(all_finite_bounded(out, N), "hostile input gives bad output");
     rng_seed(&r, 42);                                     /* knobs moving every block, some NaN */
@@ -201,7 +201,7 @@ static void test_decimator(void)
     static const float rates[] = { 250, 1000, 4410, 12000, 47999, 48000 };
     size_t k;
     for (k = 0; k < sizeof rates / sizeof rates[0]; k++) {
-        set(&p, 0, rates[k], 16, 0, 1, 0, 100, 0);
+        set(&p, 0, rates[k], 16, 0, 1, 0, 1.0f, 0);
         fx_geiger.reset(&s, SR);
         rng_seed(&r, 3);
         last = s.held;
@@ -221,8 +221,8 @@ static void test_antialias(void)
     FxParams p;
     double alias_off, alias_on;
     sig_sine(in, N, SR, 7000.0f, 0.5f);                   /* 7 kHz held at 8 kHz aliases to 1 kHz */
-    set(&p, 0, 8000, 16, 0, 1, 0, 100, 0); render(&p, in, a, N, 16);
-    set(&p, 0, 8000, 16, 0, 1, 0, 100, 1); render(&p, in, b, N, 16);
+    set(&p, 0, 8000, 16, 0, 1, 0, 1.0f, 0); render(&p, in, a, N, 16);
+    set(&p, 0, 8000, 16, 0, 1, 0, 1.0f, 1); render(&p, in, b, N, 16);
     alias_off = goertzel(a + N / 2, N / 2, 1000);
     alias_on = goertzel(b + N / 2, N / 2, 1000);
     CHECK(alias_on < alias_off * 0.5, "anti-alias: 1 kHz alias %g with, %g without", alias_on, alias_off);
@@ -231,9 +231,9 @@ static void test_antialias(void)
 
 /* Three named variants; each must sound different from the others and from dry. */
 static const struct { const char *name; float v[G_NPARAMS]; } VARIANTS[] = {
-    { "crush",  { 12, 6000, 4, 0, 0.7f, -6, 100, 0 } },
-    { "fold",   { 24, 48000, 16, 4, 0.9f, -9, 100, 1 } },
-    { "radio",  { 18, 3000, 6, 13, 0.35f, -3, 100, 0 } },
+    { "crush",  { 12, 6000, 4, 0, 0.7f, -6, 1, 0 } },
+    { "fold",   { 24, 48000, 16, 4, 0.9f, -9, 1, 1 } },
+    { "radio",  { 18, 3000, 6, 13, 0.35f, -3, 1, 0 } },
 };
 #define NVAR (sizeof VARIANTS / sizeof VARIANTS[0])
 

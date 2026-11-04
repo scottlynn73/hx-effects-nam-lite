@@ -270,6 +270,7 @@ class Layout:
         self.v = v
         if FIX_SDR:
             assert 0x5000 >= self.sdr_need and FIX_SDR + 0x5000 * 4 <= 0x2A8DF6, 'fixed SDRAM blocks do not fit'
+            assert FIX_SDR + 0x5000 * self.slots + self.sdr_need <= IR_FLAG, 'a NAM slot would reach the IR store'
 
     def sdram_words(self):
         return -(-self.sdr_need // 0x400) * 0x400
@@ -614,6 +615,11 @@ class Inst:
         sim.wr(entry + 0x10 + 7, sdram + sdram_words)
         rnd = rig.rnd
         for k in range(sdram_words):
+            # With fixed slots the kernel never uses this block (a block without a slot passes its
+            # input through), and the unit's IR store starts at IR_FLAG: a test block's stale fill
+            # must not land on the simulated captures.
+            if FIX_SDR and sdram + k >= IR_FLAG:
+                break
             sim.dm[sdram + k] = rnd.getrandbits(32)
         self.pipe = Pipe()
         self.knobs(drive=0.5, vol=0.5, model=0, eq=nam_lite.EQ_TEST)
