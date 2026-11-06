@@ -123,6 +123,31 @@ about 300 data words; worst about 3,550 cycles per call.
 Knob words: DM(5) Square, DM(6) Master, DM(7) Sub, DM(8) Glide, DM(9) Tone, DM(10) Output dB,
 DM(11) Root (int 0..3), DM(13) Harmonic (int 1..8).
 
+## The next six (`ottobit/`, `stutter/`, `syntax/`, `grains/`, `sequence/`, `warp/`)
+
+Built and checked offline on branch `ottobit` (2026-11-04): C reference, tests, and a SHARC kernel each,
+bit for bit against the reference in ssim. **Not yet in an image**: they need the external-memory route
+(`docs/baseline-audit.md`, "Finding more memory") before they fit beside the five in the unit's image.
+Each kernel's header comment lists its knob words. Every one keeps the conventions of the kernels above;
+the rings of the buffer effects sit at `RING0` (DDR2 on the unit, set by the image build).
+
+| Effect | What it is | Kernel | Cycles per call (mean / worst) |
+|---|---|---|---|
+| **Ottobit** | sequenced crusher: stutter ring -> sample-and-hold -> Bits -> Chamberlin lowpass (Q 2); 6-step patterns of power-of-two rate and filter multipliers; xorshift32 stutters loop a quarter step | 439 instructions, 2,048-word ring a slot (zeroed on claim) | 2,450 / 8,760 (the claim) |
+| **Stutter** | triggered repeater: Clock / Transient / Both, Chance, Length 20..500 ms (Random halves it), Repeats 1..16, Speed 1x, 2x, 0.5x, Rev, Rev 2x or random; 32-sample edge fades, 64-sample crossfade | 414 instructions, 32,768-word ring a slot (never zeroed: a slice only reads what was recorded) | 1,700 / 2,080 |
+| **Syntax** | drive -> soft clip -> single-sideband frequency shift (Hilbert pair of 4 + 4 allpasses, a renormalised rotating phasor), shift 0..1000 Hz x an 8-step pattern of -2..2, Glide, Tone | 426 instructions, no ring | 5,420 / 5,670 |
+| **Grains** | granular: 4 voices (Density 1..4), Size a list of 10..200 ms with exact reciprocals, Pitch -12..+12, Spray up to 0.5 s, Scatter (octave jumps), Reverse, Feedback | 412 instructions, 65,536-word ring a slot (never zeroed) | 3,110 / 4,450 |
+| **Sequence** | Corrupt's tracker -> an arpeggiator: 8-step semitone patterns (2^(k/12) table), Octave, Wave square / saw / triangle / pulse, Glide, envelope and gate | 446 instructions, no ring | 2,900 / 3,330 |
+| **Warp** | two-head rotating-delay pitch shifter (2,048-sample window), -12..+24, modulated by a triangle LFO blended with glided random steps (Chaos), Feedback into the shifter | 390 instructions, 4,096-word ring a slot (zeroed on claim) | 2,830 / 15,240 (the claim) |
+
+Two things learned on the way:
+- R*n* and F*n* are one register: an integer index kept in R9 dies at `F9 = FLOAT R9`. Use it first, or keep
+  it in a register the float code does not touch.
+- The C reference must flush denormals as the SHARC does: `fx_set_ftz(1)` (FPCR.FZ on arm64, FTZ/DAZ on
+  x86-64); the kernel checks call it, so a value that underflows agrees to the bit too. Only around each
+  reference call: left on, it changed an image build's own float arithmetic (Image B rebuilt with a
+  different MD5 until `kernel_rig.Reference` switched it off again after every call).
+
 ## Click (`metronome/`)
 
 A metronome as an ordinary **preset block**: it lives in a preset, takes one block, and follows the

@@ -1,0 +1,14 @@
+{
+  "id": "ottobit",
+  "display_name": "Ottobit",
+  "parameters": [
+    {"id": "rate", "display": "Sample Rate", "type": "continuous", "min": 250, "max": 48000, "default": 8000, "unit": "Hz", "smoothing": "immediate"},
+    {"id": "bits", "display": "Bit Depth", "type": "integer", "min": 1, "max": 16, "default": 6, "unit": "bits", "smoothing": "immediate"},
+    {"id": "filter", "display": "Filter", "type": "continuous", "min": 0, "max": 1, "default": 0.7, "unit": "", "smoothing": "immediate"},
+    {"id": "pattern", "display": "Pattern", "type": "integer", "min": 0, "max": 8, "default": 1, "unit": "0 Off, 1..8", "smoothing": "immediate"},
+    {"id": "speed", "display": "Speed", "type": "continuous", "min": 0.5, "max": 16, "default": 4, "unit": "steps/s", "smoothing": "immediate"},
+    {"id": "stutter", "display": "Stutter", "type": "continuous", "min": 0, "max": 1, "default": 0.2, "unit": "probability", "smoothing": "immediate"},
+    {"id": "output", "display": "Output", "type": "continuous", "min": -36, "max": 12, "default": -6, "unit": "dB", "smoothing": "per-sample"},
+    {"id": "mix", "display": "Mix", "type": "continuous", "min": 0, "max": 1, "default": 1, "unit": "x (shown as %)", "smoothing": "per-sample"}
+  ]
+}

@@ -117,19 +117,30 @@ class FxAlgorithm(ctypes.Structure):
 class Reference:
     def __init__(self, spec):
         self.lib, self.order = lib(), spec.order
+        # the reference flushes denormals as the SHARC does, but only inside its own calls: left on, the
+        # mode would change this process's other float arithmetic (an image build's, say)
+        assert self.lib.fx_set_ftz(0) == 1, 'cannot flush denormals to zero here (as the SHARC does)'
         self.alg = FxAlgorithm.in_dll(self.lib, f'fx_{spec.name}')
         assert self.alg.n_params == len(self.order)
 
     def new(self):
         st = ctypes.create_string_buffer(self.alg.state_bytes)
-        self.alg.reset(st, SR)
+        self.lib.fx_set_ftz(1)
+        try:
+            self.alg.reset(st, SR)
+        finally:
+            self.lib.fx_set_ftz(0)
         return st
 
     def process(self, st, knobs, block):
         p = (ctypes.c_float * 12)(*[float(knobs[k]) for k in self.order])
         i = (ctypes.c_float * 16)(*block)
         o = (ctypes.c_float * 16)()
-        self.alg.process(st, p, i, o, 16)
+        self.lib.fx_set_ftz(1)
+        try:
+            self.alg.process(st, p, i, o, 16)
+        finally:
+            self.lib.fx_set_ftz(0)
         return [fw(v) for v in o]
 
 
@@ -144,6 +155,10 @@ class Rig:
         self.sim.strict_cbufen = True
         self.sim.load(secs)
         self.syms, self.rnd, self.cycles = syms, random.Random(seed), []
+        g = random.Random(seed + 1000)
+        for lo, hi in getattr(spec, 'garbage', []):      # memory the kernel must not read before writing
+            for a in range(lo, hi):
+                self.sim.dm[a] = g.getrandbits(32)
 
     def inst(self, k):
         i0 = 0xB3000 + 0x400 * k
@@ -202,7 +217,7 @@ class Rig:
             raise AssertionError(f'{label}: returns with the loop or PC stack not empty')
         lo = self.syms['SAVE']
         allowed = [(BO, BO + 16), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 22),
-                   (self.syms['SLOTS'], self.syms['SLOTS'] + sp.slotw * sp.nslots)]
+                   (self.syms['SLOTS'], self.syms['SLOTS'] + sp.slotw * sp.nslots)] + list(getattr(sp, 'extra_writes', []))
         stray = [a for a in writes if not any(x <= a < y for x, y in allowed)]
         if stray:
             raise AssertionError(f'{label}: wrote outside its memory: {[hex(a) for a in stray[:5]]}')

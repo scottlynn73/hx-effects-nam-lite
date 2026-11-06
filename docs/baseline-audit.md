@@ -117,6 +117,37 @@ saves about 5.3 KB: 1,912 bytes free with Commander, 812 with Commander and Corr
 Anything more needs a smaller boot stream (Geiger's 4 KB of curve tables computed at start‑up instead,
 or NAM's 8 KB tone‑stack table) before it needs DSP memory.
 
+## Finding more memory (2026-11-04, branch `ottobit`)
+
+Five kernels leave 812 bytes of Entry 2 and about 1,500 words of Block 3; each further effect needs about
+400-450 instructions and 150-570 data words. What the stock image offers:
+
+- **Entry 2 is mostly code**, about 410 KB of its 490 KB: ISA (48-bit) at PM `0x8c100..0x8ee93` (~70 KB,
+  INIT_L48), VISA in internal memory (~130 KB, tag-3 blocks at short-word addresses), and VISA in DDR2
+  (~213 KB, tag-10 blocks at `0x300000..0x30d053`). 88 primitives' entries are external: entry PC = 2 x the
+  DDR2 word address (every one checked).
+- **The external code's format**: 16-bit parcels, two to a 32-bit word, the high half first. 48-bit
+  instructions appear with their ISA encoding unchanged (seen: `DM(abs) = ureg`, `JUMP abs`, `CJUMP` into
+  the ISA region); RTS's 48-bit form never appears (VISA uses a short form).
+- **No code to reclaim from the replaced blocks**: every primitive the five taken-over models use is
+  shared with models still in use. The primitives no graph uses own about 380 instructions in all.
+- **Entry 2 cannot grow**: its eMMC partition (header sector `0x8802`, `0x400` sectors) ends where image 3's
+  begins (the updater's partition table, DFU app file offset ~`0xf8c8`).
+- **Entry 4 can**: about 1.9 MB of its 15.5 MiB partition is free, and Blob 0 lands verbatim at DDR2
+  `0x21c400` (only its structured fields are relocated), so words appended after its last composite land at
+  `0x21c400 + offset`.
+
+So the route for more effects is to carry their code (and tables) at Blob 0's tail and run them from DDR2
+as the stock firmware runs its own external code. `build_all.py --probe` builds the test for it
+(`effects/probe/sharc/`): NAM + Click + a Probe block on Geiger's host, with a magic word and a two-
+instruction routine (`DM(G_FLAG) = R4; JUMP PROBE_RET`, the forms seen above) at Blob 0's tail. Added to a
+preset, the Probe sounds 880 Hz for 4 s if the magic word is where expected (220 Hz if not), then beeps at
+1,760 Hz if the routine ran from DDR2 and came back; silence or a frozen unit means it did not.
+
+**Status**: the probe image boots on the unit (so a Blob 0 with words appended is accepted); its tones are
+not yet heard. Next: hear them; if external code runs, measure its speed, then move the six new kernels'
+code there (the internal 1,500 words then hold their data).
+
 ## Tested vs untested
 
 - Tested: the build is byte‑reproducible; NAM output matches the reference bit for bit in the simulator;

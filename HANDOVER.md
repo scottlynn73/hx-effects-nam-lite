@@ -105,8 +105,13 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   Block 3 words; the binding limit is now **Entry 2's 512 KiB partition** (zero-fill LDR records save
   ~5.3 KB; the five-kernel image has 812 bytes left, with Commander and Corrupt merged into one kernel,
   `effects/corrupt/sharc/commander_corrupt_kernel.asm`). Details: `docs/baseline-audit.md`.
-- **Next effects** (from the plan): Stutter (glitch repeater), Ottobit (crusher + sequencer). Each would
-  need Entry 2 space first (see above), and the buffer effects DDR2 for their samples.
+- **The next six** (branch `ottobit`, 2026-11-04): Ottobit, Stutter, Syntax, Grains, Sequence and Warp each
+  have a C reference, tests and a SHARC kernel checked bit for bit (`effects/README.md`, "The next six";
+  `make -C effects test sharc-check`). **Not yet in an image**: they do not fit Entry 2 / Block 3 beside the five.
+  The route found (`docs/baseline-audit.md`, "Finding more memory"): carry their code at Blob 0's tail (Entry 4)
+  and run it from DDR2 as the stock firmware does. `build_all.py --probe` builds the test; it **boots** on the
+  unit, its tones are **not yet heard** (the user was away). Each new effect still needs a stock block to replace
+  (ask the user which).
 
 ## Why the takeover approach
 

@@ -39,7 +39,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.join(HERE, 'tools')
 for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', 'effects/geiger/sharc', 'effects/common',
-          'effects/commander/sharc', 'effects/corrupt/sharc'):
+          'effects/commander/sharc', 'effects/corrupt/sharc', 'effects/probe/sharc'):
     sys.path.insert(0, os.path.join(HERE, p))
 
 import build_click as bc  # noqa: E402
@@ -100,6 +100,9 @@ EFFECTS = {
                       params=COMMANDER_PARAMS, entry='COMMANDER_ENTRY'),   # measured worst 3,441 cycles of ~150,000 (2.3 %)
     'corrupt': dict(takeover=CORRUPT_TAKEOVER, name='HD2_DistCorrupt', display='Corrupt', cost=700, prim=0x0838,
                     params=CORRUPT_PARAMS, entry='CORRUPT_ENTRY'),         # measured worst 3,545
+    # --probe: a diagnostic on Geiger's host instead of Geiger (effects/probe/sharc/probe_kernel.asm)
+    'probe': dict(takeover=GEIGER_TAKEOVER, name='HD2_DistProbe', display='Probe', cost=300, prim=GEIGER_PRIM,
+                  params=GEIGER_PARAMS, entry='PROBE_ENTRY'),
 }
 BLOB0_WORDS_5 = 0x7B000                # five host graphs
 NAM_FAR_D_EXTRA = 17                   # NAM's layout when the extra kernels are in
@@ -142,6 +145,23 @@ class Kernel:
 
     def check(self, seconds):
         return self._check(seconds, self.place)
+
+
+def append_blob0(e4, words):
+    """Entry 4 with `words` appended to Blob 0 (the blobs after it move up; stock blobs stay)."""
+    w4 = list(struct.unpack('<%dI' % (len(e4) // 4), e4))
+    nblobs, dir_off = w4[2], w4[3]
+    b0_len, b0_off = w4[dir_off], w4[dir_off + 1]
+    end = b0_off + b0_len
+    assert w4[4] == b0_off and all(w4[dir_off + 2 * k + 1] + w4[dir_off + 2 * k] <= dir_off or
+                                   w4[dir_off + 2 * k + 1] >= end for k in range(1, nblobs))
+    for k in range(1, nblobs):
+        if w4[dir_off + 2 * k + 1] >= end:
+            w4[dir_off + 2 * k + 1] += len(words)
+    w4[dir_off] = b0_len + len(words)
+    w4 = w4[:end] + list(words) + w4[end:]
+    w4[5] = len(w4)
+    return struct.pack('<%dI' % len(w4), *w4), b0_len
 
 
 def b3_normal(a48):
@@ -225,16 +245,20 @@ def main():
     extras = argv[argv.index('--with') + 1].split(',') if '--with' in argv else []
     if extras not in ([], ['commander'], ['commander', 'corrupt']):
         sys.exit('build_all.py: --with takes commander, or commander,corrupt')
-    fx = ['geiger'] + extras                             # the models after NAM and Click
+    probe = '--probe' in argv
+    if probe and extras:
+        sys.exit('build_all.py: --probe goes alone')
+    first = 'probe' if probe else 'geiger'
+    fx = [first] + extras                                # the models after NAM and Click
     # the Block 3 kernels after NAM, in packing order: Commander and Corrupt together share one kernel
-    blocks = ['geiger'] + (['commander_corrupt'] if 'corrupt' in extras else extras)
+    blocks = [first] + (['commander_corrupt'] if 'corrupt' in extras else extras)
     entries_of = {k: [k] for k in blocks}
     entries_of['commander_corrupt'] = ['commander', 'corrupt']
     stock = os.path.abspath(argv.pop(0)) if argv and not argv[0].startswith('-') else \
         os.path.join(HERE, 'firmware', 'HX_Effects_v3.80.0_0xd97239907.hxf')
     if not os.path.isfile(stock) or hashlib.md5(open(stock, 'rb').read()).hexdigest() != STOCK_MD5:
         sys.exit(f'{stock}: missing or not the HX Effects 3.80.0 firmware (MD5 {STOCK_MD5}).')
-    suffix = ''.join('_' + k.capitalize() for k in extras)
+    suffix = '_Probe' if probe else ''.join('_' + k.capitalize() for k in extras)
     out = os.path.abspath(argv[argv.index('-o') + 1]) if '-o' in argv else \
         os.path.join(HERE, 'build', f'HX_Effects_v3.80.0_All{suffix}.hxf')
     build = os.path.join(HERE, 'build')
@@ -306,6 +330,25 @@ def main():
     for k in fx:
         e4n, blobs[k], comps[k] = pa.add_model_entry4(e4n, clone['blob_index'], params[k], 0, prim_id=EFFECTS[k]['prim'])
     print('[+] Entry 4: ' + ', '.join(f'{k} blob {blobs[k]} on {comps[k]:#x}' for k in blobs))
+    if probe:                                            # the magic word and the routine at Blob 0's tail
+        import probe_kernel
+        w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
+        b0_len = w4[w4[3]]
+        probe_kernel.EXT['tail'] = (b0_len + 1) & ~1
+        _, _, p_syms, _, _ = ks['probe'].assemble()
+        tail = [0] * (probe_kernel.EXT['tail'] - b0_len) + probe_kernel.tail_words(p_syms)
+        e4n, _ = append_blob0(e4n, tail)
+        w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
+        d = w4[3]
+        b0 = list(w4[w4[d + 1]: w4[d + 1] + w4[d]])
+        assert len(b0) <= blob0_words, f'Blob 0 {len(b0):#x} words, its buffer {blob0_words:#x}'
+        err = pa.sharc_blob0_check(b0, blob0_words)
+        assert err is None, err
+        assert b0[probe_kernel.EXT['tail']] == probe_kernel.MAGIC
+        print(f'[+] Entry 4: Blob 0 {b0_len:#x} -> {len(b0):#x} words: magic at DDR2 {probe_kernel.magic_addr():#x}, '
+              f'routine at PC {probe_kernel.ext_pc():#x}')
+        if check:
+            probe_kernel.check(0.25, ks['probe'].place)
 
     # 3. Entry 2: Blob 0's buffer and Heap 6
     entries = l6ia.parse(l6ia_bytes)
