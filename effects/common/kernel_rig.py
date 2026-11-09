@@ -155,6 +155,18 @@ class Rig:
         self.sim.strict_cbufen = True
         self.sim.load(secs)
         self.syms, self.rnd, self.cycles = syms, random.Random(seed), []
+        view = getattr(spec, 'pm_view', None)            # (48-bit address, instructions) written as normal words
+        if view:
+            code48, n = view
+            base, words, wr0 = 0xE0000 + (code48 - 0xE0000) * 3 // 2, n * 3 // 2, self.sim.wr
+
+            def view_wr(a, v):                           # the last word written installs the instructions
+                wr0(a, v)
+                if a == base + words - 1:
+                    raw = struct.pack('<%dI' % words, *[self.sim.dm[base + k] for k in range(words)])
+                    for k in range(n):
+                        self.sim.pm[code48 + k] = int.from_bytes(raw[6 * k: 6 * k + 6], 'little')
+            self.sim.wr = view_wr
         g = random.Random(seed + 1000)
         for lo, hi in getattr(spec, 'garbage', []):      # memory the kernel must not read before writing
             for a in range(lo, hi):

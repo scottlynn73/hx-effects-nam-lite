@@ -108,9 +108,10 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
 - **The next six** (branch `ottobit`, 2026-11-04): Ottobit, Stutter, Syntax, Grains, Sequence and Warp each
   have a C reference, tests and a SHARC kernel checked bit for bit (`effects/README.md`, "The next six";
   `make -C effects test sharc-check`). **Not yet in an image**: they do not fit Entry 2 / Block 3 beside the five.
-  The route found (`docs/baseline-audit.md`, "Finding more memory"): carry their code at Blob 0's tail (Entry 4)
-  and run it from DDR2 as the stock firmware does. `build_all.py --probe` builds the test; it **boots** on the
-  unit, its tones are **not yet heard** (the user was away). Each new effect still needs a stock block to replace
+  The route found (`docs/baseline-audit.md`, "Finding more memory"): overlays. Their code and data travel inside
+  Blob 0, and a resident stub copies the code into internal memory through the normal-word view and calls it; probe 4
+  proved that copy and call on the unit. Running 48-bit code directly from DDR2 froze the unit. Swapping different code
+  into one region every call also worked (probe 5). **Ottobit runs this way on the unit** (`build_all.py --with commander,corrupt,ottobit`, MD5 `0d403adc...`). `BOOTED` from flash.py only means the main app answers on USB. Each new effect still needs a stock block to replace
   (ask the user which).
 
 ## Why the takeover approach

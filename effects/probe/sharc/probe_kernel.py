@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""probe_kernel.py - build and check the external-memory probe (probe_kernel.asm).
+"""probe_kernel.py - build and check the overlay-swap probe (probe_kernel.asm).
 
 usage: probe_kernel.py [--check]
 
-The probe reads a magic word from Blob 0's tail in DDR2 and later jumps to a two-instruction routine
-stored there (see probe_kernel.asm for the tones). build_all.py --probe sets EXT (where Blob 0's tail
-lands) before the final assembly and appends tail_words(syms) to Blob 0.
+The probe reads a magic word inside Blob 0 (DDR2) and, when the Bit Depth knob has stayed on 3, 2 or 1 for
+1.5 s, copies routine A or B (alternating every call) from Blob 0 into one internal region and calls it,
+checking that the routine it just copied is the one that ran (probe_kernel.asm has the tests and the tones).
+build_all.py --probe sets EXT (where the words sit in Blob 0) before the final assembly and puts
+tail_words(syms) inside Blob 0.
 
-External code: the stock firmware runs code from DDR2 as 16-bit parcels, two to a 32-bit word with the
-first parcel in the high half, at PC = 2 x the word address; a 48-bit instruction is its three parcels,
-high first, with the ISA encoding unchanged (seen: DM(abs) = ureg, JUMP abs, CJUMP). The routine uses
-only those forms and no RTS (its 48-bit form never appears in the stock external code).
+Found on the unit so far (docs/baseline-audit.md, "Finding more memory"): words inside Blob 0 land in DDR2 where
+predicted; 48-bit code in DDR2 does not run; a routine copied into internal memory through its normal-word view
+(the INIT_L48 packing) runs and returns.
 
---check runs the kernel in ssim with the routine placed (as ISA) at EXT_PC: the register contract, the
-memory it may write, and each stage's tone, against a model in Python.
+--check runs it in ssim: the register contract, the memory it may write, the routine that ran on each call, and
+each tone, against a model in Python. ssim has no instruction cache and no normal-word view of PM: the check
+installs each copy into PM when its last word is written, so it covers the logic, not the cache.
 """
 import os
 import random
@@ -27,21 +29,26 @@ import sasm  # noqa: E402  (kernel_rig puts tools/sharc on the path)
 import ssim  # noqa: E402
 
 BLOB0_BASE = 0x21C400
-MAGIC, MAGIC2 = 0x50524F42, 0x45584543            # 'PROB', 'EXEC'
-STAGE2 = 12000                                    # calls (4 s)
+MAGIC, MAGIC2, MAGIC3 = 0x50524F42, 0x45584543, 0x53574150       # 'PROB', 'EXEC', 'SWAP'
+DWELL = 4500                                      # calls (1.5 s) on a value before its test runs
 HALF = dict(HALF_880=27, HALF_220=109, HALF_1760=14, HALF_110=218)
 BEEP_BIT = 0x400
-EXT = dict(tail=0x7A000)                          # Blob 0 word offset of the tail; build_all.py sets it
+EXT = dict(tail=0x7A000)                          # Blob 0 word offset of the words; build_all.py sets it
+# The region (a 48-bit address in Block 3, unused by every kernel in the probe image: Click's data starts at
+# normal word 0xe7c20 = 48-bit 0xe52c0).
+REG = 0xE5000
+NINSN, NWORDS = 8, 12                             # a routine's instructions, and its 32-bit words when packed
 ASM = os.path.join(HERE, 'probe_kernel.asm')
-GLOBALS = ['G_CALLS', 'G_PH', 'G_SIGN', 'G_FLAG']
+GLOBALS = ['G_CALLS', 'G_PH', 'G_SIGN', 'G_FLAG', 'G_LAST', 'G_DWELL', 'G_BAD', 'G_SV', 'G_SV1']
+
+
+def normal_of(a48):
+    """The normal-word address where 48-bit address a48 (Block 3, even offset) starts."""
+    return 0xE0000 + (a48 - 0xE0000) * 3 // 2
 
 
 def magic_addr():
     return BLOB0_BASE + EXT['tail']
-
-
-def ext_pc():
-    return 2 * (BLOB0_BASE + EXT['tail'] + 2)
 
 
 class Spec:
@@ -49,19 +56,23 @@ class Spec:
 
     def __init__(self):
         self.places = {'b2': (0xC4EF8, 0xC5554, 0xE4850)}
+        self.extra_writes = []
 
     def source(self, place):
         code, _, data0 = self.places[place]
-        lay, a = [('SAVE', 11, [0] * 11)], data0
+        lay, a = [('SAVE', 13, [0] * 13)], data0
         lay += [(g, 1, [kr.fw(1.0) if g == 'G_SIGN' else 0]) for g in GLOBALS]
-        lay += [('K_MAGIC', 1, [MAGIC]), ('K_MAGIC2', 1, [MAGIC2])]
+        lay += [('K_MAGIC', 1, [MAGIC]), ('K_MAGIC2', 1, [MAGIC2]), ('K_MAGIC3', 1, [MAGIC3])]
         equ, words = [], []
         for name, n, w in lay:
             equ.append(f'.equ {name}, {a:#x}')
             words += w
             a += n
-        equ += [f'.equ SLOTS, {a:#x}', f'.equ MAGIC_ADDR, {magic_addr():#x}', f'.equ EXT_PC, {ext_pc():#x}',
-                f'.equ STAGE2, {STAGE2}', f'.equ BEEP_BIT, {BEEP_BIT:#x}'] + [f'.equ {k}, {v}' for k, v in HALF.items()]
+        m = magic_addr()
+        equ += [f'.equ SLOTS, {a:#x}', f'.equ MAGIC_ADDR, {m:#x}', f'.equ SRC, {m + 2:#x}', f'.equ FAM, {2 * NWORDS}',
+                f'.equ NWORDS, {NWORDS}', f'.equ REG, {REG:#x}', f'.equ REG_N, {normal_of(REG):#x}',
+                f'.equ DWELL, {DWELL}', f'.equ BEEP_BIT, {BEEP_BIT:#x}']
+        equ += [f'.equ {k}, {v}' for k, v in HALF.items()]
         data = [f'.section dm {data0:#x}', '.word ' + ', '.join(f'{w:#010x}' for w in words)]
         asm = open(ASM).read()
         asm = asm.replace('.section pm 0x0c4ef8', f'.section pm {code:#08x}')
@@ -74,63 +85,101 @@ class Spec:
         end = max(s.addr + len(s.words) for s in pm)
         code, code_end, _ = self.places[place]
         assert end <= code_end, f'probe: code {code:#x}..{end:#x}, past {code_end:#x}'
+        if code & ~0xFFFF == 0xE0000:
+            assert end <= REG, f'probe: code to {end:#x} runs into the test region'
+        self.extra_writes = [(normal_of(REG), normal_of(REG) + NWORDS), (data[0], data[1])]
         return src, secs, syms, end, data
 
 
 SPEC = Spec()
 
 
-def ext_insns(syms):
-    """The external routine, as 48-bit ISA words: store R4 in G_FLAG, jump back to PROBE_RET."""
-    a = sasm.encode(f'DM({syms["G_FLAG"]:#x}) = R4')
-    b = sasm.encode(f'JUMP {syms["PROBE_RET"]:#x}')
-    a, b = (x if isinstance(x, int) else x[0] for x in (a, b))     # [0]: the absolute JUMP (op 0x06)
-    assert a >> 40 == 0x11 and b >> 40 == 0x06, (hex(a), hex(b))
-    return [a, b]
+def encode(text):
+    r = sasm.encode(text)
+    return r if isinstance(r, int) else r[0]
+
+
+def routine(syms, reg, forcing):
+    """A routine of NINSN words storing register `reg` in G_FLAG twice (the last store is the one that
+    counts). The forcing form puts PM data accesses just before the stores, so the fetches they collide with
+    (the stores) go into the instruction cache."""
+    head = 'R1 = PM(0, I8)' if forcing else 'NOP'
+    store = f'DM({syms["G_FLAG"]:#x}) = {reg}'
+    return [encode(t) for t in [head] * 4 + [store, store, 'NOP', 'RTS']]
+
+
+def routines(syms):
+    """[plain A, plain B, forcing A, forcing B]: A stores R4 (K_MAGIC2), B R3 (K_MAGIC3)."""
+    return [routine(syms, r, f) for f in (False, True) for r in ('R4', 'R3')]
+
+
+def packed(insns):
+    """The INIT_L48 packing: each instruction's 6 bytes little-endian, back to back, read as 32-bit words."""
+    raw = b''.join(int(w).to_bytes(6, 'little') for w in insns)
+    return list(struct.unpack('<%dI' % (len(raw) // 4), raw))
+
+
+def unpacked(words):
+    raw = struct.pack('<%dI' % len(words), *words)
+    return [int.from_bytes(raw[6 * k:6 * k + 6], 'little') for k in range(len(raw) // 6)]
 
 
 def tail_words(syms):
-    """The words to append to Blob 0 at EXT['tail']: the magic word, a pad, then the routine's parcels."""
-    par = []
-    for w in ext_insns(syms):
-        par += [w >> 32 & 0xFFFF, w >> 16 & 0xFFFF, w & 0xFFFF]
-    if len(par) & 1:
-        par.append(0)
-    return [MAGIC, 0] + [par[k] << 16 | par[k + 1] for k in range(0, len(par), 2)]
+    """The words for Blob 0 at EXT['tail']: magic, pad, then the four routines packed."""
+    return [MAGIC, 0] + [w for r in routines(syms) for w in packed(r)]
 
 
 def check(seconds=1.0, place='b2'):
     src, secs, syms, end, data = SPEC.assemble(place)
     code = SPEC.places[place][0]
     print(f'[probe {place}] code {code:#x}..{end:#x} ({end - code} instructions), data {data[0]:#x}..{data[1]:#x}; '
-          f'magic at {magic_addr():#x}, routine at PC {ext_pc():#x}')
-    tail = tail_words(syms)
-    # the parcels decode back to the routine
-    par = [p for w in tail[2:] for p in (w >> 16, w & 0xFFFF)]
-    assert [par[0] << 32 | par[1] << 16 | par[2], par[3] << 32 | par[4] << 16 | par[5]] == ext_insns(syms)
+          f'magic at {magic_addr():#x}; region {REG:#x}')
+    rs = routines(syms)
+    assert all(len(r) == NINSN and len(packed(r)) == NWORDS and unpacked(packed(r)) == r for r in rs)
 
-    def run(landed, start_calls, nblk, seed):
+    def run(landed, bits, nblk, seed, corrupt=False):
         rig = kr.Rig(SPEC, secs, syms, seed)
-        ext = sasm.Section('pm', ext_pc())
-        ext.words = ext_insns(syms)
-        rig.sim.load([ext])
+        n = normal_of(REG)
+        wr0 = rig.sim.wr
+        ran = []
+
+        def wr(a, v):                          # the normal-word view: the last word written installs the copy
+            wr0(a, v)
+            if a == n + NWORDS - 1:
+                insns = unpacked([rig.sim.dm[n + k] for k in range(NWORDS)])
+                ran.append(insns)
+                if corrupt:                    # as a stale cache would: the other routine's stores run instead
+                    other = rs[[rs.index(x) for x in rs if x == insns][0] ^ 1]
+                    insns = other
+                for k, w in enumerate(insns):
+                    rig.sim.pm[REG + k] = w
+        rig.sim.wr = wr
         if landed:
-            rig.sim.wr(magic_addr(), MAGIC)
-        rig.sim.wr(syms['G_CALLS'], start_calls)
+            for k, w in enumerate(tail_words(syms)):
+                wr0(magic_addr() + k, w)
         i0 = rig.inst(0)
-        r = random.Random(seed)
-        ph, sign, calls = 0, 1.0, start_calls
+        rig.sim.wr(i0 + 7, bits)
+        rng = random.Random(seed)
+        ph, sign, calls = 0, 1.0, 0
         for b in range(nblk):
-            blk = [kr.fw(kr.f32(r.uniform(-0.5, 0.5))) for _ in range(16)]
-            got = rig.call(i0, blk, f'landed={landed} block {b}')
+            blk = [kr.fw(kr.f32(rng.uniform(-0.5, 0.5))) for _ in range(16)]
+            before = len(ran)
+            got = rig.call(i0, blk, f'landed={landed} bits={bits} block {b}')
             calls += 1
+            test = landed and bits in (1, 2, 3) and calls > DWELL
+            assert len(ran) - before == (1 if test else 0), 'a copy ran when it should not, or did not when it should'
             if not landed:
                 half, amp = HALF['HALF_220'], 0.1
-            elif calls < STAGE2:
+            elif not test:
                 half, amp = HALF['HALF_880'], 0.1
+            elif corrupt:
+                half, amp = HALF['HALF_110'], 0.1
             else:
                 half, amp = HALF['HALF_1760'], (0.1 if calls & BEEP_BIT else 0.0)
-                assert rig.sim.rd(syms['G_FLAG']) == MAGIC2, 'the routine did not set the flag'
+                odd = calls & 1
+                want_r = rs[(0 if bits == 3 else 2) + odd]
+                assert ran[-1] == want_r, f'call {calls}: copied the wrong routine'
+                assert rig.sim.rd(syms['G_FLAG']) == (MAGIC3 if odd else MAGIC2), f'call {calls}: wrong flag'
             want = []
             for k in range(16):
                 ph += 1
@@ -138,17 +187,17 @@ def check(seconds=1.0, place='b2'):
                     ph, sign = 0, -sign
                 tone = kr.f32(kr.f32(sign) * kr.f32(amp))
                 want.append(kr.fw(kr.f32(ssim.b2f(blk[k]) + tone)))
-            assert got == want, f'landed={landed} calls={calls}: output differs'
+            assert got == want, f'landed={landed} bits={bits} calls={calls}: output differs'
         return rig
 
-    nblk = int(seconds * kr.SR) // 16
-    rig = run(False, 0, nblk, 1)
-    print(f'  not landed: 220 Hz, {nblk} calls: as modelled')
-    rig = run(True, 0, nblk, 2)
-    print(f'  landed, stage 1: 880 Hz, {nblk} calls: as modelled')
-    rig2 = run(True, STAGE2 - 100, nblk + 2000, 3)
-    print(f'  landed, stage 2 (through the routine at {ext_pc():#x}), {nblk + 2000} calls: beeps as modelled')
-    worst = max(rig.cycles + rig2.cycles)
+    nblk = DWELL + 2000
+    rigs = []
+    for landed, bits in ((False, 3), (True, 8), (True, 3), (True, 2), (True, 1)):
+        rigs.append(run(landed, bits, nblk, 1 + bits))
+        print(f'  landed={landed}, Bit Depth {bits}: as modelled')
+    rigs.append(run(True, 1, nblk, 9, corrupt=True))
+    print('  a stale routine (the other one runs) gives the low drone: as modelled')
+    worst = max(c for g in rigs for c in g.cycles)
     print(f'cycles per call: worst {worst} (budget {SPEC.max_cycles})')
     assert worst <= SPEC.max_cycles
     return worst

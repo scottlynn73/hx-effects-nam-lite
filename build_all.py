@@ -39,7 +39,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.join(HERE, 'tools')
 for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', 'effects/geiger/sharc', 'effects/common',
-          'effects/commander/sharc', 'effects/corrupt/sharc', 'effects/probe/sharc'):
+          'effects/commander/sharc', 'effects/corrupt/sharc', 'effects/probe/sharc', 'effects/ottobit/sharc'):
     sys.path.insert(0, os.path.join(HERE, p))
 
 import build_click as bc  # noqa: E402
@@ -92,6 +92,17 @@ CORRUPT_PARAMS = (
     (8, 13, 'HD2_FM4SynthOMatic', 'Wave', 'Harmonic', 'Harm', LIST,
      {1: '1x Root', 2: '2x Octave', 3: '3x Fifth', 4: '4x 2 Oct', 5: '5x Third', 6: '6x Fifth', 7: '7x Flat 7', 8: '8x 3 Oct'}, 1),
 )
+OTTOBIT_PARAMS = (     # as GEIGER_PARAMS; the kernel reads words 5..11 and 13 (effects/ottobit/sharc)
+    (1, 5,  'HD2_AmpLine6Clarity', 'Drive', 'Sample Rate', 'Rate', 'hz', (250.0, 48000.0), 8000.0),
+    (2, 6,  'HD2_DelayMultiPassMono', 'Pattern', 'Bit Depth', 'Bits', LIST,
+     {b: (f'{b} bit' if b == 1 else f'{b} bits') for b in range(1, 17)}, 6),
+    (3, 7,  'HD2_AmpLine6Clarity', 'Bass', 'Filter', 'Filter', 'knob', (0.0, 1.0), 0.7),
+    (4, 8,  'HD2_FM4SynthOMatic', 'Wave', 'Pattern', 'Pattern', LIST, {0: 'Off', **{k: str(k) for k in range(1, 9)}}, 1),
+    (5, 9,  'HD2_AmpLine6Clarity', 'Treble', 'Speed', 'Speed', 'hz', (0.5, 16.0), 4.0),
+    (6, 10, 'HD2_AmpLine6Clarity', 'Mid', 'Stutter', 'Stutter', 'percent', (0.0, 1.0), 0.2),
+    (7, 11, 'HD2_AmpLine6Clarity', 'Presence', 'Output', 'Output', 'db', (-36.0, 12.0), -6.0),
+    (8, 13, 'HD2_AmpLine6Clarity', 'ChVol', 'Mix', 'Mix', 'percent', (0.0, 1.0), 1.0),
+)
 # the Block 3 kernels after NAM, in packing order: model, name, display, Entry 0 cost, primitive, knobs, entry symbol
 EFFECTS = {
     'geiger': dict(takeover=GEIGER_TAKEOVER, name=GEIGER_NAME, display=GEIGER_DISPLAY, cost=GEIGER_COST, prim=GEIGER_PRIM,
@@ -100,11 +111,16 @@ EFFECTS = {
                       params=COMMANDER_PARAMS, entry='COMMANDER_ENTRY'),   # measured worst 3,441 cycles of ~150,000 (2.3 %)
     'corrupt': dict(takeover=CORRUPT_TAKEOVER, name='HD2_DistCorrupt', display='Corrupt', cost=700, prim=0x0838,
                     params=CORRUPT_PARAMS, entry='CORRUPT_ENTRY'),         # measured worst 3,545
+    # an overlay: the code and data travel inside Blob 0; only its stub is in the boot stream (ovl_stub_kernel.py)
+    'ottobit': dict(takeover='HD2_DistBitcrusherMono', name='HD2_DistOttobit', display='Ottobit', cost=700, prim=0x2392,
+                    params=OTTOBIT_PARAMS, entry='OVL_ENTRY'),   # measured mean 2,450 cycles of ~150,000
     # --probe: a diagnostic on Geiger's host instead of Geiger (effects/probe/sharc/probe_kernel.asm)
     'probe': dict(takeover=GEIGER_TAKEOVER, name='HD2_DistProbe', display='Probe', cost=300, prim=GEIGER_PRIM,
                   params=GEIGER_PARAMS, entry='PROBE_ENTRY'),
 }
 BLOB0_WORDS_5 = 0x7B000                # five host graphs
+BLOB0_WORDS_OVL = 0x7D000              # six host graphs and the overlay payload
+GEIGER_CURVES_WORDS = 16 * 65
 NAM_FAR_D_EXTRA = 17                   # NAM's layout when the extra kernels are in
 
 
@@ -117,6 +133,11 @@ class Kernel:
             import geiger_kernel as m
             self.places = m.PLACES
             self._asm = m.assemble
+            self._check = lambda sec, pl: m.check(sec, pl)
+        elif key == 'ovl_stub':
+            import ovl_stub_kernel as m
+            self.places = m.SPEC.places
+            self._asm = m.SPEC.assemble
             self._check = lambda sec, pl: m.check(sec, pl)
         elif key == 'commander_corrupt':                 # both in one kernel, two entry points
             import commander_corrupt_kernel as m
@@ -147,7 +168,7 @@ class Kernel:
         return self._check(seconds, self.place)
 
 
-def append_blob0(e4, words):
+def append_blob0(e4, words):   # (unused: words past the last structure froze the unit)
     """Entry 4 with `words` appended to Blob 0 (the blobs after it move up; stock blobs stay)."""
     w4 = list(struct.unpack('<%dI' % (len(e4) // 4), e4))
     nblobs, dir_off = w4[2], w4[3]
@@ -243,17 +264,21 @@ def main():
     if '-h' in argv or '--help' in argv:
         sys.exit(__doc__)
     extras = argv[argv.index('--with') + 1].split(',') if '--with' in argv else []
-    if extras not in ([], ['commander'], ['commander', 'corrupt']):
-        sys.exit('build_all.py: --with takes commander, or commander,corrupt')
+    if extras not in ([], ['commander'], ['commander', 'corrupt'], ['commander', 'corrupt', 'ottobit']):
+        sys.exit('build_all.py: --with takes commander, commander,corrupt or commander,corrupt,ottobit')
+    overlay = 'ottobit' in extras
     probe = '--probe' in argv
     if probe and extras:
         sys.exit('build_all.py: --probe goes alone')
     first = 'probe' if probe else 'geiger'
     fx = [first] + extras                                # the models after NAM and Click
     # the Block 3 kernels after NAM, in packing order: Commander and Corrupt together share one kernel
-    blocks = [first] + (['commander_corrupt'] if 'corrupt' in extras else extras)
+    blocks = [first] + (['commander_corrupt'] if 'corrupt' in extras else extras[:1])
+    if overlay:
+        blocks += ['ottobit', 'ovl_stub']                # the overlay's region, then its resident stub
     entries_of = {k: [k] for k in blocks}
     entries_of['commander_corrupt'] = ['commander', 'corrupt']
+    entries_of['ottobit'], entries_of['ovl_stub'] = [], ['ottobit']
     stock = os.path.abspath(argv.pop(0)) if argv and not argv[0].startswith('-') else \
         os.path.join(HERE, 'firmware', 'HX_Effects_v3.80.0_0xd97239907.hxf')
     if not os.path.isfile(stock) or hashlib.md5(open(stock, 'rb').read()).hexdigest() != STOCK_MD5:
@@ -266,9 +291,17 @@ def main():
     nam_asm = os.path.join(build, 'nam_lite_2slots.asm' if not extras else f'nam_lite_2slots_fd{NAM_FAR_D_EXTRA}.asm')
     image = os.path.join(build, f'all{suffix.lower()}.l6ia')
     manifest_path = os.path.join(build, f'all{suffix.lower()}_manifest.json')
-    blob0_words = BLOB0_WORDS_5 if extras else bnc.BLOB0_WORDS_ALL
+    blob0_words = BLOB0_WORDS_OVL if overlay else BLOB0_WORDS_5 if extras else bnc.BLOB0_WORDS_ALL
     sdr_base = bnc.BLOB0_BASE + blob0_words            # NAM's DDR2 slots just above the Blob 0 buffer
     env = dict(os.environ, NAM_DEVICE='effects', NAM_SDR_BASE=hex(sdr_base))
+    ring0 = sdr_base + NAM_SLOTS * 0x5000                # Ottobit's rings, above NAM's slots
+    if overlay:
+        import geiger_kernel
+        import ottobit_kernel
+        import ovl_stub_kernel
+        geiger_kernel.EXT_CURVES = 0x3F0000              # for the check; the real address once Blob 0 is laid out
+        ottobit_kernel.SPEC = ottobit_kernel.make_spec(ring0)
+        assert ring0 + ottobit_kernel.RING_N * ottobit_kernel.NSLOTS <= 0x2A8DF6, 'the rings run past the free DDR2'
     check = '--no-check' not in argv
     run = bnc.run
 
@@ -328,25 +361,44 @@ def main():
     e4n, b_c, c_c = pa.add_model_entry4(e4n, clone['blob_index'], params['click'], 0, blob_fn=bc.click_host_blob, prim_id=CLICK_PRIM)
     blobs, comps = {'nam': b_n, 'click': b_c}, {'nam': c_n, 'click': c_c}
     for k in fx:
-        e4n, blobs[k], comps[k] = pa.add_model_entry4(e4n, clone['blob_index'], params[k], 0, prim_id=EFFECTS[k]['prim'])
+        pad = ()
+        if k == 'ottobit':      # inside Blob 0, before this model's own table copy: Geiger's curves, the overlay
+            w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
+            b0_len = w4[w4[3]]
+            curves = geiger_kernel.tables()
+            assert len(curves) == GEIGER_CURVES_WORDS
+            _, o_secs, o_syms, _, o_data = ks['ottobit'].assemble()
+            o_code, o_dwords, o_code48, o_data0 = ovl_stub_kernel.payload(o_secs)
+            pad = curves + o_code + o_dwords
+            base = bnc.BLOB0_BASE + b0_len
+            geiger_kernel.EXT_CURVES = base
+            ovl = dict(src_code=base + len(curves), n_code=len(o_code), code_n=ovl_stub_kernel.normal_of(o_code48),
+                       src_data=base + len(curves) + len(o_code), n_data=len(o_dwords), data0=o_data0,
+                       kernel=o_syms['OTTOBIT_ENTRY'])
+            ovl_stub_kernel.configure(**ovl)
+            print(f'[+] Entry 4: inside Blob 0 at DDR2 {base:#x}: Geiger\'s curves ({len(curves)} words), Ottobit\'s code '
+                  f'({len(o_code)}) and data ({len(o_dwords)}); rings at {ring0:#x}')
+        if k == 'probe':        # the magic word and the routine inside Blob 0, before the probe's own table copy
+            import probe_kernel
+            w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
+            b0_len = w4[w4[3]]
+            probe_kernel.EXT['tail'] = (b0_len + 1) & ~1
+            _, _, p_syms, _, _ = ks['probe'].assemble()
+            pad = [0] * (probe_kernel.EXT['tail'] - b0_len) + probe_kernel.tail_words(p_syms)
+        e4n, blobs[k], comps[k] = pa.add_model_entry4(e4n, clone['blob_index'], params[k], 0, prim_id=EFFECTS[k]['prim'],
+                                                      b0_pad=pad)
     print('[+] Entry 4: ' + ', '.join(f'{k} blob {blobs[k]} on {comps[k]:#x}' for k in blobs))
-    if probe:                                            # the magic word and the routine at Blob 0's tail
-        import probe_kernel
-        w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
-        b0_len = w4[w4[3]]
-        probe_kernel.EXT['tail'] = (b0_len + 1) & ~1
-        _, _, p_syms, _, _ = ks['probe'].assemble()
-        tail = [0] * (probe_kernel.EXT['tail'] - b0_len) + probe_kernel.tail_words(p_syms)
-        e4n, _ = append_blob0(e4n, tail)
+    if probe:                                            # where the probe's words landed, checked
         w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
         d = w4[3]
         b0 = list(w4[w4[d + 1]: w4[d + 1] + w4[d]])
+        t = probe_kernel.EXT['tail']
         assert len(b0) <= blob0_words, f'Blob 0 {len(b0):#x} words, its buffer {blob0_words:#x}'
-        err = pa.sharc_blob0_check(b0, blob0_words)
-        assert err is None, err
-        assert b0[probe_kernel.EXT['tail']] == probe_kernel.MAGIC
-        print(f'[+] Entry 4: Blob 0 {b0_len:#x} -> {len(b0):#x} words: magic at DDR2 {probe_kernel.magic_addr():#x}, '
-              f'routine at PC {probe_kernel.ext_pc():#x}')
+        assert pa.sharc_blob0_check(b0, blob0_words) is None
+        assert b0[t] == probe_kernel.MAGIC and b0[t: t + len(probe_kernel.tail_words(p_syms))] == probe_kernel.tail_words(p_syms)
+        assert b0[0x10] > t, 'the probe words are not before the last composite table'
+        print(f'[+] Entry 4: Blob 0 {len(b0):#x} words, the probe words inside it at {t:#x} (table at {b0[0x10]:#x}): '
+              f'magic at DDR2 {probe_kernel.magic_addr():#x}')
         if check:
             probe_kernel.check(0.25, ks['probe'].place)
 
@@ -409,6 +461,10 @@ def main():
     regions = {who: [(*bnc.byte_range(s.kind, s.addr, len(s.words)), f'{who} {s.kind} {s.addr:#x}+{len(s.words)}')
                      for s in secs] for who, (secs, _, _) in kernels.items()}
     regions['NAM'].append((*bnc.byte_range('dm', nam_b3[0], nam_b3[1] - nam_b3[0]), f'NAM Block 3 {nam_b3[0]:#x}..{nam_b3[1]:#x}'))
+    if overlay:                                          # not in the boot stream, but its internal region is taken
+        _, o_secs2, _, _, _ = ks['ottobit'].assemble()
+        regions['Ottobit overlay'] = [(*bnc.byte_range(x.kind, x.addr, len(x.words)), f'Ottobit overlay {x.kind} {x.addr:#x}+{len(x.words)}')
+                                      for x in o_secs2]
     owners = list(regions)
     for i, a in enumerate(owners):
         for b in owners[i + 1:]:
@@ -427,6 +483,8 @@ def main():
     for secs, _, _ in kernels.values():
         for s in secs:
             ldr += pa.pack_init_l48(s.addr, s.words) if s.kind == 'pm' else ldr_l32(pa, s.addr, s.words, bool(extras))
+    if probe:                                            # the overlay test region: free, below Click's data
+        assert bnc.byte_range('dm', probe_kernel.normal_of(probe_kernel.REG), probe_kernel.NWORDS)[2] <= bnc.byte_range('dm', click_data0, 1)[1]
     table, _ = pa.sharc_prim_table(e2_raw)
     template = pa.sharc_prim_record(e2_raw, 0x822)
     for who, (_, entry, prim) in kernels.items():
@@ -454,6 +512,8 @@ def main():
                            data=list(placed[k][1]), dsp_cost=EFFECTS[k]['cost'], **({'kernel': b} if b != k else {}))
     if extras:
         manifest['extras'] = extras
+    if overlay:
+        manifest['overlay'] = dict(ovl, ring0=ring0, curves=geiger_kernel.EXT_CURVES, place=list(ks['ottobit'].places['b3']))
     manifest.update(blob0_words=blob0_words, checked=check)
     json.dump(manifest, open(manifest_path, 'w'), indent=1)
     print(f'\nDone: {out}\nFlash: python3 tools/flash.py flash {os.path.relpath(out, HERE)}')

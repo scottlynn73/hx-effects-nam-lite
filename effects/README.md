@@ -126,8 +126,8 @@ DM(11) Root (int 0..3), DM(13) Harmonic (int 1..8).
 ## The next six (`ottobit/`, `stutter/`, `syntax/`, `grains/`, `sequence/`, `warp/`)
 
 Built and checked offline on branch `ottobit` (2026-11-04): C reference, tests, and a SHARC kernel each,
-bit for bit against the reference in ssim. **Not yet in an image**: they need the external-memory route
-(`docs/baseline-audit.md`, "Finding more memory") before they fit beside the five in the unit's image.
+bit for bit against the reference in ssim. Ottobit is in an image and works on the unit, as an overlay
+(`docs/baseline-audit.md`, "Finding more memory"); the other five are not in an image yet.
 Each kernel's header comment lists its knob words. Every one keeps the conventions of the kernels above;
 the rings of the buffer effects sit at `RING0` (DDR2 on the unit, set by the image build).
 

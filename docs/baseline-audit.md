@@ -137,16 +137,36 @@ Five kernels leave 812 bytes of Entry 2 and about 1,500 words of Block 3; each f
   `0x21c400` (only its structured fields are relocated), so words appended after its last composite land at
   `0x21c400 + offset`.
 
-So the route for more effects is to carry their code (and tables) at Blob 0's tail and run them from DDR2
-as the stock firmware runs its own external code. `build_all.py --probe` builds the test for it
-(`effects/probe/sharc/`): NAM + Click + a Probe block on Geiger's host, with a magic word and a two-
-instruction routine (`DM(G_FLAG) = R4; JUMP PROBE_RET`, the forms seen above) at Blob 0's tail. Added to a
-preset, the Probe sounds 880 Hz for 4 s if the magic word is where expected (220 Hz if not), then beeps at
-1,760 Hz if the routine ran from DDR2 and came back; silence or a frozen unit means it did not.
+What the probes (`build_all.py --probe`, `effects/probe/sharc/`) showed on the unit, 2026-11-06 to 09:
 
-**Status**: the probe image boots on the unit (so a Blob 0 with words appended is accepted); its tones are
-not yet heard. Next: hear them; if external code runs, measure its speed, then move the six new kernels'
-code there (the internal 1,500 words then hold their data).
+| Probe | Result |
+|---|---|
+| Words inside Blob 0, read by a kernel | **Work**: 880 Hz, the magic word is at `0x21c400 + offset` |
+| 48-bit ISA routine in DDR2, jumped to (Bit Depth 2 of probe 3: beside the stock external code) | **Froze the unit** |
+| Routine copied from Blob 0 into Block 3 as 32-bit words through the normal-word view (INIT_L48 packing), then called | **Works**: it ran and came back, with the unit responsive |
+| The same routine written through PX to PM, then called | Came back with the flag wrong (low drone); not understood, and not needed |
+| PX copy plus `FLUSH CACHE` | Not established (1 bit was not reported separately) |
+| Two different routines swapped into one internal region every call, no PM data access, no flush (probe 5, 3 bits) | **Works**: the routine just copied was the one that ran, on every call heard |
+| The same with PM data accesses meant to force the instruction cache, with `FLUSH CACHE` (2 bits) | Works; `FLUSH CACHE` executes without harm |
+| The forcing routines with no flush (1 bit) | Also worked, so no stale code was seen: either the forcing did not load the cache, or the cache is not in play here. It does **not** show that `FLUSH CACHE` is needed or effective |
+
+Probes 1 and 2 froze because the Probe sat on Geiger's slot, the user's start-up preset contains Geiger, and
+their timed jump to DDR2 fired during boot. flash.py's `BOOTED` did not show it: it only means the main app
+answers on USB.
+
+So the route for more effects is **overlays**: the kernels' code and data travel inside Blob 0, and a small
+resident stub copies a kernel's code into one internal region through the normal-word view before calling it.
+The six kernels make no PM data accesses, so they should not load the instruction cache; the stubs still flush
+after each copy, since it does no harm.
+
+**Ottobit works on the unit this way** (2026-11-09; `build_all.py --with commander,corrupt,ottobit`, MD5
+`0d403adc...`). Its stub (`effects/common/ovl_stub_kernel.py`, 35 instructions on primitive `0x2392`) copies its code and
+data once from Blob 0 into Block 3, so the kernel runs entirely from internal memory; only its rings are in DDR2,
+above NAM's slots. Image B had about 700 free Block 3 words (not the 1,500 first stated), so this image also moves
+Geiger's 1,040 curve words into Blob 0, leaving 4,560 bytes of Entry 2 free. Not yet done: two different overlay
+effects sharing the region (swap out their data as well as their code), and a home for the larger rings: only
+about 31,000 words of DDR2 are known free below `0x2a8df6`, less than Stutter's or Grains' rings need as written.
+
 
 ## Tested vs untested
 

@@ -21,7 +21,7 @@ import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', 'effects/geiger/sharc', 'effects/common',
-          'effects/commander/sharc', 'effects/corrupt/sharc', '.'):
+          'effects/commander/sharc', 'effects/corrupt/sharc', 'effects/ottobit/sharc', '.'):
     sys.path.insert(0, os.path.join(ROOT, p))
 os.environ['NAM_DEVICE'] = 'effects'
 import build_all  # noqa: E402
@@ -41,6 +41,15 @@ def check(c, msg):
 
 man = json.load(open(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'all_manifest.json')))
 FX = ['geiger'] + man.get('extras', [])
+OVL = man.get('overlay')
+if OVL:                                               # what the build set: the kernels assemble as they did for the image
+    import geiger_kernel  # noqa: E402
+    import ottobit_kernel  # noqa: E402
+    import ovl_stub_kernel  # noqa: E402
+    geiger_kernel.EXT_CURVES = OVL['curves']
+    ottobit_kernel.SPEC = ottobit_kernel.make_spec(OVL['ring0'])
+    ottobit_kernel.SPEC.places['b3'] = tuple(OVL['place'])
+    ovl_stub_kernel.configure(**{k: OVL[k] for k in ('src_code', 'n_code', 'code_n', 'src_data', 'n_data', 'data0', 'kernel')})
 
 
 def load(name):
@@ -140,6 +149,19 @@ for cid in range(0x6001c1, 0x6001c1 + len(order)):
     prims[cid] = b0[hdr[3] + 20 + 6]
 want = {0x6001c1 + j: man[k]['primitive'] for j, k in enumerate(order)}
 check(prims == want, f'Blob 0 host composites on primitives { {hex(k): hex(v) for k, v in prims.items()} }')
+if OVL:
+    base = pa.SHARC_BLOB0_BASE
+    t = OVL['curves'] - base
+    curves = geiger_kernel.tables()
+    _, o_secs, _, _, _ = ottobit_kernel.SPEC.assemble('b3')
+    o_code, o_dwords, _, _ = ovl_stub_kernel.payload(o_secs)
+    want_pad = curves + o_code + o_dwords
+    check(b0[t: t + len(want_pad)] == want_pad and OVL['src_code'] - base == t + len(curves) and
+          OVL['src_data'] - base == t + len(curves) + len(o_code),
+          f'Blob 0 carries Geiger\'s curves and Ottobit\'s code and data at {t:#x} ({len(want_pad)} words), as assembled')
+    check(ctab == t + len(want_pad), '  right before the last composite table')
+    h = b0[ctab + 7 * (b0[0xf] - 1): ctab + 7 * b0[0xf]]
+    check(h[5] + 4 * h[4] == len(b0), '  Blob 0 still ends at its last composite')
 err = pa.sharc_blob0_check(list(b0), man['blob0_words'])
 check(err is None, f'Blob 0 ({len(b0):#x} words) fits the {man["blob0_words"]:#x}-word buffer{"" if err is None else ": " + err}')
 

@@ -22,7 +22,7 @@ import kernel_rig as kr  # noqa: E402
 from kernel_rig import f32, SR  # noqa: E402
 
 RING_N, RING_SHIFT, NSTEPS, NPAT, LMIN, SEED = 2048, 11, 6, 9, 64, 0x12345678
-NSLOTS = 8
+NSLOTS = 4
 RING0 = 0x380000                     # the check's; build_all.py sets the unit's (DDR2)
 
 STATE = ['PRIMED', 'GOUT', 'GMIX', 'TOUT', 'TMIX', 'INC', 'FBASE', 'SINC', 'THR', 'Q', 'QI', 'PAT', 'RING',
