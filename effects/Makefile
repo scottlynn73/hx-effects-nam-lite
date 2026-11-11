@@ -9,11 +9,11 @@ CFLAGS ?= -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Wpedantic -Werror -Wshad
 LDLIBS = -lm
 
 COMMON = common/fx.c common/wav.c common/signals.c
-EFFECTS = geiger/geiger.c metronome/metronome.c commander/commander.c corrupt/corrupt.c ottobit/ottobit.c stutter/stutter.c syntax/syntax.c grains/grains.c sequence/sequence.c warp/warp.c
-HEADERS = common/*.h geiger/*.h metronome/*.h commander/*.h corrupt/*.h ottobit/*.h stutter/*.h syntax/*.h grains/*.h sequence/*.h warp/*.h
+EFFECTS = geiger/geiger.c metronome/metronome.c commander/commander.c corrupt/corrupt.c ottobit/ottobit.c stutter/stutter.c syntax/syntax.c grains/grains.c sequence/sequence.c warp/warp.c doomchug/doomchug.c
+HEADERS = common/*.h geiger/*.h metronome/*.h commander/*.h corrupt/*.h ottobit/*.h stutter/*.h syntax/*.h grains/*.h sequence/*.h warp/*.h doomchug/*.h
 OUT = out
 
-all: $(OUT)/fxrender $(OUT)/test_geiger $(OUT)/test_metronome $(OUT)/test_commander $(OUT)/test_corrupt $(OUT)/test_ottobit $(OUT)/test_stutter $(OUT)/test_syntax $(OUT)/test_grains $(OUT)/test_sequence $(OUT)/test_warp
+all: $(OUT)/fxrender $(OUT)/test_geiger $(OUT)/test_metronome $(OUT)/test_commander $(OUT)/test_corrupt $(OUT)/test_ottobit $(OUT)/test_stutter $(OUT)/test_syntax $(OUT)/test_grains $(OUT)/test_sequence $(OUT)/test_warp $(OUT)/test_doomchug
 
 $(OUT):
 	mkdir -p $(OUT)
@@ -51,6 +51,9 @@ $(OUT)/test_sequence: sequence/test_sequence.c $(COMMON) $(EFFECTS) $(HEADERS) |
 $(OUT)/test_warp: warp/test_warp.c $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) -o $@ warp/test_warp.c $(COMMON) $(EFFECTS) $(LDLIBS)
 
+$(OUT)/test_doomchug: doomchug/test_doomchug.c $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
+	$(CC) $(CFLAGS) -o $@ doomchug/test_doomchug.c $(COMMON) $(EFFECTS) $(LDLIBS)
+
 # the reference as a shared library, for the SHARC kernels' checks (ctypes)
 $(OUT)/libfx.so: $(COMMON) $(EFFECTS) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) -shared -fPIC -o $@ $(COMMON) $(EFFECTS) $(LDLIBS)
@@ -68,6 +71,7 @@ sharc-check: $(OUT)/libfx.so
 	../.venv/bin/python3 grains/sharc/grains_kernel.py --check --seconds 0.25
 	../.venv/bin/python3 sequence/sharc/sequence_kernel.py --check --seconds 0.25
 	../.venv/bin/python3 warp/sharc/warp_kernel.py --check --seconds 0.25
+	../.venv/bin/python3 doomchug/sharc/doomchug_kernel.py --check --seconds 0.25
 
 test: all
 	$(OUT)/test_geiger geiger/golden.txt
@@ -80,6 +84,8 @@ test: all
 	$(OUT)/test_grains
 	$(OUT)/test_sequence
 	$(OUT)/test_warp
+	$(OUT)/test_doomchug
+	$(OUT)/fxrender describe doomchug | diff -u doomchug/params.json - && echo "doomchug params.json up to date"
 	$(OUT)/fxrender describe warp | diff -u warp/params.json - && echo "warp params.json up to date"
 	$(OUT)/fxrender describe sequence | diff -u sequence/params.json - && echo "sequence params.json up to date"
 	$(OUT)/fxrender describe grains | diff -u grains/params.json - && echo "grains params.json up to date"

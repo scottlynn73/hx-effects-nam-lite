@@ -45,7 +45,7 @@ TAKEOVER = 'HD2_ImpulseResponse1024Mono'              # the stock model the NAM 
 CLONE = 'HD2_ImpulseResponse2048Mono'                 # the graph the NAM host is built on
 NAME, DISPLAY, SHORT = 'HD2_AmpNAMLite', 'NAM A2 Lite', 'NAM A2 Lite'
 STRIP_TITLE = 'NAM / IR_2048'      # the IR category's default scribble-strip title (also the 2048 IR's while empty)
-DSP_COST = 2700
+DSP_COST = 2300
 KERNEL = os.path.join(TOOLS, 'sharc', 'nam_multi.py')
 
 

@@ -47,10 +47,15 @@ potentially having to recover your unit yourself!**
   | **Polarity** | Normal / Inverted |
 
 - The block takes over the **1024‑sample IR** block's identity, so that block is no longer available.
-  The **2048‑sample IR** block is untouched: captures and cab IRs can share the 128 User IR slots, and a
-  preset can run a NAM block into a 2048 IR block (amp, then cab).
+  The **2048‑sample IR** block is untouched and captures and cab IRs can share the 128 User IR slots, but
+  a preset **cannot** hold a NAM block and another IR block: on the unit each hides the other in the
+  browser, in either order (found 2026‑11‑10). Two NAM blocks are fine.
 - The IR category's default scribble‑strip title becomes **"NAM / IR_2048"**. The NAM block shows the
   capture's name once a slot is selected; the 2048 IR block shows the IR's name once one is selected.
+- In the all‑in‑one image (`build_all.py`) NAM is instead under **Distortion → Mono → NAM A2 Lite**, in
+  place of the mono Regal Bass DI, so a 2048 IR (or any IR block) can follow it as the cab. There
+  **Model** is a list of User IR slots 1–21 showing numbers, not names (the IR name list exists only on
+  IR blocks), and the 1024‑sample IR block is stock. `build_all.py --nam-host ir` builds the old layout.
 - Everything else in the firmware stays stock 3.80.0.
 - Optionally, with `build_nam_click.py` instead of `build_effects.py`: the **Click** metronome as well,
   in place of the mono Mod/Chorus Echo delay; or with `build_all.py`: Click and the **Geiger** bit crusher
@@ -144,7 +149,7 @@ Geiger reduces the sample rate and bit depth and then shapes the result through 
 It comes in one image with NAM and Click:
 
 ```
-python3 build_all.py          # build/HX_Effects_v3.80.0_All.hxf: NAM A2 Lite + Click + Geiger
+python3 build_all.py --with none   # build/HX_Effects_v3.80.0_All.hxf: NAM A2 Lite + Click + Geiger
 ```
 
 In this image NAM runs **two** blocks at once instead of three (a third NAM block passes its input
@@ -198,17 +203,16 @@ Built and checked in the simulator and offline; **both images work on the unit**
 
 ## Tuning the declared DSP cost
 
-The block declares a DSP cost of 2700 (`DSP_COST` in `build_effects.py`). That number is bookkeeping
+The block declares a DSP cost of 2300 (`DSP_COST` in `build_effects.py`; it was 2700 until 2026‑11‑10). That number is bookkeeping
 only: the app uses it to decide when to grey out other blocks, and it has no effect on what the DSP
 actually does. The kernel was measured in the simulator at about 23% of a block (34,000 of 150,000
 cycles per audio block); stock blocks declare costs in roughly hundredths of a percent, so the honest
-figure is around 2300 and 2700 leaves a heavy block's worth of margin. As shipped, two NAM blocks and
-a few effects fit in one preset.
+figure is around 2300. Two NAM blocks and a few effects fit in one preset.
 
 If you want to trade some of that margin for more blocks:
 
-1. Lower `DSP_COST` in `build_effects.py` (try 2300; don't go below it, that's what the measurement
-   supports), rebuild and flash.
+1. `DSP_COST` in `build_effects.py` is already at the 2300 the measurement supports; don't go below it.
+   If you change it, rebuild and flash.
 2. Build the heaviest preset the unit now allows: two NAM blocks plus whatever was previously greyed
    out (the dynamic reverbs, Shimmer, Poly Pitch, Cosmos Echo are the heavy ones).
 3. Stress it: big chords, long reverb tails, and change **Model** on both blocks while notes ring. A
@@ -216,7 +220,7 @@ If you want to trade some of that margin for more blocks:
 4. Crackling, dropouts or a block going silent means the number is too low: raise it and rebuild.
 
 Declaring too little lets the app accept a chain the DSP can't service; declaring too much only costs
-you a block you might have fitted. When in doubt, leave it at 2700.
+you a block you might have fitted. When in doubt, leave it at 2300.
 
 
 ## Install
@@ -295,7 +299,7 @@ small header. Loading one into the stock 2048‑sample IR block does nothing use
 - Presets store the slot number, not the capture: moving a capture to another slot means updating the
   presets that use it.
 - Only 3‑channel A2 Lite captures fit; standard and A2 Full captures don't.
-- The block's DSP cost is declared as 2700 (like a heavy stock block), so the unit greys out other heavy
+- The block's DSP cost is declared as 2300 (like a heavy stock block), so the unit greys out other heavy
   blocks beside it.
 
 ## Getting the stock firmware

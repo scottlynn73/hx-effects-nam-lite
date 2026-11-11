@@ -28,7 +28,7 @@ firmware), or **unknown**.
    (cuts off, mix wet);
 3. Entry 2: Blob 0 buffer `0x76a2c` → `0x78000` words; Heap 6 moved to `0x30d100`;
 4. Entry 3: the new model's descriptor fields copied over `HD2_ImpulseResponse1024Mono` (model 72);
-5. Entry 0: that model's Table 1 cost (`DSP_COST` = 2700), Table 2 counts/short name, browser name,
+5. Entry 0: that model's Table 1 cost (`DSP_COST` = 2300, 2700 until 2026-11-10), Table 2 counts/short name, browser name,
    the IR category's strip title;
 6. Entry 2 again: the kernel assembled (`sasm.py`) at PM `0xc4ef8`, primitive `0x9c75`'s record
    (template copied from primitive `0x822`) pointed at it, DM 0x91 / PM 0x0d words per instance;
@@ -50,7 +50,7 @@ firmware), or **unknown**.
 | Knob words | `DM(5..11, I0)` and `DM(15, I0)` (pid order in `patch_amp.NAM_PARAMS`): floats, or an integer for Model (User IR slot 1..128) and a bool for Polarity | modelled + observed (knobs work on the unit) |
 | Free state words | the kernel uses `DM(12..14, I0)` for its own state (`P_SLOT`, `P_SEEN`, `P_MET`) | observed (source) |
 | Registers | R0–R15, the alternate set, the DAG registers **including I1–I3**, and MODE1 must come back unchanged (NAM restores I1–I3 through B1–B3). A kernel that returned with I1/I2 advanced froze the unit's knobs and footswitches while audio carried on. The rig now checks I1–I3 too. | observed on the unit |
-| Per‑call budget | the check enforces ≤ 33,000 instructions steady (`MAX_STEADY`); `DSP_COST` 2700 is the host's bookkeeping, not a measurement | observed (source) |
+| Per‑call budget | the check enforces ≤ 33,000 instructions steady (`MAX_STEADY`); `DSP_COST` 2300 is the host's bookkeeping, not a measurement | observed (source) |
 | Parameter smoothing | none by the host as far as known; the NAM kernel crossfades captures itself | unknown for other knob types |
 | Bypass | applied in the graph, not through the instance block: on a delay host (Click on Mod/Chorus Echo) the footswitch bypasses the block; on the 1024 IR host it lit but did not bypass Click | observed on the unit |
 | Preset change / re‑creation | no explicit callback seen; kernels detect re‑creation by comparing `I0` and a call counter | modelled |

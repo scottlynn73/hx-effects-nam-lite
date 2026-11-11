@@ -53,7 +53,7 @@ SPEC = kr.Spec('syntax', os.path.join(HERE, 'syntax_kernel.asm'), 'SYNTAX_ENTRY'
                knobs=dict(drive=5, shift=6, pattern=7, speed=8, glide=9, tone=10, output=11, mix=13),
                int_knobs={'pattern'},
                order=['drive', 'shift', 'pattern', 'speed', 'glide', 'tone', 'output', 'mix'],   # = syntax.h Y_*
-               state=STATE, constants=CONSTANTS, tables=tables(), max_cycles=8000,
+               state=STATE, constants=CONSTANTS, nslots=4, tables=tables(), max_cycles=8000,
                extra_equ=[f'.equ NSTEPS, {NSTEPS}'])
 SPEC.places['b2'] = (0xC4EF8, 0xC5554, 0xE4850)        # a Syntax-only placement, for the check
 

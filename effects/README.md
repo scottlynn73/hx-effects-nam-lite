@@ -233,3 +233,7 @@ DM(10) Subdivision (int). What the hardware builds taught (2026-11-03):
 - **Level is built on NAM's ChVol record.** On a chorus's "Mix" record its value never reached the
   kernel. Tempo is a float knob too (20.0..300.0, one decimal shown): as a 281-entry list (stock lists have at most
   21) the page holding it was not drawn.
+
+## Doom Chug (`doomchug/`)
+
+A low, dark four-voice drone generator that ignores the guitar, made to feed the glitch effects. Saws on root, sharp root, fifth and octave; every pitch stays between 110 Hz (low A) and 440 Hz. Each step (Rate, 0.05 to 8 a second) moves the Pattern, gives each voice a new random pitch target and LFO speed, and restarts the Chug thud. Knobs: Key, Pattern, Rate, Drift, Warble, Chug, Tone, Level; the input passes through untouched. A resident kernel, not an overlay, because it is meant to run beside Ottobit and a swap costs about 28,000 cycles on the unit. 360 instructions, 77 data words, one slot (a second block passes through), every constant an immediate; worst 2,743 cycles a call in ssim.

@@ -194,6 +194,8 @@ class Sim:
     def get(self, code):
         if code == U_PC:
             return self.pc
+        if code == 0x69:                    # EMUCLK: the core's cycle counter
+            return self.cycles & M32
         if code == U_CURLCNTR:
             return self.loops[-1][2] if self.loops else self.u[U_LCNTR]
         if code == U_ASTATX:

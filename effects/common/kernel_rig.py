@@ -160,12 +160,13 @@ class Rig:
             code48, n = view
             base, words, wr0 = 0xE0000 + (code48 - 0xE0000) * 3 // 2, n * 3 // 2, self.sim.wr
 
-            def view_wr(a, v):                           # the last word written installs the instructions
+            def view_wr(a, v):                           # a word written there changes the pair of instructions over it
                 wr0(a, v)
-                if a == base + words - 1:
-                    raw = struct.pack('<%dI' % words, *[self.sim.dm[base + k] for k in range(words)])
-                    for k in range(n):
-                        self.sim.pm[code48 + k] = int.from_bytes(raw[6 * k: 6 * k + 6], 'little')
+                if base <= a < base + words:
+                    pair = (a - base) // 3
+                    raw = struct.pack('<3I', *[self.sim.dm.get(base + 3 * pair + k, 0) for k in range(3)])
+                    self.sim.pm[code48 + 2 * pair] = int.from_bytes(raw[:6], 'little')
+                    self.sim.pm[code48 + 2 * pair + 1] = int.from_bytes(raw[6:], 'little')
             self.sim.wr = view_wr
         g = random.Random(seed + 1000)
         for lo, hi in getattr(spec, 'garbage', []):      # memory the kernel must not read before writing
@@ -281,22 +282,29 @@ def check(spec, place, cases, rnd_knobs, seconds=1.0, signals=None):
             total += 16
     print(f'  {len(cases)} settings: identical')
 
+    def age_slots():                                   # few slots: the ones the last block used go stale first
+        if spec.nslots < 4:
+            rig.sim.wr(syms['G_CALLS'], rig.sim.rd(syms['G_CALLS']) + STALE + 1)
+
+    age_slots()
     r = random.Random(5)
     ia, ib = rig.inst(0), rig.inst(1)
     sa, sb = ref.new(), ref.new()
+    pairs = 2 if spec.nslots > 1 else 1                # a one-slot kernel: the second block would pass through
     xa, xb = signal(nblk * 16, 11, chord=True), signal(nblk * 16, 12)
     for b in range(nblk):
         if b % 300 == 0:
             ka, kb = rnd_knobs(r), rnd_knobs(r)
             rig.knobs(ia, ka)
             rig.knobs(ib, kb)
-        for i0, st, kn, x in ((ia, sa, ka, xa), (ib, sb, kb, xb)):
+        for i0, st, kn, x in ((ia, sa, ka, xa), (ib, sb, kb, xb))[:pairs]:
             blk = x[16 * b:16 * b + 16]
             if rig.call(i0, blk, f'moving block {b}') != ref.process(st, kn, [ssim.b2f(v) for v in blk]):
                 raise AssertionError(f'moving knobs, block {b}: kernel and reference differ')
             total += 16
-    print('  two instances, every knob moving every 100 ms: identical')
+    print(f'  {pairs} instance(s), every knob moving every 100 ms: identical')
 
+    age_slots()
     kn = cases[0]
     i0 = rig.inst(2)
     rig.knobs(i0, kn)

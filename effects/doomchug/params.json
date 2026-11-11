@@ -1,0 +1,14 @@
+{
+  "id": "doomchug",
+  "display_name": "Doom Chug",
+  "parameters": [
+    {"id": "key", "display": "Key", "type": "integer", "min": 0, "max": 11, "default": 0, "unit": "semitones above low A", "smoothing": "immediate"},
+    {"id": "pattern", "display": "Pattern", "type": "integer", "min": 0, "max": 8, "default": 1, "unit": "0 Off, 1..8", "smoothing": "immediate"},
+    {"id": "rate", "display": "Rate", "type": "continuous", "min": 0, "max": 1, "default": 0.5, "unit": "0.05 .. 8 steps/s", "smoothing": "immediate"},
+    {"id": "drift", "display": "Drift", "type": "continuous", "min": 0, "max": 1, "default": 0.35, "unit": "", "smoothing": "immediate"},
+    {"id": "warble", "display": "Warble", "type": "continuous", "min": 0, "max": 1, "default": 0.5, "unit": "", "smoothing": "immediate"},
+    {"id": "chug", "display": "Chug", "type": "continuous", "min": 0, "max": 1, "default": 0.4, "unit": "", "smoothing": "immediate"},
+    {"id": "tone", "display": "Tone", "type": "continuous", "min": 0, "max": 1, "default": 0.25, "unit": "", "smoothing": "immediate"},
+    {"id": "level", "display": "Level", "type": "continuous", "min": 0, "max": 1, "default": 0.5, "unit": "x (shown as %)", "smoothing": "immediate"}
+  ]
+}
