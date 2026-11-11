@@ -29,9 +29,11 @@ It also adds effects of our own, each an original algorithm running on the same 
 - **Ottobit**, a sequenced bit crusher with random stutters ([Ottobit](#ottobit-a-sequenced-bit-crusher))
 - **Doom Chug**, a low drone generator to feed the glitch effects ([Doom Chug](#doom-chug-a-low-drone-generator))
 
+and one of Line 6's own amps that the HX Effects never lists, **US Small Tweed** ([Stock amps](#stock-amps-us-small-tweed)).
+
 **The recommended build is the all‑in‑one image**, `python3 build_all.py`: NAM and all six effects in
-one firmware, with NAM moved out of the IR category so a cab IR can follow it. This is the image
-running on the maintainer's unit (2026‑11‑11). The NAM‑only build (`build_effects.py`) is still there.
+one firmware, plus the US Small Tweed amp, with NAM moved out of the IR category so a cab IR can follow
+it. This is the image running on the maintainer's unit (2026‑11‑11). The NAM‑only build (`build_effects.py`) is still there.
 
 **You do this at your own risk! Do not attempt it if you are not comfortable with running command line tools and 
 potentially having to recover your unit yourself!**
@@ -75,6 +77,7 @@ Everything else in the firmware stays stock 3.80.0, apart from the blocks the cu
 | Ottobit | Distortion → Mono | mono Bitcrusher |
 | Doom Chug | Distortion → Mono | mono Pocket Fuzz |
 | NAM A2 Lite | Distortion → Mono | mono Regal Bass DI |
+| US Small Tweed (stock Line 6 amp) | Distortion → Mono | mono Tycoctavia Fuzz |
 
 The stereo versions of the replaced blocks stay.
 
@@ -134,6 +137,7 @@ compiler (`cc`) for those checks. Other combinations:
 | `build_all.py --with commander,corrupt` | … + Corrupt |
 | `build_all.py --with commander,corrupt,ottobit` | … + Ottobit |
 | `build_all.py --nam-host ir` | the default set, with NAM back in the IR category (file name ends `_NamIR`) |
+| `build_all.py --amp none` | the default set without the US Small Tweed amp (file name ends `_NoAmp`) |
 
 Every one of these has been flashed and worked on the unit, though the older ones were tested with NAM
 in the IR category.
@@ -272,17 +276,46 @@ fed into Ottobit, Geiger or Commander. It takes over the **mono Pocket Fuzz** (D
 Only one Doom Chug works per preset (a second one passes its input through). On load it glides up to
 its notes from low A. Works on the unit (2026‑11‑10).
 
+## Stock amps: US Small Tweed
+
+The firmware still contains Line 6's 224 amp and preamp models, with all the DSP code they need, but the
+HX Effects never lists them. The all‑in‑one image gives one of them a stock block's identity, the same
+trick NAM uses: **US Small Tweed** (Line 6's model of a Fender Champ) under **Distortion → Mono**, in place of the
+mono Tycoctavia Fuzz (the stereo one stays). It is Line 6's own model, unchanged: Drive, Bass, Mid,
+Treble, Presence, Ch Vol, Master, Sag, Hum, Ripple, Bias and Bias X. There's no cab in it, so follow it
+with a cab IR. Works on the unit (2026‑11‑11).
+
+Not every amp can be added this way. Every effect block runs inside a container with room for 907 words
+of the DSP's fast memory and 334 of program memory, and an amp only runs if it fits:
+
+| Tried | Result |
+|---|---|
+| US Small Tweed | plays (in the default image) |
+| Agua 51 (bass) | plays |
+| Tweed Blues (Line 6's Bassman) | locked the unit when scrolled over in the browser, though it fits the memory limits; cause unknown |
+| Moo)))n Jump (Sunn Model T) | silent, then locked on a knob turn: too big for the container |
+
+`build_all.py --amp agua51`, `tweedbrt` and `moonjump` build those tests; don't flash the last two. Each
+amp needs its own stock block to replace.
+
+The HX Effects' firmware has no DSP cost for its hidden amps, so each one declares Line 6's own figure from
+the HX Stomp 3.80.0 firmware. The two units declare identical costs for every model they share, and the
+figures line up with Benvesco's Helix DSP allocation table at about 75 per percent (US Small Tweed: 1209,
+16.12 %).
+
 ## Tuning the declared DSP cost
 
 The block declares a DSP cost of 2300 (`DSP_COST` in `build_effects.py`; it was 2700 until 2026‑11‑10). That number is bookkeeping
 only: the app uses it to decide when to grey out other blocks, and it has no effect on what the DSP
 actually does. The kernel was measured in the simulator at about 23% of a block (34,000 of 150,000
-cycles per audio block); stock blocks declare costs in roughly hundredths of a percent, so the honest
-figure is around 2300. Two NAM blocks and a few effects fit in one preset.
+cycles per audio block). Line 6's own costs run at about 75 per percent of its DSP allocation (they
+match Benvesco's Helix DSP table on that scale; see [Stock amps](#stock-amps-us-small-tweed)), so 2300 is
+about 31 % on Line 6's scale against the 23 % measured: a safe margin. Two NAM blocks and a few effects
+fit in one preset.
 
 If you want to trade some of that margin for more blocks:
 
-1. `DSP_COST` in `build_effects.py` is already at the 2300 the measurement supports; don't go below it.
+1. Lower `DSP_COST` in `build_effects.py` towards the measured 23 % (about 1725 on Line 6's scale); don't go below that.
    If you change it, rebuild and flash.
 2. Build the heaviest preset the unit now allows: two NAM blocks plus whatever was previously greyed
    out (the dynamic reverbs, Shimmer, Poly Pitch, Cosmos Echo are the heavy ones).
@@ -381,6 +414,8 @@ small header. Loading one into the stock 2048‑sample IR block does nothing use
   investigated.
 - **Doom Chug's Chug knob** does almost nothing audible on the unit except lower the level. Not
   investigated yet.
+- **Stock amps:** only some fit (see [Stock amps](#stock-amps-us-small-tweed)). Each declares Line 6's
+  own DSP cost for it, read from the HX Stomp firmware (US Small Tweed: 1209).
 - Presets made with NAM in the IR category load a stock 1024 IR block in its place after switching to
   the all‑in‑one image: add NAM again from Distortion → Mono.
 - Presets store the slot number, not the capture: moving a capture to another slot means updating the
@@ -490,7 +525,7 @@ None of these change the firmware; a boot failure needs the Updater flash above.
 
 ```
 build_effects.py          the one-step build (NAM)
-build_all.py              the all-in-one image: NAM and all six effects (--with, --nam-host: other sets)
+build_all.py              the all-in-one image: NAM, all six effects and US Small Tweed (--with, --nam-host, --amp)
 build_click.py            Click only; build_nam_click.py: NAM and Click
 firmware/                 where you put the stock .hxf (git-ignored, never committed)
 captures/                 demo NAM A2 Lite captures, already converted to User IR .wav files

@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Build HX Effects firmware 3.80.0 with NAM A2 Lite and the custom effects in one image (the all-in-one image).
 
-usage: python3 build_all.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--with LIST|none] [--nam-host regal|ir] [--no-check]
+usage: python3 build_all.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--with LIST|none] [--nam-host regal|ir] [--amp moonjump|agua51|tweedbrt|smalltweed] [--no-check]
+
+The default image also has Line 6's stock US Small Tweed amp on the mono Tycoctavia Fuzz (--amp smalltweed;
+--amp none leaves it out, suffix _NoAmp). Stock amps run on an effect block's identity when they fit its container
+(DM 907, PM 334 words): Agua 51 and US Small Tweed play; Tweed Blues locked the unit; Moo)))n is too big.
+--amp moonjump (failed on the unit: silent, locked on a knob turn) puts Line 6's stock Moo)))n Jump amp, which the HX Effects never lists, on the mono
+Tycoctavia Fuzz (Distortion > Mono): the host takes the amp's own parameters, states and graph, unchanged.
 
 NAM sits on the mono Regal Bass DI (Distortion > Mono, --nam-host regal, the default since 2026-11-11), not the
 1024 IR, so a real IR block can share its preset; Model is a list of User IR slots 1..21. --nam-host ir puts
@@ -315,6 +321,43 @@ def nam_off_ir(pa_params):
     return pa_params
 
 
+# --amp: a stock Line 6 amp the HX Effects never lists, run on a stock block's identity (a test so far). The host
+# gets the amp's own parameters, states and graph blob, untouched: no new DSP code and no new graph.
+# cost: Line 6's own Table 1 cost for the amp, from the HX Stomp 3.80.0 firmware (same scale: all 463 models the two
+# units share have identical costs; about 75 per percent in Benvesco's Helix DSP allocation table)
+STOCK_AMPS = {'moonjump': dict(amp='HD2_AmpMoonJump', host='HD2_DistTycoctaviaFuzzMono', name='HD2_DistMoonJump',
+                               display='Moo)))n Jump', cost=2850),
+              # Agua 51 fits the effect blocks' container (DM 629 of 907 words, 55 of 70 stages); Moo)))n does not
+              'agua51': dict(amp='HD2_AmpAgua51', host='HD2_DistTycoctaviaFuzzMono', name='HD2_DistAgua51',
+                             display='Agua 51', cost=1900),
+              # Tweed Blues (Line 6's Bassman): DM 846 of 907, PM 265 of 334; locked the unit when scrolled over (2026-11-11)
+              'tweedbrt': dict(amp='HD2_AmpTweedBluesBrt', host='HD2_DistTycoctaviaFuzzMono', name='HD2_DistTweedBluesBrt',
+                               display='Tweed Blues Brt', cost=2324),
+              # US Small Tweed: DM 410, PM 172, with send/receive links and power-amp knobs; works on the unit
+              # (2026-11-11) and is in the default image
+              'smalltweed': dict(amp='HD2_AmpUSSmallTweed', host='HD2_DistTycoctaviaFuzzMono', name='HD2_DistUSSmallTweed',
+                                 display='US Small Tweed', cost=1209)}
+
+
+def stock_params(pa, e3, info, m):
+    """A stock model's parameters in nam_params' form (records, metadata and state names as they are)."""
+    S, d = info['strings'], m['words']
+    states = [S[struct.unpack_from('<5I', e3, d[10] + 20 * k)[2]] for k in range(d[6])]
+    out = []
+    for p in sorted(m['params'], key=lambda p: p['slot']):
+        pm_cnt, pm_off = struct.unpack_from('<2I', e3, p['off'])
+        meta = []
+        for k in range(pm_cnt):
+            ks, kt, kv = struct.unpack_from('<3I', e3, pm_off + 12 * k)
+            meta.append((S[ks], kt, S[kv] if kt == 7 else kv))
+        raw = list(struct.unpack_from('<5I3I', e3, p['off']))
+        st = next(x for x in states if x.split('.')[0] == p['name'] + 'State')
+        out.append({'slot': p['slot'], 'pid': None, 'name': p['name'], 'type': p['type'], 'op': pa.NAM_INPUT_OP[p['type']],
+                    'raw': raw, 'meta': meta, 'state': st, 'default_word': raw[7]})
+    return out
+
+
+DEFAULT_AMPS = ('smalltweed',)                       # what a plain build_all.py adds from STOCK_AMPS
 DEFAULT_EXTRAS = ('commander', 'corrupt', 'ottobit', 'doomchug')   # what a plain build_all.py builds
 
 
@@ -354,8 +397,13 @@ def main():
         sys.exit('build_all.py: --nam-host takes ' + ' or '.join(NAM_HOSTS))
     nam_host = NAM_HOSTS[host_arg]
     nam_takeover = nam_host or be.TAKEOVER
+    amp_arg = argv[argv.index('--amp') + 1] if '--amp' in argv else None
+    amps = [] if amp_arg == 'none' or probe else amp_arg.split(',') if amp_arg else list(DEFAULT_AMPS)
+    if any(a not in STOCK_AMPS for a in amps):
+        sys.exit('build_all.py: --amp takes none or ' + ', '.join(STOCK_AMPS))
     suffix = '_Probe' if probe else ''.join('_' + k.capitalize() for k in extras) + ('_Meter' if meter else '') + \
-        ('' if nam_host else '_NamIR')
+        ('' if nam_host else '_NamIR') + ('' if amps == list(DEFAULT_AMPS) else
+                                          ''.join('_Amp' + a.capitalize() for a in amps) or '_NoAmp')
     out = os.path.abspath(argv[argv.index('-o') + 1]) if '-o' in argv else \
         os.path.join(HERE, 'build', f'HX_Effects_v3.80.0_All{suffix}.hxf')
     build = os.path.join(HERE, 'build')
@@ -471,6 +519,13 @@ def main():
         e4n, blobs[k], comps[k] = pa.add_model_entry4(e4n, clone['blob_index'], params[k], 0, prim_id=EFFECTS[k]['prim'],
                                                       b0_pad=pad)
     print('[+] Entry 4: ' + ', '.join(f'{k} blob {blobs[k]} on {comps[k]:#x}' for k in blobs))
+    amp_src = {}
+    for a in amps:                                       # stock amps: the host gets the amp's own blob
+        amp_src[a] = pa.find_model(info, STOCK_AMPS[a]['amp'])
+        targets[a] = pa.find_model(info, STOCK_AMPS[a]['host'])
+        params[a] = stock_params(pa, e3, info, amp_src[a])
+        blobs[a] = amp_src[a]['blob_index']
+        print(f'[+] {STOCK_AMPS[a]["amp"]} (blob {blobs[a]}, {len(params[a])} parameters) on {STOCK_AMPS[a]["host"]}')
     if probe:                                            # where the probe's words landed, checked
         w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
         d = w4[3]
@@ -497,6 +552,8 @@ def main():
     ids = {'nam': id_n, 'click': id_c}
     for k in fx:
         e3n, ids[k], _ = pa.add_model_entry3(e3n, targets[k], EFFECTS[k]['name'], EFFECTS[k]['display'], blobs[k], params[k])
+    for a in amps:
+        e3n, ids[a], _ = pa.add_model_entry3(e3n, targets[a], STOCK_AMPS[a]['name'], STOCK_AMPS[a]['display'], blobs[a], params[a])
     e3n = bytearray(e3n)
     ms = pa.parse_entry3_full(bytes(e3n))['models']
     for key, new_id in ids.items():
@@ -504,10 +561,14 @@ def main():
         d_tgt = list(struct.unpack_from('<14I', e3n, ms[targets[key]['model_id']]['off']))
         for k in (0, 1, 6, 7, 10, 11, 13):
             d_tgt[k] = d_new[k]
+        if key in amps:                                  # the amp's own states and parameters, as stock has them
+            for k in (6, 7, 10, 11):
+                d_tgt[k] = amp_src[key]['words'][k]
         struct.pack_into('<14I', e3n, ms[targets[key]['model_id']]['off'], *d_tgt)
     e3n = bytes(e3n)
     chk = pa.parse_entry3_full(e3n)['models']
-    displays = {'nam': be.DISPLAY, 'click': bc.DISPLAY, **{k: EFFECTS[k]['display'] for k in fx}}
+    displays = {'nam': be.DISPLAY, 'click': bc.DISPLAY, **{k: EFFECTS[k]['display'] for k in fx},
+                **{a: STOCK_AMPS[a]['display'] for a in amps}}
     for key, disp in displays.items():
         t = chk[targets[key]['model_id']]
         assert t['displayName'] == disp and t['blob_index'] == blobs[key] and len(t['params']) == len(params[key]), key
@@ -524,6 +585,11 @@ def main():
                                                        short_name=EFFECTS[k]['display'], dsp_cost=EFFECTS[k]['cost'],
                                                        n_params=len(params[k]), strip_title=None)
         print(f'[+] Entry 0: {EFFECTS[k]["display"]} preset_id {pid}, browser slots {hits}, dsp_cost {EFFECTS[k]["cost"]}')
+    for a in amps:
+        A_ = STOCK_AMPS[a]
+        e0n, pid, _, hits = pa.takeover_entry0_effects(e0n, targets[a]['words'][2], A_['display'], short_name=A_['display'],
+                                                       dsp_cost=A_['cost'], n_params=len(params[a]), strip_title=None)
+        print(f'[+] Entry 0: {A_["display"]} preset_id {pid}, browser slots {hits}, dsp_cost {A_["cost"]}')
     l6ia_bytes, _, _ = l6ia.rebuild_archive(l6ia_bytes, {0: e0n, 2: l6ia.swap32(e2_raw), 3: e3n, 4: e4n})
 
     # 6. Entry 2: the kernels, no shared byte, one hook each
@@ -594,6 +660,9 @@ def main():
                            data=list(placed[k][1]), dsp_cost=EFFECTS[k]['cost'], **({'kernel': b} if b != k else {}))
     if extras:
         manifest['extras'] = extras
+    if amps:
+        manifest['amps'] = {a: dict(model=STOCK_AMPS[a]['host'], amp=STOCK_AMPS[a]['amp'], blob=blobs[a],
+                                    display=STOCK_AMPS[a]['display'], dsp_cost=STOCK_AMPS[a]['cost']) for a in amps}
     if overlay:
         manifest['overlay'] = dict(ovl, meter=meter, ring0=ring0, curves=geiger_kernel.EXT_CURVES, place=list(ovk[overlays[0]].places['b3']), names=overlays)
     manifest.update(blob0_words=blob0_words, checked=check)

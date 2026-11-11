@@ -136,6 +136,18 @@ for key, single in (('nam', nam_img), ('click', click_img)):
           f'  host blob {ma["blob_index"]} word for word as in its image, composite {ba[tree + 1]:#x}')
     check(e0_rows(allimg, name) == e0_rows(single, name), '  Entry 0 rows as in its image')
 
+# stock amps on a stock block's identity: the amp's own knobs, states and graph blob
+for a, A_ in man.get('amps', {}).items():
+    h, mh = model(allimg, A_['model'])
+    s_, ms_ = model(stock, A_['amp'])
+    check(h['params'] == s_['params'] and h['states'] == s_['states'],
+          f'{A_["model"]} ({h["display"]}): {A_["amp"]}\'s own knobs and states')
+    check(mh['blob_index'] == ms_['blob_index'] == A_['blob'], f'  its graph is the amp\'s stock blob {A_["blob"]}')
+    check(h['display'] == A_['display'] and dict(h['meta']).get('category') == 'distortion', '  listed as Distortion > Mono')
+    check(blob(allimg, A_['blob']) == blob(stock, A_['blob']), '  that blob is unchanged from stock')
+    t1, t2 = e0_rows(allimg, A_['model'])
+    check(t1[3] == A_['dsp_cost'] and struct.unpack_from('<3I', t2, 24)[0] == len(h['params']), f'  Entry 0: dsp_cost {t1[3]}, {len(h["params"])} knobs')
+
 # Geiger, Commander, Corrupt: the eight knobs as defined
 for k in FX:
     E = build_all.EFFECTS[k]
