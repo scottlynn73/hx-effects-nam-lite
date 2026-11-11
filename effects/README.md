@@ -125,9 +125,11 @@ DM(11) Root (int 0..3), DM(13) Harmonic (int 1..8).
 
 ## The next six (`ottobit/`, `stutter/`, `syntax/`, `grains/`, `sequence/`, `warp/`)
 
-Built and checked offline on branch `ottobit` (2026-11-04): C reference, tests, and a SHARC kernel each,
-bit for bit against the reference in ssim. Ottobit is in an image and works on the unit, as an overlay
-(`docs/baseline-audit.md`, "Finding more memory"); the other five are not in an image yet.
+Written 2026-11-04 (on `main` since 2026-11-11): C reference, tests, and a SHARC kernel each, bit for
+bit against the reference in ssim. **Ottobit** is in the default image and works on the unit, as an
+overlay (`docs/baseline-audit.md`, "Finding more memory"). **Syntax** was built into a test image and
+dropped: it locked the unit's interface when knobs were turned beside Geiger or Ottobit (audio carried
+on; cause unknown). Stutter, Grains, Sequence and Warp are not in an image.
 Each kernel's header comment lists its knob words. Every one keeps the conventions of the kernels above;
 the rings of the buffer effects sit at `RING0` (DDR2 on the unit, set by the image build).
 
@@ -236,4 +238,11 @@ DM(10) Subdivision (int). What the hardware builds taught (2026-11-03):
 
 ## Doom Chug (`doomchug/`)
 
-A low, dark four-voice drone generator that ignores the guitar, made to feed the glitch effects. Saws on root, sharp root, fifth and octave; every pitch stays between 110 Hz (low A) and 440 Hz. Each step (Rate, 0.05 to 8 a second) moves the Pattern, gives each voice a new random pitch target and LFO speed, and restarts the Chug thud. Knobs: Key, Pattern, Rate, Drift, Warble, Chug, Tone, Level; the input passes through untouched. A resident kernel, not an overlay, because it is meant to run beside Ottobit and a swap costs about 28,000 cycles on the unit. 360 instructions, 77 data words, one slot (a second block passes through), every constant an immediate; worst 2,743 cycles a call in ssim.
+**In the default image and working on the unit (2026-11-10)**, on the mono Pocket Fuzz. The Chug knob
+does almost nothing audible there except lower the level: not investigated (the thud decays in about
+0.15 s, so at low Rate it mostly turns the drone down between steps).
+
+A low, dark four-voice drone generator that ignores the guitar, made to feed the glitch effects. Saws on root, sharp root, fifth and octave; every pitch stays between 110 Hz (low A) and 440 Hz. Each step (Rate, 0.05 to 8 a second) moves the Pattern, gives each voice a new random pitch target and LFO speed, and restarts the Chug thud. Knobs: Key, Pattern, Rate, Drift, Warble, Chug, Tone, Level; the input passes through untouched. A resident kernel, not an overlay, because it is meant to run beside Ottobit and a swap costs about 28,000 cycles on the unit. 360 instructions, 77 data words, one slot (a second block passes through), every constant an immediate; worst 2,743 cycles a call in ssim. `doomchug_kernel.py --check` (part of `make sharc-check`) requires every output word to equal the C reference's; `test_doomchug.c` checks pitch range, patterns, block sizes and hostile input.
+
+Knob words: DM(5) Key (int 0..11), DM(6) Pattern (int 0..8), DM(7) Rate, DM(8) Drift, DM(9) Warble,
+DM(10) Chug, DM(11) Tone (all 0..1), DM(13) Level (0..1).

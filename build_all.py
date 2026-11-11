@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build HX Effects firmware 3.80.0 with NAM A2 Lite, Click and Geiger in one image.
+"""Build HX Effects firmware 3.80.0 with NAM A2 Lite and the custom effects in one image (the all-in-one image).
 
 usage: python3 build_all.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--with LIST|none] [--nam-host regal|ir] [--no-check]
 
@@ -13,7 +13,7 @@ and Geiger alone, build/HX_Effects_v3.80.0_All.hxf.
 
   NAM A2 Lite   as build_nam_click.py, but with 2 slots (two NAM blocks at once; a third passes its
                 input through) instead of 3, which frees Block 3 for Geiger, and its DDR2 blocks at
-                0x296400 (the Blob 0 buffer holds three host graphs: 0x7a000 words). IR > Single.
+                0x296400 (the Blob 0 buffer holds three host graphs: 0x7a000 words). Where it is listed: see --nam-host.
   Click         as build_nam_click.py (Delay > Mono, the mono Mod/Chorus Echo's slot), primitive 0x0128,
                 in the top of Block 3.
   Geiger        bit crusher / sample-rate reducer / 16-curve waveshaper (effects/geiger), taking over
@@ -24,7 +24,14 @@ and Geiger alone, build/HX_Effects_v3.80.0_All.hxf.
   --with commander          adds Commander (square-wave octave fuzz, effects/commander) on the mono
                             Xenomorph Fuzz (Distortion > Mono), primitive 0x0100;
   --with commander,corrupt  and Corrupt (pitch-tracking square synth, effects/corrupt) on Octave Fuzz
-                            (Distortion > Mono), primitive 0x0838.
+                            (Distortion > Legacy), primitive 0x0838;
+  ...,ottobit               and Ottobit (sequenced crusher, effects/ottobit) on the mono Bitcrusher, primitive
+                            0x2392, as an overlay: code and data inside Blob 0, a resident stub copies them in;
+  ...,ottobit,doomchug      and Doom Chug (drone generator, effects/doomchug) on the mono Pocket Fuzz, primitive
+                            0x238f, resident in Block 3 (the default set);
+  ...,ottobit,syntax        Syntax instead of Doom Chug, on the same Pocket Fuzz slot (dropped: knob turns
+                            locked the unit's interface beside Geiger or Ottobit).
+  --meter                   the overlays report their cycle cost by sound (diagnostic image).
                 With either, NAM keeps 2 slots but puts its d >= 17 rings in DDR2 too (nam_multi.py
                 --far-d 17), which frees Block 3 for the extra kernels; the Blob 0 buffer grows to
                 0x7b000 words (five host graphs) and NAM's DDR2 slots move up to 0x297400. Geiger,

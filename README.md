@@ -21,11 +21,17 @@ runs NAM captures on the unit's own SHARC DSP. This is the HX Effects port of
 simulator and firmware tools it uses (copied into `tools/` and `src/`, with the HX Effects support
 added).
 
-It can also add **Click**, a metronome block of our own (see [Click: a metronome block](#click-a-metronome-block)),
-either on its own or in the same image as NAM, and **Geiger**, a bit crusher (see
-[Geiger: a bit crusher](#geiger-a-bit-crusher)), in an image with all three. Two more blocks,
-**Commander** (an octave fuzz) and **Corrupt** (a tracking square synth), can join them (see
-[Commander and Corrupt](#commander-and-corrupt-octave-fuzz-and-tracking-synth)).
+It also adds effects of our own, each an original algorithm running on the same DSP:
+
+- **Click**, a metronome block ([Click](#click-a-metronome-block))
+- **Geiger**, a bit crusher ([Geiger](#geiger-a-bit-crusher))
+- **Commander**, an octave fuzz, and **Corrupt**, a tracking square synth ([Commander and Corrupt](#commander-and-corrupt-octave-fuzz-and-tracking-synth))
+- **Ottobit**, a sequenced bit crusher with random stutters ([Ottobit](#ottobit-a-sequenced-bit-crusher))
+- **Doom Chug**, a low drone generator to feed the glitch effects ([Doom Chug](#doom-chug-a-low-drone-generator))
+
+**The recommended build is the all‑in‑one image**, `python3 build_all.py`: NAM and all six effects in
+one firmware, with NAM moved out of the IR category so a cab IR can follow it. This is the image
+running on the maintainer's unit (2026‑11‑11). The NAM‑only build (`build_effects.py`) is still there.
 
 **You do this at your own risk! Do not attempt it if you are not comfortable with running command line tools and 
 potentially having to recover your unit yourself!**
@@ -36,32 +42,41 @@ potentially having to recover your unit yourself!**
 
 ## What you get
 
-- **NAM A2 Lite**, under **IR → Single** in the block browser, with the knobs:
+**NAM A2 Lite**, with the knobs:
 
-  | Knob | What it does |
-  |---|---|
-  | **Model** | Which capture plays: 1–128 is the User IR slot that holds it. A slot holding anything else is silent. |
-  | **Input** | Gain into the capture, −20 to +20 dB; 0 dB at 5.0 |
-  | **Bass / Mid / Treble / Presence** | A tone stack after the model, ±12 dB, flat at 5.0 |
-  | **Ch Vol** | Output level; 0 dB at 5.0, +12 dB at 10 |
-  | **Polarity** | Normal / Inverted |
+| Knob | What it does |
+|---|---|
+| **Model** | Which capture plays: the number of the User IR slot that holds it. A slot holding anything else is silent. |
+| **Input** | Gain into the capture, −20 to +20 dB; 0 dB at 5.0 |
+| **Bass / Mid / Treble / Presence** | A tone stack after the model, ±12 dB, flat at 5.0 |
+| **Ch Vol** | Output level; 0 dB at 5.0, +12 dB at 10 |
+| **Polarity** | Normal / Inverted |
 
-- The block takes over the **1024‑sample IR** block's identity, so that block is no longer available.
-  The **2048‑sample IR** block is untouched and captures and cab IRs can share the 128 User IR slots, but
-  a preset **cannot** hold a NAM block and another IR block: on the unit each hides the other in the
-  browser, in either order (found 2026‑11‑10). Two NAM blocks are fine.
-- The IR category's default scribble‑strip title becomes **"NAM / IR_2048"**. The NAM block shows the
-  capture's name once a slot is selected; the 2048 IR block shows the IR's name once one is selected.
-- In the all‑in‑one image (`build_all.py`) NAM is instead under **Distortion → Mono → NAM A2 Lite**, in
-  place of the mono Regal Bass DI, so a 2048 IR (or any IR block) can follow it as the cab. There
-  **Model** is a list of User IR slots 1–21 showing numbers, not names (the IR name list exists only on
-  IR blocks), and the 1024‑sample IR block is stock. `build_all.py --nam-host ir` builds the old layout.
-- Everything else in the firmware stays stock 3.80.0.
-- Optionally, with `build_nam_click.py` instead of `build_effects.py`: the **Click** metronome as well,
-  in place of the mono Mod/Chorus Echo delay; or with `build_all.py`: Click and the **Geiger** bit crusher
-  (in place of the mono Megaphone), with NAM limited to two blocks at once (below); with
-  `build_all.py --with commander[,corrupt]`, also **Commander** (in place of the mono Xenomorph Fuzz) and
-  **Corrupt** (in place of Octave Fuzz).
+Where the block lives depends on the image:
+
+| | All‑in‑one (`build_all.py`, recommended) | NAM only (`build_effects.py`) |
+|---|---|---|
+| Browser | **Distortion → Mono → NAM A2 Lite**, in place of the mono Regal Bass DI (the stereo one stays) | **IR → Single → NAM A2 Lite**, in place of the 1024‑sample IR block |
+| Model knob | User IR slots **1–21**, shown as numbers | User IR slots 1–128, with the capture's name |
+| A cab IR after it | Yes: the IR blocks are all stock, so a 2048 IR (or any IR block) can follow NAM | **No**: the unit won't put a NAM block and any other IR block in one preset, in either order |
+| NAM blocks at once | 2 (a third passes its input through) | 3 |
+
+The Model knob is limited to 21 slots in the all‑in‑one image because the IR name list exists only on IR
+blocks and the unit's ordinary list knobs stop at 21 entries. Keep captures in slots 1–21 there.
+
+Everything else in the firmware stays stock 3.80.0, apart from the blocks the custom effects take over:
+
+| Effect | Browser | Replaces |
+|---|---|---|
+| Click | Delay → Mono | mono Mod/Chorus Echo |
+| Geiger | Distortion → Mono | mono Megaphone |
+| Commander | Distortion → Mono | mono Xenomorph Fuzz |
+| Corrupt | Distortion → Legacy | Octave Fuzz |
+| Ottobit | Distortion → Mono | mono Bitcrusher |
+| Doom Chug | Distortion → Mono | mono Pocket Fuzz |
+| NAM A2 Lite | Distortion → Mono | mono Regal Bass DI |
+
+The stereo versions of the replaced blocks stay.
 
 ## What you need
 
@@ -100,6 +115,28 @@ python3 build_effects.py
 `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf` in about 30 seconds. The build checks the firmware's MD5 and
 refuses any other file; the kernel is first run in the SHARC simulator and must match the reference bit
 for bit (`--no-check` skips that).
+
+**Or the all‑in‑one image (recommended):**
+
+```
+python3 build_all.py                      # NAM + all six effects
+python3 tools/verify/verify_all.py        # read the image back and check it
+```
+
+This writes `build/HX_Effects_v3.80.0_All_Commander_Corrupt_Ottobit_Doomchug.hxf` in a few minutes:
+every kernel is first checked bit for bit in the simulator (`--no-check` skips that). It also needs a C
+compiler (`cc`) for those checks. Other combinations:
+
+| Command | Image |
+|---|---|
+| `build_all.py --with none` | NAM + Click + Geiger |
+| `build_all.py --with commander` | … + Commander |
+| `build_all.py --with commander,corrupt` | … + Corrupt |
+| `build_all.py --with commander,corrupt,ottobit` | … + Ottobit |
+| `build_all.py --nam-host ir` | the default set, with NAM back in the IR category (file name ends `_NamIR`) |
+
+Every one of these has been flashed and worked on the unit, though the older ones were tested with NAM
+in the IR category.
 
 ## Click: a metronome block
 
@@ -146,14 +183,9 @@ Geiger reduces the sample rate and bit depth and then shapes the result through 
 | **Mix** | Dry/wet |
 | **Anti‑Alias** | On filters before the sample‑and‑hold |
 
-It comes in one image with NAM and Click:
-
-```
-python3 build_all.py --with none   # build/HX_Effects_v3.80.0_All.hxf: NAM A2 Lite + Click + Geiger
-```
-
-In this image NAM runs **two** blocks at once instead of three (a third NAM block passes its input
-through): that is the DSP memory Geiger uses. Flashed and working on an HX Effects (2026‑11‑04).
+It is in every all‑in‑one image (`build_all.py`; `--with none` for just NAM, Click and Geiger). In
+those images NAM runs **two** blocks at once instead of three (a third NAM block passes its input
+through): that is the DSP memory Geiger uses. Working on the unit since 2026‑11‑04.
 
 ## Commander and Corrupt: octave fuzz and tracking synth
 
@@ -188,18 +220,57 @@ over **Octave Fuzz** (Distortion → Legacy → "Corrupt").
 | **Harmonic** | 1x–8x the root: 2x an octave, 3x a fifth above that, 5x a third, … |
 
 Both like single notes, the neck pickup and the tone rolled back a little; chords make them glitch
-(that is part of the sound). They come in two images, each with everything above:
-
-```
-python3 build_all.py --with commander           # build/HX_Effects_v3.80.0_All_Commander.hxf
-python3 build_all.py --with commander,corrupt   # build/HX_Effects_v3.80.0_All_Commander_Corrupt.hxf
-```
+(that is part of the sound). Both are in the default all‑in‑one image; `--with commander` builds one
+with Commander alone.
 
 To make room, NAM keeps its two blocks but moves more of its working memory to DDR2 (`nam_multi.py
 --far-d 17`), and the DSP's boot stream loads the kernels' zeroed state with zero‑fill records instead
 of stored zeros: that stream must fit a 512 KiB partition, and with all five blocks it has about 800 bytes
 left. In the image with both, Commander and Corrupt share one kernel (one copy of the common parts).
-Built and checked in the simulator and offline; **both images work on the unit** (2026‑11‑04).
+**Both work on the unit** (2026‑11‑04).
+
+## Ottobit: a sequenced bit crusher
+
+Ottobit crushes the signal like Geiger, but a pattern steps its sample rate and filter up and down in
+time, and random stutters loop short slices. It takes over the **mono Bitcrusher** (Distortion → Mono →
+"Ottobit").
+
+| Knob | What it does |
+|---|---|
+| **Sample Rate** | 250 Hz – 48 kHz, the base rate the pattern moves around |
+| **Bit Depth** | 1–16 bits |
+| **Filter** | A resonant low‑pass after the crusher |
+| **Pattern** | Off, or 1–8: six‑step patterns of rate and filter multipliers |
+| **Speed** | 0.5–16 steps a second |
+| **Stutter** | The chance that a step loops a short slice instead |
+| **Output** | −36 to +12 dB |
+| **Mix** | Dry/wet |
+
+Up to four Ottobit blocks can run at once in the simulator; more than one hasn't been tried on the unit. It runs as an **overlay**: its code and data travel in the
+DSP's graph library and a small resident stub copies them into DSP memory, because there was no room
+left to load it at boot. Works on the unit (2026‑11‑09).
+
+## Doom Chug: a low drone generator
+
+Doom Chug ignores the guitar (which passes through untouched) and adds a dark drone: four detuned saw
+voices on the root, a slightly sharp root, the fifth and the octave, wandering and wobbling, stepping
+through a pattern. Every pitch stays between 110 Hz (the open A string) and 440 Hz. It is meant to be
+fed into Ottobit, Geiger or Commander. It takes over the **mono Pocket Fuzz** (Distortion → Mono →
+"Doom Chug").
+
+| Knob | What it does |
+|---|---|
+| **Key** | The root note, A to G# |
+| **Pattern** | Off, or 1–8: crawl, blue note, flat second, tritone, descent, falling minor, octave riff, lost |
+| **Rate** | How often it steps: once every 20 seconds to 8 times a second |
+| **Drift** | How far each voice wanders at random, up to half an octave |
+| **Warble** | Uneven wobble in each voice's pitch and level |
+| **Chug** | Meant to turn the drone into a thud on each step; see [Limits](#limits) |
+| **Tone** | Dark to bright |
+| **Level** | Drone volume |
+
+Only one Doom Chug works per preset (a second one passes its input through). On load it glides up to
+its notes from low A. Works on the unit (2026‑11‑10).
 
 ## Tuning the declared DSP cost
 
@@ -228,7 +299,9 @@ you a block you might have fitted. When in doubt, leave it at 2300.
 **Double check that you have a backed up version of the .hxf firmware file for your unit- you may need it for recovery!**
 
 1. In HX Edit, back up your presets and IRs, then **close HX Edit**.
-2. Open Line 6 Updater, choose **Choose File**, pick `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf`.
+2. Open Line 6 Updater, choose **Choose File**, pick the image you built:
+   `build/HX_Effects_v3.80.0_All_Commander_Corrupt_Ottobit_Doomchug.hxf` (all‑in‑one) or
+   `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf` (NAM only).
 3. Let it finish and restart the unit. A normal boot means the install worked; see
    [Recovery](#recovery) if it shows "Boot Failure" or stops at the splash.
 
@@ -242,7 +315,7 @@ back into its main app. Close HX Edit and Line 6 Updater first, then:
 
 ```
 pip install pyusb libusb-package      # once, in the .venv
-.venv/bin/python tools/flash.py flash build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf
+.venv/bin/python tools/flash.py flash build/HX_Effects_v3.80.0_All_Commander_Corrupt_Ottobit_Doomchug.hxf
 ```
 
 It checks the file (product, MD5, every entry's checksum), asks you to type `flash`, then: restarts the
@@ -274,10 +347,12 @@ Updater with a logging libusb shim, `decode.py` reads the log), and `.venv/bin/p
    The `.wav` is about 8 KB: it is not a sound, it carries the capture's weights.
 2. In HX Edit's **Impulses** tab, import the `.wav` into a User IR slot (say slot 5). Do this with a
    preset selected that has no NAM block in it; HX Edit does not understand the NAM block (see Limits).
-3. On the unit, add a block, choose **IR → Single → NAM A2 Lite**, and set **Model** to 5.
+3. On the unit, add a block, choose **Distortion → Mono → NAM A2 Lite** (all‑in‑one image) or
+   **IR → Single → NAM A2 Lite** (NAM only), and set **Model** to 5.
+4. For a cab, add a **2048‑sample IR** block after NAM (all‑in‑one image only) and pick a cab IR in another slot.
 
-A layout that's easy to remember helps, since the Model knob shows slot numbers, not names: for
-example captures in slots 1–20 and cab IRs from 21.
+Captures and cab IRs share the 128 User IR slots. A layout that's easy to remember helps: for example
+captures in slots 1–20 (the all‑in‑one image's Model knob reaches 1–21) and cab IRs from 22.
 
 ## Try it quickly: the demo captures
 
@@ -286,16 +361,28 @@ so you can hear the block without converting anything yourself:
 
 1. Open HX Edit, go to the **Impulses** tab, and drag the `.wav` files from `captures/` into free
    User IR slots (note the slot numbers). Do this with a preset selected that contains no NAM block.
-2. On the unit, add **IR → Single → NAM A2 Lite** to a preset and set **Model** to one of those slot
-   numbers. The capture's name shows on the strip once it's selected.
+2. On the unit, add NAM A2 Lite to a preset (see [Use](#use) for where it is) and set **Model** to one of
+   those slot numbers. In the NAM‑only image the capture's name shows on the strip once it's selected.
 3. Set Input, Bass/Mid/Treble/Presence and Ch Vol to 5.0 for the capture as recorded, then adjust.
 
 Each `.wav` is about 8 KB and is not an audio IR: it carries the capture's 1,871 weights behind a
-small header. Loading one into the stock 2048‑sample IR block does nothing useful. 
+small header. Loading one into the stock 2048‑sample IR block does nothing useful.
+
+## Limits
 
 - **HX Edit cannot edit the NAM block.** It shows "Failed to load model (code −8200)" when a preset
-  containing one is selected, because its own definition of the 1024‑sample IR block has 5 knobs and
-  the unit's now has 8. Edit NAM blocks on the unit; use HX Edit for everything else (IR import works).
+  containing one is selected, because its own definition of the block NAM replaced has fewer knobs than
+  the unit's now has. Edit NAM blocks on the unit; use HX Edit for everything else (IR import works).
+  The custom effects take over stock blocks the same way, so expect the same in HX Edit for them.
+- In the all‑in‑one image the **Model knob reaches slots 1–21** only.
+- In the NAM‑only image a preset **can't hold a NAM block and another IR block** (see
+  [What you get](#what-you-get)); the all‑in‑one image doesn't have this problem.
+- **Two NAM blocks in a split:** with one NAM in each path, the bottom path is much quieter. Not
+  investigated.
+- **Doom Chug's Chug knob** does almost nothing audible on the unit except lower the level. Not
+  investigated yet.
+- Presets made with NAM in the IR category load a stock 1024 IR block in its place after switching to
+  the all‑in‑one image: add NAM again from Distortion → Mono.
 - Presets store the slot number, not the capture: moving a capture to another slot means updating the
   presets that use it.
 - Only 3‑channel A2 Lite captures fit; standard and A2 Full captures don't.
@@ -383,24 +470,33 @@ None of these change the firmware; a boot failure needs the Updater flash above.
   level 0 dB). Those inits are the `{(member, pid): value}` overrides in `tools/patch_amp.py`.
 - The app's boot self‑test rejects any model it doesn't already know, so the NAM block takes over the
   1024‑sample IR block's identity (name, preset id, browser entry) rather than adding a new one.
+- In the all‑in‑one image NAM takes over the mono Regal Bass DI's identity instead, on the same IR
+  graph: Distortion blocks get ordinary knob pages, so Model becomes a plain list knob, and the IR
+  category is left stock. On the unit, NAM in the IR category shut out every other IR block; the most
+  likely reason is an app rule allowing one IR block type per preset (the check itself hasn't been found).
 - Click works the same way on the mono Mod/Chorus Echo's identity, on a copy of the IR block's graph with
   its own primitive (0x0128 in the combined image). A delay host matters: HX draws a delay with ordinary
   knob pages, where an IR block's pages treat knob 1 as the IR selector. Its tempo sync is the stock
   delay's own: the two parameter‑map steps that turn Time, the note value and the global tempo into a
   beat length are copied from Mod/Chorus Echo.
-- In the combined image Click's kernel sits in the top of DSP memory block 3, above NAM's, and the DSP's
-  graph buffer is 0x1000 words larger (so NAM's DDR2 working memory starts at `0x295400` instead).
+- In the combined images Click's kernel sits in the top of DSP memory block 3, above NAM's, and the DSP's
+  graph buffer is larger (so NAM's DDR2 working memory starts higher). Geiger, Commander, Corrupt and
+  Doom Chug are packed between NAM and Click. Ottobit is an overlay (see its section).
+- The two hard limits are the DSP boot stream (a 512 KiB partition, about 2 KB left in the default
+  image) and DSP memory block 3 (a few dozen words left). Another resident effect won't fit without
+  freeing space first; further effects would have to be overlays. Details: `docs/baseline-audit.md`.
 
 ## Layout
 
 ```
 build_effects.py          the one-step build (NAM)
-build_click.py            Click only; build_nam_click.py: NAM and Click; build_all.py: NAM, Click and Geiger
-                          (--with commander[,corrupt]: and Commander, Corrupt)
+build_all.py              the all-in-one image: NAM and all six effects (--with, --nam-host: other sets)
+build_click.py            Click only; build_nam_click.py: NAM and Click
 firmware/                 where you put the stock .hxf (git-ignored, never committed)
 captures/                 demo NAM A2 Lite captures, already converted to User IR .wav files
 .gitignore                keeps firmware/, build/ and every .hxf out of version control
 README.md                 this file
+HANDOVER.md               the state of play and how things were found, for picking the project up
 build/                    the output (created by the build)
 tools/                    hxf.py, l6ia.py, l6ia_verify.py, patch_amp.py, nam2ir.py
 tools/flash.py            USB flasher with boot check (see Flashing from the command line)

@@ -95,8 +95,8 @@ What is left after all three: 8 words in Block 2's tail (NAM's staging buffers f
 about 256 words between Geiger's code and Click's data and about 137 above Click's code. (An earlier
 version of this note said "about 90 instructions in Block 2's tail"; that was wrong.)
 
-Four and five kernels (`build_all.py --with commander[,corrupt]`; built and checked offline, not yet run
-on a unit; addresses in `build/all_commander[_corrupt]_manifest.json`):
+Four and five kernels (`build_all.py --with commander[,corrupt]`; both work on the unit since 2026-11-04;
+addresses in `build/all_commander[_corrupt]_manifest.json`):
 
 | Region | Use |
 |---|---|
@@ -117,7 +117,7 @@ saves about 5.3 KB: 1,912 bytes free with Commander, 812 with Commander and Corr
 Anything more needs a smaller boot stream (Geiger's 4 KB of curve tables computed at start‑up instead,
 or NAM's 8 KB tone‑stack table) before it needs DSP memory.
 
-## Finding more memory (2026-11-04, branch `ottobit`)
+## Finding more memory (2026-11-04)
 
 Five kernels leave 812 bytes of Entry 2 and about 1,500 words of Block 3; each further effect needs about
 400-450 instructions and 150-570 data words. What the stock image offers:
@@ -167,6 +167,14 @@ Geiger's 1,040 curve words into Blob 0, leaving 4,560 bytes of Entry 2 free. Not
 effects sharing the region (swap out their data as well as their code), and a home for the larger rings: only
 about 31,000 words of DDR2 are known free below `0x2a8df6`, less than Stutter's or Grains' rings need as written.
 
+**Since then (2026-11-10/11).** Two different overlays sharing the region (Ottobit and Syntax, saving each
+one's state to its home in Blob 0) worked, but swapping every call costs about 28,000 cycles on the unit,
+and Syntax was dropped for unexplained interface lock-ups. Doom Chug went in as a resident kernel instead
+(77 data words, constants as immediates) so it never swaps beside Ottobit. The default image
+(`build_all.py`) now has about 2 KB of Entry 2 and a few dozen Block 3 words left (cursor `0xe7c10`
+against `0xe7c2f`): a further effect has to be an overlay. NAM in that image sits on the mono Regal Bass
+DI rather than the 1024 IR; its memory layout is unchanged.
+
 
 ## Tested vs untested
 
@@ -176,6 +184,8 @@ about 31,000 words of DDR2 are known free below `0x2a8df6`, less than Stutter's 
   tempo and the global BPM reaching a kernel; the register and instance‑block rules above.
 - Untested: in‑place buffers; how often the host rewrites knob words; whether a bypassed block's
   primitive is still called; MIDI clock; any frame count other than 16; NAM's own footswitch bypass.
+- Tested since (2026-11-11): overlays copied from Blob 0 and swapped every call; NAM reading the User IR
+  store from a non-IR host with no IR block in the preset; a real IR block after NAM.
 
 ## Already done from the plan's flasher track (F0–F4)
 

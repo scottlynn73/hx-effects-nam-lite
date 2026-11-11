@@ -1,31 +1,40 @@
 # Handover: NAM A2 Lite on the Line 6 HX Effects
 
-Working state as of 2026‑11‑04 (first written 2026‑11‑01). A working, tested firmware build exists,
-a USB flasher that installs it without Line 6 Updater, a working custom metronome block (Click),
-and an image with both NAM and Click (`build_nam_click.py`). This note is for picking the
-project up in Claude Code (or anywhere) without re‑deriving anything.
+Working state as of 2026‑11‑11 (first written 2026‑11‑01). Two builds work on the unit: the NAM‑only
+image (`build_effects.py`) and the all‑in‑one image (`build_all.py`: NAM, Click, Geiger, Commander,
+Corrupt, Ottobit and Doom Chug, with NAM on the mono Regal Bass DI). The all‑in‑one default image
+(MD5 `7b291b5f…`) is what runs on the unit. A USB flasher installs either without Line 6 Updater.
+This note is for picking the project up in Claude Code (or anywhere) without re‑deriving anything;
+the dated sections further down record how things were found.
 
 ## What exists
 
 - **Repo:** `/Users/scott/hx-effects-nam-lite` → <https://github.com/scottlynn73/hx-effects-nam-lite>
   (standalone, GPL‑3.0, no Line 6 files tracked; `.gitignore` excludes `firmware/`, `build/`, `*.hxf`,
-  `*.l6ia`, `.venv/`, `.DS_Store`, `usblog/`). Work is on `main`, SSH remote; not pushed since 2026‑11‑03.
+  `*.l6ia`, `.venv/`, `.DS_Store`, `usblog/`). Everything is on `main` (the only branch), SSH remote,
+pushed 2026‑11‑11. Pushing from Claude's shell has failed before: push from your own terminal.
 - **Upstream + scratch work:** `~/hx-stomp-nam-lite` (clone of
   <https://github.com/nocaseguy/hx-stomp-nam-lite> with all the edits applied by `apply_effects*.py`,
   plus the bisection scripts, `*_parts/` entry dumps, `stomp_e2.txt`/`effects_e2.txt`, `*_ddr.txt`).
   Not needed to build; useful if the offsets ever have to be re‑mapped.
-- **Build:** `cd /Users/scott/hx-effects-nam-lite && source .venv/bin/activate && python3 build_effects.py`
-  reads `firmware/HX_Effects_v3.80.0_0xd97239907.hxf` (MD5 `7c2ebdf1bffb6bcc5f89dda97f91e40c`) and
-  writes `build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf` (current output MD5 `a27780d3ff57612ebd2484a4cc4a9f7e`).
+- **Build:** `cd /Users/scott/hx-effects-nam-lite && source .venv/bin/activate`, then
+  `python3 build_all.py` (all‑in‑one, the default image, MD5 `7b291b5f27ad8bb7c121c15528dbc5d2`; check
+  it with `python3 tools/verify/verify_all.py`) or `python3 build_effects.py` (NAM only, MD5
+  `aaa5186b41f8db6f7a05487355706bb1` since the 2300 cost; verify_all compares against it, so rebuild it
+  after any change to NAM). Both read `firmware/HX_Effects_v3.80.0_0xd97239907.hxf` (MD5
+  `7c2ebdf1bffb6bcc5f89dda97f91e40c`) and refuse anything else.
 - **Flash:** HX Edit and Line 6 Updater closed, then
-  `.venv/bin/python tools/flash.py flash build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf` (~2 min, ends `BOOTED` /
+  `echo flash | .venv/bin/python tools/flash.py flash build/<image>.hxf` (~2 min, ends `BOOTED` /
   `BOOT FAILED`, exit 0/1). `flash.py info` is read‑only. Needs `pip install pyusb libusb-package` in
-  the venv. Line 6 Updater → Choose File still works too.
-- **Result on the unit:** block under **IR → Single → "NAM A2 Lite"** (takes over the 1024‑sample IR
-  block's identity; the 2048 IR block is intact). The standalone build was flashed and booted on
+  the venv; always the `.venv` Python (system Python has no numpy). Line 6 Updater → Choose File
+  still works too. `BOOTED` only means the main app answers on USB: a frozen UI passed it once, so
+  after any new kind of change check the screen and footswitches as well.
+- **Result on the unit (NAM‑only image):** block under **IR → Single → "NAM A2 Lite"** (takes over the
+  1024‑sample IR block's identity; the 2048 IR block is intact, but the unit won't put it in a preset
+  beside NAM). In the all‑in‑one image NAM is under Distortion → Mono instead (see below). The standalone build was flashed and booted on
   2026‑11‑03, with both Line 6 Updater and `flash.py`. Knobs: Model (User IR slot), Input, Bass, Mid,
   Treble, Presence, Ch Vol, Polarity. Strip title "NAM / IR_2048". Two NAM blocks + a few effects
-  fit in one preset. Sounds right (confirmed by ear after the EQ fixes below).
+  fit in one preset (declared DSP cost 2300 since 2026‑11‑10, was 2700). Sounds right (confirmed by ear after the EQ fixes below).
 - **Recovery:** hold the **>** (right arrow) button while powering on → fail‑safe update mode → Updater
   → Choose File → stock `.hxf`. Verified against Line 6's reset‑procedures KB page.
 
@@ -57,6 +66,40 @@ harness table at `0x28102650`; count getter `movw #465` at `0x28100b5c` (the oth
 (we used `0x2810021c` = Distortion onward), counts `+0xf0`, 13 categories × 4, IR = cat 9 (our index),
 subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `btype` per item is a block‑type enum
 (IR = 0x13/0x14/0x15), not a category.
+
+## The all‑in‑one image now (2026‑11‑11)
+
+`python3 build_all.py` with no options:
+
+| Block | Browser | Replaces | Kernel | On the unit |
+|---|---|---|---|---|
+| NAM A2 Lite | Distortion → Mono | mono Regal Bass DI | Block 2 tail + Block 3, 2 slots, primitive 0x9c75 | works; Model = User IR slots 1..21 |
+| Click | Delay → Mono | mono Mod/Chorus Echo | Block 3 top, 0x0128 | works |
+| Geiger | Distortion → Mono | mono Megaphone | Block 3, 0x012e, curves in Blob 0 | works |
+| Commander | Distortion → Mono | mono Xenomorph Fuzz | Block 3, shared kernel with Corrupt, 0x0100 | works |
+| Corrupt | Distortion → Legacy | Octave Fuzz | (shared), 0x0838 | works |
+| Ottobit | Distortion → Mono | mono Bitcrusher | overlay, stub on 0x2392, rings in DDR2 | works |
+| Doom Chug | Distortion → Mono | mono Pocket Fuzz | Block 3 resident, 0x238f, 1 slot | works; Chug knob barely audible |
+
+Options: `--with none | commander | commander,corrupt | commander,corrupt,ottobit |
+commander,corrupt,ottobit,syntax` for other sets, `--nam-host ir` for NAM on the 1024 IR (suffix
+`_NamIR`, MD5 `d372b440…` with the default set), `--meter` for the cycle-meter build, `--probe` for the
+memory probe, `--no-check` to skip the simulator checks. Room left: about 2 KB of Entry 2 and a few dozen
+words of Block 3 (cursor 0xe7c10 against a limit of 0xe7c2f), so no further resident kernel fits.
+
+Why NAM moved: in the IR category, the unit would not list any other IR block beside a NAM block, in
+either order, though a second NAM was fine. Most likely an app rule allowing one IR block type per
+preset (NAM inherited btype 0x13, the 2048 IR is 0x14); the check itself was not found. On the Regal
+Bass DI NAM keeps its IR‑block audio graph and still reads captures from the User IR store with no IR
+block in the preset (tested on the unit 2026‑11‑10). IR Select's `dynamicList` display exists only on IR
+blocks, so Model became an ordinary list, and stock lists stop at 21 entries. The graph's cut filters
+stay in, parked at 19.9 Hz and 20.1 kHz (Q 0.707), with the mix at wet 0 dB, dry off.
+
+Known and left alone: with one NAM in each path of a split, the bottom path is much quieter (the user
+called it an edge case; both slots match the reference in the simulator). Doom Chug's Chug knob does
+almost nothing audible except lower the level (not investigated; its pulse decays in about 0.15 s, so at
+low Rate it mostly turns the drone down between steps). A Fuzz‑on‑Chug plus Sub redesign was proposed and
+shelved.
 
 ## Custom effects (on `main` since 2026-11-04)
 
@@ -105,9 +148,11 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   Block 3 words; the binding limit is now **Entry 2's 512 KiB partition** (zero-fill LDR records save
   ~5.3 KB; the five-kernel image has 812 bytes left, with Commander and Corrupt merged into one kernel,
   `effects/corrupt/sharc/commander_corrupt_kernel.asm`). Details: `docs/baseline-audit.md`.
-- **The next six** (branch `ottobit`, 2026-11-04): Ottobit, Stutter, Syntax, Grains, Sequence and Warp each
+- **The next six** (on `main` since 2026-11-11; written on a branch from 2026-11-04): Ottobit, Stutter, Syntax, Grains, Sequence and Warp each
   have a C reference, tests and a SHARC kernel checked bit for bit (`effects/README.md`, "The next six";
-  `make -C effects test sharc-check`). **Not yet in an image**: they do not fit Entry 2 / Block 3 beside the five.
+  `make -C effects test sharc-check`). Ottobit is in the default image. Syntax was tried (`--with ...,syntax`)
+  and dropped: it locked the unit's interface on knob turns beside Geiger or Ottobit, cause unknown. Stutter,
+  Grains, Sequence and Warp are not in an image: they would have to be overlays.
   The route found (`docs/baseline-audit.md`, "Finding more memory"): overlays. Their code and data travel inside
   Blob 0, and a resident stub copies the code into internal memory through the normal-word view and calls it; probe 4
   proved that copy and call on the unit. Running 48-bit code directly from DDR2 froze the unit. Swapping different code
@@ -172,7 +217,8 @@ stock's end and ours (not in the partition table; presets and IRs live elsewhere
 
 1. ~~Verify the standalone build on the unit~~ — done 2026‑11‑03 (flashed twice, boots). Still worth a
    look: the "NAM / IR_2048" strip title.
-2. ~~Add the DSP‑cost tuning note to the README~~ — done (README, `DSP_COST = 2700`, floor ≈2300).
+2. ~~Add the DSP‑cost tuning note to the README~~ — done (README; `DSP_COST` lowered to the measured 2300
+   on 2026‑11‑10).
 3. ~~Strip the bisection switches from `tools/patch_amp.py`~~ — done 2026‑11‑03: all `NAM_*` env switches
    (except `NAM_DEVICE`) and the dead `add_model_entry0_effects()` removed; the build output is byte‑identical
    (MD5 `a27780d3ff57612ebd2484a4cc4a9f7e`). The HX Stomp `add-model` path is kept.
@@ -185,6 +231,12 @@ stock's end and ours (not in the partition table; presets and IRs live elsewhere
 6. **Check NAM's footswitch bypass.** NAM's kernel clears instance word 3 every time it is set (it took it
    for a knob‑write flag); with Click that defeated nothing (bypass is applied in the graph on a delay
    host), but NAM's own bypass on its IR host has never been checked.
+7. The all‑in‑one Model knob reaches only User IR slots 1..21. Reaching all 128 needs a knob type the unit
+   draws on a Distortion page (a longer list broke page drawing for Click).
+8. Doom Chug's Chug knob (see above), if the user wants it fixed.
+9. More effects (Stutter, Grains, Sequence, Warp) need overlays, a stock block each (the user's choices:
+   Bleat Chop Trem, Pitch Echo, Mystery Filter, 4-Voice Chorus) and somewhere in DDR2 for the larger
+   rings. Two overlays in one preset swap every call: about 28,000 cycles a swap on the unit.
 
 ## Don'ts
 
@@ -193,21 +245,16 @@ stock's end and ours (not in the partition table; presets and IRs live elsewhere
 - Don't flash while HX Edit or Line 6 Updater is open (they hold the USB interface).
 - Don't `sudo` anything in the home folder again (that's what broke `~/.config/git` and the venv).
 
-## Doom Chug and the meter results (2026-11-10)
+## Meter results (2026-11-10)
 
-Plain `build_all.py` (same as `--with commander,corrupt,ottobit,doomchug`) builds the default image (MD5 27b6dbf1…, verify_all ALL OK, flashed, the user confirmed it sounds right on 2026-11-10); `--with none` now builds what a plain run used to (NAM + Click + Geiger, 899f6904): Doom Chug on the mono Pocket Fuzz (Distortion > Mono), primitive 0x238f. Syntax is out of this image; its code stays in `effects/syntax` and `--with ...,syntax` still builds it.
+Measured on the unit with the `--meter` image (cycles of about 150,000 a call): Ottobit alone 4,100-6,100;
+Syntax alone 10,200-12,300; with Commander or Geiger unchanged; Syntax with Ottobit swapping 38,900-41,000.
+One swap is about 28,000 cycles for about 1,100 words moved. The interface lock-ups with Syntax are
+unexplained: Syntax + Geiger locks with no swap and no change in Syntax's time. The metered block must be
+last in the chain or later blocks garble the beeps.
 
-Measured on the unit with the `--meter` image (cycles of about 150,000 a call): Ottobit alone 4,100-6,100; Syntax alone 10,200-12,300; with Commander or Geiger unchanged; Syntax with Ottobit swapping 38,900-41,000. One swap is about 28,000 cycles for about 1,100 words moved. The interface lock-ups with Syntax are unexplained: Syntax + Geiger locks with no swap and no change in Syntax's time.
-The overlay payload goes before the last model's table copy, so it stays right before the final composite table whatever order the models come in.
-
-Open bug (2026-11-10, reported on the unit): with a NAM block in the preset, another IR block cannot be selected for a cab, although the README says NAM can feed a 2048 IR block. Declared costs: NAM 2700, 2048 IR 250, 1024 Dual 500. Likely an app rule that all IR blocks in a preset share one block type (NAM has 0x13, the 2048 IR 0x14), not DSP load; the check itself has not been located. A second NAM is allowed.
-
-Test in progress: `build_all.py --nam-host regal` (MD5 7b291b5f…, verify_all ALL OK, flashed, BOOTED) puts NAM on the mono Regal Bass DI (Distortion > Mono) so a real IR block can share the preset, with the 1024 IR block stock again. Model is a list of User IR slots 1..21 because IR Select's `dynamicList` display exists only on IR blocks and stock lists stop at 21. Open question for the unit: does the IR store reach the DSP when no IR block has that slot selected? Plain `build_all.py` still leaves NAM on the IR category.
-
-NAM's `DSP_COST` is now 2300, which is in every image, so the proven MD5s above (899f6904, a486dbed, e0a3f744, 27b6dbf1) are for 2700. The default image at 2300 is d372b440…. After changing it, rebuild `build_effects.py` too, or verify_all fails comparing against the old standalone NAM image.
-
-The Regal Bass DI test image works on the unit (user, 2026-11-10); not yet the default. Known and left alone (user: an edge case): with one NAM in each path of a split, the bottom path is much quieter. Host graph filters stay in but neutral (member 3 at 19.9 Hz, member 4 at 20.1 kHz, Q 0.707; tone stack flat at 5.0).
-
-Default since 2026-11-11: plain `build_all.py` puts NAM on the Regal Bass DI (MD5 7b291b5f…, the image on the unit, verify_all ALL OK); `--nam-host ir` builds the old IR layout (d372b440…, file suffix `_NamIR`). The standalone `build_effects.py` image keeps NAM on the 1024 IR (verify_all compares against it).
-
-Doom Chug on the unit (user, 2026-11-11): sounds great, but the Chug knob does almost nothing audible except lower the level. Not investigated. A fuzz-plus-sub replacement for Chug was designed and shelved by the user (Block 3 has only ~20-30 words spare after the default build).
+Build notes from that work: the overlay payload goes before the last model's table copy, so it stays right
+before the final composite table whatever order the models come in. NAM's `DSP_COST` is in every image, so
+the older proven MD5s (899f6904 NAM+Click+Geiger, a486dbed +Commander, e0a3f744 +Corrupt, 27b6dbf1 first
+Doom Chug image) are 2700 builds. Rebuilt now they should differ only in that cost and Entry 0's checksum
+(checked for the default image).
