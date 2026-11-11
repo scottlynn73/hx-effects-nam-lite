@@ -269,7 +269,7 @@ class Layout:
                  HXK_INST_SDRAM_END=7, FIX_SDR=FIX_SDR)
         self.v = v
         if FIX_SDR:
-            assert 0x5000 >= self.sdr_need and FIX_SDR + 0x5000 * 4 <= 0x2A8DF6, 'fixed SDRAM blocks do not fit'
+            assert 0x5000 >= self.sdr_need and FIX_SDR + 0x5000 * (self.slots + 1) <= 0x2A8DF6, 'fixed SDRAM blocks do not fit'
             assert FIX_SDR + 0x5000 * self.slots + self.sdr_need <= IR_FLAG, 'a NAM slot would reach the IR store'
 
     def sdram_words(self):

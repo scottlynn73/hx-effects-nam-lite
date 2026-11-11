@@ -29,6 +29,7 @@ import ssim  # noqa: E402
 SR = 48000.0
 # placements: 'b2' a Geiger-only image (NAM's regions); 'b3' is set by the all-in-one build
 PLACES = {'b2': (0xC4EF8, 0xC5554, 0xE4850)}
+EXT_CURVES = None                           # the curve tables' address when they are not in the kernel's data
 KNOB = dict(gain=5, rate=6, bits=7, curve=8, tone=9, output=10, mix=11, aa=13)
 INT_KNOBS = {'bits', 'curve', 'aa'}
 PARAM_ORDER = ['gain', 'rate', 'bits', 'curve', 'tone', 'output', 'mix', 'aa']    # = geiger.h G_*
@@ -95,8 +96,11 @@ def source(place='b2'):
     q = [float(2 ** max(b - 1, 0)) for b in range(17)]
     lay.append(('T_Q', a, [fw(v) for v in q])); a += 17
     lay.append(('T_QI', a, [fw(float(np.float32(1.0) / np.float32(v))) for v in q])); a += 17
-    curves = tables()
-    lay.append(('T_CURVES', a, curves)); a += len(curves)
+    if EXT_CURVES is None:
+        curves = tables()
+        lay.append(('T_CURVES', a, curves)); a += len(curves)
+    else:
+        lay.append(('T_CURVES', EXT_CURVES, []))      # elsewhere (inside Blob 0, in DDR2): no words here
     slots = a + NSLOTS
     lay.append(('T_SLOTBASE', a, [slots + SLOTW * k for k in range(NSLOTS)])); a += NSLOTS
     lay.append(('SLOTS', a, [0] * (SLOTW * NSLOTS))); a += SLOTW * NSLOTS
@@ -105,7 +109,7 @@ def source(place='b2'):
     equ += ['.equ S_OWNER, 0', '.equ S_LAST, 1', f'.equ P_SLOT, {P_SLOT}', f'.equ NSLOTS, {NSLOTS}',
             f'.equ NSTATE, {NSTATE}', f'.equ STALE, {STALE}']
     equ += [f'.equ {name}, {addr:#x}' for name, addr, _ in lay]
-    data = [f'.section dm {data0:#x}'] + ['.word ' + ', '.join(f'{w:#010x}' for w in words) for _, _, words in lay]
+    data = [f'.section dm {data0:#x}'] + ['.word ' + ', '.join(f'{w:#010x}' for w in words) for _, _, words in lay if words]
     asm = open(os.path.join(HERE, 'geiger_kernel.asm')).read()
     assert asm.count('// EQUS') == 1 and asm.count('.section pm 0x0c4ef8') == 1
     asm = asm.replace('.section pm 0x0c4ef8', f'.section pm {code:#08x}')
@@ -245,6 +249,9 @@ def check(seconds=1.0, place='b2'):
     src, secs, syms, end, data = assemble(place)
     ref = Reference()
     rig = Rig(secs, syms, data)
+    if EXT_CURVES is not None:                       # as the image's Blob 0 provides them
+        for k, w in enumerate(tables()):
+            rig.sim.dm[EXT_CURVES + k] = w
     nblk = int(seconds * SR) // 16
     code = PLACES[place][0]
     print(f'[{place}] code {code:#x}..{end:#x} ({end - code} instructions), data {data[0]:#x}..{data[1]:#x}')

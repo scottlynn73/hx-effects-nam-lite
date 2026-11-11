@@ -54,6 +54,11 @@ int fx_param_index(const FxAlgorithm *a, const char *id);
 /* Clamp (and round integers / toggles) to the declared range. */
 float fx_param_clamp(const FxParamDesc *d, float v);
 
+/* Flush denormal inputs and results to zero (on) or not (off), as the SHARC always does: the SHARC kernels'
+   checks run the reference this way, so the two agree to the bit even where a value underflows. Returns 1
+   if this machine supports it (arm64, x86-64), else 0. */
+int fx_set_ftz(int on);
+
 /* The registry: every algorithm the renderer and tests know. */
 const FxAlgorithm *fx_find(const char *name);
 const FxAlgorithm *const *fx_all(size_t *n);

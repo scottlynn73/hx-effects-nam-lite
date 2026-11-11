@@ -71,7 +71,7 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   image read-back check `tools/verify/verify_click.py`. Geiger: C reference + tests in `effects/geiger/`,
   SHARC kernel in `effects/geiger/sharc/` (also in `make -C effects sharc-check`; its tables come from the
   C library, which the tooling rebuilds before loading). Baseline audit: `docs/baseline-audit.md`.
-- **NAM + Click + Geiger** (`python3 build_all.py` → `build/HX_Effects_v3.80.0_All.hxf`, verified offline
+- **NAM + Click + Geiger** (`python3 build_all.py --with none` → `build/HX_Effects_v3.80.0_All.hxf`, verified offline
   with `tools/verify/verify_all.py` and `build/all_manifest.json`; **works on the unit**, 2026-11-04). Geiger
   (bit crusher, 8 knobs) takes over the mono Megaphone on primitive 0x012e; NAM runs 2 slots (frees Block 3
   for Geiger: data 0xe73d0..0xe78f6, code 48-bit 0xe50a4..0xe5215); the Blob 0 buffer is 0x7a000 words so
@@ -105,8 +105,14 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
   Block 3 words; the binding limit is now **Entry 2's 512 KiB partition** (zero-fill LDR records save
   ~5.3 KB; the five-kernel image has 812 bytes left, with Commander and Corrupt merged into one kernel,
   `effects/corrupt/sharc/commander_corrupt_kernel.asm`). Details: `docs/baseline-audit.md`.
-- **Next effects** (from the plan): Stutter (glitch repeater), Ottobit (crusher + sequencer). Each would
-  need Entry 2 space first (see above), and the buffer effects DDR2 for their samples.
+- **The next six** (branch `ottobit`, 2026-11-04): Ottobit, Stutter, Syntax, Grains, Sequence and Warp each
+  have a C reference, tests and a SHARC kernel checked bit for bit (`effects/README.md`, "The next six";
+  `make -C effects test sharc-check`). **Not yet in an image**: they do not fit Entry 2 / Block 3 beside the five.
+  The route found (`docs/baseline-audit.md`, "Finding more memory"): overlays. Their code and data travel inside
+  Blob 0, and a resident stub copies the code into internal memory through the normal-word view and calls it; probe 4
+  proved that copy and call on the unit. Running 48-bit code directly from DDR2 froze the unit. Swapping different code
+  into one region every call also worked (probe 5). **Ottobit runs this way on the unit** (`build_all.py --with commander,corrupt,ottobit`, MD5 `0d403adc...`). `BOOTED` from flash.py only means the main app answers on USB. Each new effect still needs a stock block to replace
+  (ask the user which).
 
 ## Why the takeover approach
 
@@ -186,3 +192,22 @@ stock's end and ours (not in the partition table; presets and IRs live elsewhere
 - Don't commit anything from `firmware/` or `build/`; both are Line 6's firmware (the `.l6ia` too).
 - Don't flash while HX Edit or Line 6 Updater is open (they hold the USB interface).
 - Don't `sudo` anything in the home folder again (that's what broke `~/.config/git` and the venv).
+
+## Doom Chug and the meter results (2026-11-10)
+
+Plain `build_all.py` (same as `--with commander,corrupt,ottobit,doomchug`) builds the default image (MD5 27b6dbf1…, verify_all ALL OK, flashed, the user confirmed it sounds right on 2026-11-10); `--with none` now builds what a plain run used to (NAM + Click + Geiger, 899f6904): Doom Chug on the mono Pocket Fuzz (Distortion > Mono), primitive 0x238f. Syntax is out of this image; its code stays in `effects/syntax` and `--with ...,syntax` still builds it.
+
+Measured on the unit with the `--meter` image (cycles of about 150,000 a call): Ottobit alone 4,100-6,100; Syntax alone 10,200-12,300; with Commander or Geiger unchanged; Syntax with Ottobit swapping 38,900-41,000. One swap is about 28,000 cycles for about 1,100 words moved. The interface lock-ups with Syntax are unexplained: Syntax + Geiger locks with no swap and no change in Syntax's time.
+The overlay payload goes before the last model's table copy, so it stays right before the final composite table whatever order the models come in.
+
+Open bug (2026-11-10, reported on the unit): with a NAM block in the preset, another IR block cannot be selected for a cab, although the README says NAM can feed a 2048 IR block. Declared costs: NAM 2700, 2048 IR 250, 1024 Dual 500. Likely an app rule that all IR blocks in a preset share one block type (NAM has 0x13, the 2048 IR 0x14), not DSP load; the check itself has not been located. A second NAM is allowed.
+
+Test in progress: `build_all.py --nam-host regal` (MD5 7b291b5f…, verify_all ALL OK, flashed, BOOTED) puts NAM on the mono Regal Bass DI (Distortion > Mono) so a real IR block can share the preset, with the 1024 IR block stock again. Model is a list of User IR slots 1..21 because IR Select's `dynamicList` display exists only on IR blocks and stock lists stop at 21. Open question for the unit: does the IR store reach the DSP when no IR block has that slot selected? Plain `build_all.py` still leaves NAM on the IR category.
+
+NAM's `DSP_COST` is now 2300, which is in every image, so the proven MD5s above (899f6904, a486dbed, e0a3f744, 27b6dbf1) are for 2700. The default image at 2300 is d372b440…. After changing it, rebuild `build_effects.py` too, or verify_all fails comparing against the old standalone NAM image.
+
+The Regal Bass DI test image works on the unit (user, 2026-11-10); not yet the default. Known and left alone (user: an edge case): with one NAM in each path of a split, the bottom path is much quieter. Host graph filters stay in but neutral (member 3 at 19.9 Hz, member 4 at 20.1 kHz, Q 0.707; tone stack flat at 5.0).
+
+Default since 2026-11-11: plain `build_all.py` puts NAM on the Regal Bass DI (MD5 7b291b5f…, the image on the unit, verify_all ALL OK); `--nam-host ir` builds the old IR layout (d372b440…, file suffix `_NamIR`). The standalone `build_effects.py` image keeps NAM on the 1024 IR (verify_all compares against it).
+
+Doom Chug on the unit (user, 2026-11-11): sounds great, but the Chug knob does almost nothing audible except lower the level. Not investigated. A fuzz-plus-sub replacement for Chug was designed and shelved by the user (Block 3 has only ~20-30 words spare after the default build).

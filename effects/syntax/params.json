@@ -1,0 +1,14 @@
+{
+  "id": "syntax",
+  "display_name": "Syntax",
+  "parameters": [
+    {"id": "drive", "display": "Drive", "type": "continuous", "min": 0, "max": 36, "default": 12, "unit": "dB", "smoothing": "per-sample"},
+    {"id": "shift", "display": "Shift", "type": "continuous", "min": 0, "max": 1000, "default": 150, "unit": "Hz", "smoothing": "immediate"},
+    {"id": "pattern", "display": "Pattern", "type": "integer", "min": 0, "max": 8, "default": 1, "unit": "0 Off, 1..8", "smoothing": "immediate"},
+    {"id": "speed", "display": "Speed", "type": "continuous", "min": 0.5, "max": 16, "default": 4, "unit": "steps/s", "smoothing": "immediate"},
+    {"id": "glide", "display": "Glide", "type": "continuous", "min": 0, "max": 1, "default": 0.2, "unit": "", "smoothing": "immediate"},
+    {"id": "tone", "display": "Tone", "type": "continuous", "min": 0, "max": 1, "default": 0.7, "unit": "", "smoothing": "immediate"},
+    {"id": "output", "display": "Output", "type": "continuous", "min": -36, "max": 12, "default": -6, "unit": "dB", "smoothing": "per-sample"},
+    {"id": "mix", "display": "Mix", "type": "continuous", "min": 0, "max": 1, "default": 1, "unit": "x (shown as %)", "smoothing": "per-sample"}
+  ]
+}

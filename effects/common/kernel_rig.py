@@ -117,19 +117,30 @@ class FxAlgorithm(ctypes.Structure):
 class Reference:
     def __init__(self, spec):
         self.lib, self.order = lib(), spec.order
+        # the reference flushes denormals as the SHARC does, but only inside its own calls: left on, the
+        # mode would change this process's other float arithmetic (an image build's, say)
+        assert self.lib.fx_set_ftz(0) == 1, 'cannot flush denormals to zero here (as the SHARC does)'
         self.alg = FxAlgorithm.in_dll(self.lib, f'fx_{spec.name}')
         assert self.alg.n_params == len(self.order)
 
     def new(self):
         st = ctypes.create_string_buffer(self.alg.state_bytes)
-        self.alg.reset(st, SR)
+        self.lib.fx_set_ftz(1)
+        try:
+            self.alg.reset(st, SR)
+        finally:
+            self.lib.fx_set_ftz(0)
         return st
 
     def process(self, st, knobs, block):
         p = (ctypes.c_float * 12)(*[float(knobs[k]) for k in self.order])
         i = (ctypes.c_float * 16)(*block)
         o = (ctypes.c_float * 16)()
-        self.alg.process(st, p, i, o, 16)
+        self.lib.fx_set_ftz(1)
+        try:
+            self.alg.process(st, p, i, o, 16)
+        finally:
+            self.lib.fx_set_ftz(0)
         return [fw(v) for v in o]
 
 
@@ -144,6 +155,23 @@ class Rig:
         self.sim.strict_cbufen = True
         self.sim.load(secs)
         self.syms, self.rnd, self.cycles = syms, random.Random(seed), []
+        view = getattr(spec, 'pm_view', None)            # (48-bit address, instructions) written as normal words
+        if view:
+            code48, n = view
+            base, words, wr0 = 0xE0000 + (code48 - 0xE0000) * 3 // 2, n * 3 // 2, self.sim.wr
+
+            def view_wr(a, v):                           # a word written there changes the pair of instructions over it
+                wr0(a, v)
+                if base <= a < base + words:
+                    pair = (a - base) // 3
+                    raw = struct.pack('<3I', *[self.sim.dm.get(base + 3 * pair + k, 0) for k in range(3)])
+                    self.sim.pm[code48 + 2 * pair] = int.from_bytes(raw[:6], 'little')
+                    self.sim.pm[code48 + 2 * pair + 1] = int.from_bytes(raw[6:], 'little')
+            self.sim.wr = view_wr
+        g = random.Random(seed + 1000)
+        for lo, hi in getattr(spec, 'garbage', []):      # memory the kernel must not read before writing
+            for a in range(lo, hi):
+                self.sim.dm[a] = g.getrandbits(32)
 
     def inst(self, k):
         i0 = 0xB3000 + 0x400 * k
@@ -202,7 +230,7 @@ class Rig:
             raise AssertionError(f'{label}: returns with the loop or PC stack not empty')
         lo = self.syms['SAVE']
         allowed = [(BO, BO + 16), (i0 + P_SLOT, i0 + P_SLOT + 1), (lo, lo + 22),
-                   (self.syms['SLOTS'], self.syms['SLOTS'] + sp.slotw * sp.nslots)]
+                   (self.syms['SLOTS'], self.syms['SLOTS'] + sp.slotw * sp.nslots)] + list(getattr(sp, 'extra_writes', []))
         stray = [a for a in writes if not any(x <= a < y for x, y in allowed)]
         if stray:
             raise AssertionError(f'{label}: wrote outside its memory: {[hex(a) for a in stray[:5]]}')
@@ -254,22 +282,29 @@ def check(spec, place, cases, rnd_knobs, seconds=1.0, signals=None):
             total += 16
     print(f'  {len(cases)} settings: identical')
 
+    def age_slots():                                   # few slots: the ones the last block used go stale first
+        if spec.nslots < 4:
+            rig.sim.wr(syms['G_CALLS'], rig.sim.rd(syms['G_CALLS']) + STALE + 1)
+
+    age_slots()
     r = random.Random(5)
     ia, ib = rig.inst(0), rig.inst(1)
     sa, sb = ref.new(), ref.new()
+    pairs = 2 if spec.nslots > 1 else 1                # a one-slot kernel: the second block would pass through
     xa, xb = signal(nblk * 16, 11, chord=True), signal(nblk * 16, 12)
     for b in range(nblk):
         if b % 300 == 0:
             ka, kb = rnd_knobs(r), rnd_knobs(r)
             rig.knobs(ia, ka)
             rig.knobs(ib, kb)
-        for i0, st, kn, x in ((ia, sa, ka, xa), (ib, sb, kb, xb)):
+        for i0, st, kn, x in ((ia, sa, ka, xa), (ib, sb, kb, xb))[:pairs]:
             blk = x[16 * b:16 * b + 16]
             if rig.call(i0, blk, f'moving block {b}') != ref.process(st, kn, [ssim.b2f(v) for v in blk]):
                 raise AssertionError(f'moving knobs, block {b}: kernel and reference differ')
             total += 16
-    print('  two instances, every knob moving every 100 ms: identical')
+    print(f'  {pairs} instance(s), every knob moving every 100 ms: identical')
 
+    age_slots()
     kn = cases[0]
     i0 = rig.inst(2)
     rig.knobs(i0, kn)

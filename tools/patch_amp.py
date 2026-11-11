@@ -1086,13 +1086,14 @@ def sharc_blob0_check(b0, max_words=SHARC_BLOB0_WORDS):
     return None
 
 
-def clone_composite_in_blob0(b0, src_comp_id):
+def clone_composite_in_blob0(b0, src_comp_id, pad=()):
     """Append a relocated copy of composite `src_comp_id` (e.g. 0x600189) to Blob 0 as a
     new composite (0x600000 + n_comp: 0x6001c6, 0x6001c7, ...), with a copy of the
     composite table one entry longer after it; no existing composite changes. Blob 0
     grows past the stock SHARC buffer, so this needs Entry 2 patched by
     expand_sharc_blob0_buffer (add-model does both); the result must pass
-    sharc_blob0_check with the enlarged size."""
+    sharc_blob0_check with the enlarged size. `pad` (words) goes in first, between the old end and the
+    new table, so it sits inside the blob rather than past its last structure."""
     b0 = list(b0)
     n_comp = b0[0xf]
     ctab = b0[0x10]
@@ -1104,7 +1105,7 @@ def clone_composite_in_blob0(b0, src_comp_id):
     src_end = src_hdr[5] + 4 * src_hdr[4]
 
     dst_idx = n_comp
-    new_ctab = len(b0)
+    new_ctab = len(b0) + len(pad)
     dst_start = new_ctab + 7 * (n_comp + 1)
     delta = dst_start - src_start
 
@@ -1120,6 +1121,7 @@ def clone_composite_in_blob0(b0, src_comp_id):
                 slice_w[rbase + col] += delta
 
     new_hdr = [src_hdr[0], src_hdr[1], src_hdr[2], src_hdr[3] + delta, src_hdr[4], src_hdr[5] + delta, src_hdr[6]]
+    b0.extend(pad)
     b0.extend(b0[ctab: ctab + 7 * n_comp])
     b0.extend(new_hdr)
     b0.extend(slice_w)
@@ -1330,7 +1332,7 @@ def pmap_slots_without_param(e4, blob_index, params):
     return sorted(slots - {p['slot'] for p in params})
 
 
-def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, blob_fn=None, prim_id=0x9c75):
+def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, blob_fn=None, prim_id=0x9c75, b0_pad=()):
     """Entry 4 with one more blob, the NAM host: a copy of the model's composite
     (DEV.NAM_HOST_COMPOSITE) appended to Blob 0 (0x6001c6, 0x6001c7, ...;
     clone_composite_in_blob0) with its amp member made primitive 0x9c75
@@ -1355,7 +1357,7 @@ def add_model_entry4(e4, src_blob_index, nam, sdram_words=0, blob_fn=None, prim_
     src_comp_id = src_blob_words[tl + 1]
     assert src_comp_id == DEV.NAM_HOST_COMPOSITE, \
         f'the NAM host wants a model on composite {DEV.NAM_HOST_COMPOSITE:#x} (HD2_AmpLine6Clarity), not {src_comp_id:#x}'
-    b0_words, new_comp_id = clone_composite_in_blob0(b0_words, src_comp_id)
+    b0_words, new_comp_id = clone_composite_in_blob0(b0_words, src_comp_id, pad=b0_pad)
     nam_host_member(b0_words, new_comp_id, sdram_words, prim_id)
     extra = []
     if DEV.HOST_SWAP:        # the other members keep their stock inits; root ctrl records stay too

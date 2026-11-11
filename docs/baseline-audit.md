@@ -28,7 +28,7 @@ firmware), or **unknown**.
    (cuts off, mix wet);
 3. Entry 2: Blob 0 buffer `0x76a2c` → `0x78000` words; Heap 6 moved to `0x30d100`;
 4. Entry 3: the new model's descriptor fields copied over `HD2_ImpulseResponse1024Mono` (model 72);
-5. Entry 0: that model's Table 1 cost (`DSP_COST` = 2700), Table 2 counts/short name, browser name,
+5. Entry 0: that model's Table 1 cost (`DSP_COST` = 2300, 2700 until 2026-11-10), Table 2 counts/short name, browser name,
    the IR category's strip title;
 6. Entry 2 again: the kernel assembled (`sasm.py`) at PM `0xc4ef8`, primitive `0x9c75`'s record
    (template copied from primitive `0x822`) pointed at it, DM 0x91 / PM 0x0d words per instance;
@@ -50,7 +50,7 @@ firmware), or **unknown**.
 | Knob words | `DM(5..11, I0)` and `DM(15, I0)` (pid order in `patch_amp.NAM_PARAMS`): floats, or an integer for Model (User IR slot 1..128) and a bool for Polarity | modelled + observed (knobs work on the unit) |
 | Free state words | the kernel uses `DM(12..14, I0)` for its own state (`P_SLOT`, `P_SEEN`, `P_MET`) | observed (source) |
 | Registers | R0–R15, the alternate set, the DAG registers **including I1–I3**, and MODE1 must come back unchanged (NAM restores I1–I3 through B1–B3). A kernel that returned with I1/I2 advanced froze the unit's knobs and footswitches while audio carried on. The rig now checks I1–I3 too. | observed on the unit |
-| Per‑call budget | the check enforces ≤ 33,000 instructions steady (`MAX_STEADY`); `DSP_COST` 2700 is the host's bookkeeping, not a measurement | observed (source) |
+| Per‑call budget | the check enforces ≤ 33,000 instructions steady (`MAX_STEADY`); `DSP_COST` 2300 is the host's bookkeeping, not a measurement | observed (source) |
 | Parameter smoothing | none by the host as far as known; the NAM kernel crossfades captures itself | unknown for other knob types |
 | Bypass | applied in the graph, not through the instance block: on a delay host (Click on Mod/Chorus Echo) the footswitch bypasses the block; on the 1024 IR host it lit but did not bypass Click | observed on the unit |
 | Preset change / re‑creation | no explicit callback seen; kernels detect re‑creation by comparing `I0` and a call counter | modelled |
@@ -116,6 +116,57 @@ and slot pool) with ZERO_LDATA records (tag 1, a 3‑word header; the stock stre
 saves about 5.3 KB: 1,912 bytes free with Commander, 812 with Commander and Corrupt sharing one kernel.
 Anything more needs a smaller boot stream (Geiger's 4 KB of curve tables computed at start‑up instead,
 or NAM's 8 KB tone‑stack table) before it needs DSP memory.
+
+## Finding more memory (2026-11-04, branch `ottobit`)
+
+Five kernels leave 812 bytes of Entry 2 and about 1,500 words of Block 3; each further effect needs about
+400-450 instructions and 150-570 data words. What the stock image offers:
+
+- **Entry 2 is mostly code**, about 410 KB of its 490 KB: ISA (48-bit) at PM `0x8c100..0x8ee93` (~70 KB,
+  INIT_L48), VISA in internal memory (~130 KB, tag-3 blocks at short-word addresses), and VISA in DDR2
+  (~213 KB, tag-10 blocks at `0x300000..0x30d053`). 88 primitives' entries are external: entry PC = 2 x the
+  DDR2 word address (every one checked).
+- **The external code's format**: 16-bit parcels, two to a 32-bit word, the high half first. 48-bit
+  instructions appear with their ISA encoding unchanged (seen: `DM(abs) = ureg`, `JUMP abs`, `CJUMP` into
+  the ISA region); RTS's 48-bit form never appears (VISA uses a short form).
+- **No code to reclaim from the replaced blocks**: every primitive the five taken-over models use is
+  shared with models still in use. The primitives no graph uses own about 380 instructions in all.
+- **Entry 2 cannot grow**: its eMMC partition (header sector `0x8802`, `0x400` sectors) ends where image 3's
+  begins (the updater's partition table, DFU app file offset ~`0xf8c8`).
+- **Entry 4 can**: about 1.9 MB of its 15.5 MiB partition is free, and Blob 0 lands verbatim at DDR2
+  `0x21c400` (only its structured fields are relocated), so words appended after its last composite land at
+  `0x21c400 + offset`.
+
+What the probes (`build_all.py --probe`, `effects/probe/sharc/`) showed on the unit, 2026-11-06 to 09:
+
+| Probe | Result |
+|---|---|
+| Words inside Blob 0, read by a kernel | **Work**: 880 Hz, the magic word is at `0x21c400 + offset` |
+| 48-bit ISA routine in DDR2, jumped to (Bit Depth 2 of probe 3: beside the stock external code) | **Froze the unit** |
+| Routine copied from Blob 0 into Block 3 as 32-bit words through the normal-word view (INIT_L48 packing), then called | **Works**: it ran and came back, with the unit responsive |
+| The same routine written through PX to PM, then called | Came back with the flag wrong (low drone); not understood, and not needed |
+| PX copy plus `FLUSH CACHE` | Not established (1 bit was not reported separately) |
+| Two different routines swapped into one internal region every call, no PM data access, no flush (probe 5, 3 bits) | **Works**: the routine just copied was the one that ran, on every call heard |
+| The same with PM data accesses meant to force the instruction cache, with `FLUSH CACHE` (2 bits) | Works; `FLUSH CACHE` executes without harm |
+| The forcing routines with no flush (1 bit) | Also worked, so no stale code was seen: either the forcing did not load the cache, or the cache is not in play here. It does **not** show that `FLUSH CACHE` is needed or effective |
+
+Probes 1 and 2 froze because the Probe sat on Geiger's slot, the user's start-up preset contains Geiger, and
+their timed jump to DDR2 fired during boot. flash.py's `BOOTED` did not show it: it only means the main app
+answers on USB.
+
+So the route for more effects is **overlays**: the kernels' code and data travel inside Blob 0, and a small
+resident stub copies a kernel's code into one internal region through the normal-word view before calling it.
+The six kernels make no PM data accesses, so they should not load the instruction cache; the stubs still flush
+after each copy, since it does no harm.
+
+**Ottobit works on the unit this way** (2026-11-09; `build_all.py --with commander,corrupt,ottobit`, MD5
+`0d403adc...`). Its stub (`effects/common/ovl_stub_kernel.py`, 35 instructions on primitive `0x2392`) copies its code and
+data once from Blob 0 into Block 3, so the kernel runs entirely from internal memory; only its rings are in DDR2,
+above NAM's slots. Image B had about 700 free Block 3 words (not the 1,500 first stated), so this image also moves
+Geiger's 1,040 curve words into Blob 0, leaving 4,560 bytes of Entry 2 free. Not yet done: two different overlay
+effects sharing the region (swap out their data as well as their code), and a home for the larger rings: only
+about 31,000 words of DDR2 are known free below `0x2a8df6`, less than Stutter's or Grains' rings need as written.
+
 
 ## Tested vs untested
 

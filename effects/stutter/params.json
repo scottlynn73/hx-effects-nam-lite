@@ -1,0 +1,14 @@
+{
+  "id": "stutter",
+  "display_name": "Stutter",
+  "parameters": [
+    {"id": "trigger", "display": "Trigger", "type": "integer", "min": 0, "max": 2, "default": 0, "unit": "0 Clock, 1 Transient, 2 Both", "smoothing": "immediate"},
+    {"id": "rate", "display": "Rate", "type": "continuous", "min": 0.5, "max": 16, "default": 2, "unit": "Hz", "smoothing": "immediate"},
+    {"id": "chance", "display": "Chance", "type": "continuous", "min": 0, "max": 1, "default": 0.5, "unit": "probability", "smoothing": "immediate"},
+    {"id": "length", "display": "Length", "type": "continuous", "min": 0, "max": 1, "default": 0.5, "unit": "20 .. 500 ms", "smoothing": "immediate"},
+    {"id": "repeats", "display": "Repeats", "type": "integer", "min": 1, "max": 16, "default": 4, "unit": "", "smoothing": "immediate"},
+    {"id": "speed", "display": "Speed", "type": "integer", "min": 0, "max": 5, "default": 0, "unit": "1x, 2x, 0.5x, Rev, Rev 2x, Random", "smoothing": "immediate"},
+    {"id": "random", "display": "Random", "type": "continuous", "min": 0, "max": 1, "default": 0, "unit": "", "smoothing": "immediate"},
+    {"id": "mix", "display": "Mix", "type": "continuous", "min": 0, "max": 1, "default": 1, "unit": "x (shown as %)", "smoothing": "immediate"}
+  ]
+}

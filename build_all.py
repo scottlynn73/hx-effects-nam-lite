@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Build HX Effects firmware 3.80.0 with NAM A2 Lite, Click and Geiger in one image.
 
-usage: python3 build_all.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--with commander[,corrupt]] [--no-check]
+usage: python3 build_all.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--with LIST|none] [--nam-host regal|ir] [--no-check]
+
+NAM sits on the mono Regal Bass DI (Distortion > Mono, --nam-host regal, the default since 2026-11-11), not the
+1024 IR, so a real IR block can share its preset; Model is a list of User IR slots 1..21. --nam-host ir puts
+it back on the 1024 IR (IR > Single, Model 1..128 with the IR names; no other IR block beside it), suffix _NamIR.
+
+With no --with this builds the default image: --with commander,corrupt,ottobit,doomchug (the DEFAULT_EXTRAS
+below), build/HX_Effects_v3.80.0_All_Commander_Corrupt_Ottobit_Doomchug.hxf. --with none builds NAM, Click
+and Geiger alone, build/HX_Effects_v3.80.0_All.hxf.
 
   NAM A2 Lite   as build_nam_click.py, but with 2 slots (two NAM blocks at once; a third passes its
                 input through) instead of 3, which frees Block 3 for Geiger, and its DDR2 blocks at
@@ -27,7 +35,6 @@ usage: python3 build_all.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [-
 Each kernel is checked in the simulator first unless --no-check (NAM bit for bit against nam_a2.asm with
 2 slots, Click and Geiger bit for bit against their C references at their addresses), and the build
 asserts no byte of internal memory is used by two of them.
-Writes build/HX_Effects_v3.80.0_All.hxf.
 """
 import hashlib
 import os
@@ -39,7 +46,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.join(HERE, 'tools')
 for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', 'effects/geiger/sharc', 'effects/common',
-          'effects/commander/sharc', 'effects/corrupt/sharc'):
+          'effects/commander/sharc', 'effects/corrupt/sharc', 'effects/probe/sharc', 'effects/ottobit/sharc', 'effects/syntax/sharc', 'effects/doomchug/sharc'):
     sys.path.insert(0, os.path.join(HERE, p))
 
 import build_click as bc  # noqa: E402
@@ -92,6 +99,38 @@ CORRUPT_PARAMS = (
     (8, 13, 'HD2_FM4SynthOMatic', 'Wave', 'Harmonic', 'Harm', LIST,
      {1: '1x Root', 2: '2x Octave', 3: '3x Fifth', 4: '4x 2 Oct', 5: '5x Third', 6: '6x Fifth', 7: '7x Flat 7', 8: '8x 3 Oct'}, 1),
 )
+OTTOBIT_PARAMS = (     # as GEIGER_PARAMS; the kernel reads words 5..11 and 13 (effects/ottobit/sharc)
+    (1, 5,  'HD2_AmpLine6Clarity', 'Drive', 'Sample Rate', 'Rate', 'hz', (250.0, 48000.0), 8000.0),
+    (2, 6,  'HD2_DelayMultiPassMono', 'Pattern', 'Bit Depth', 'Bits', LIST,
+     {b: (f'{b} bit' if b == 1 else f'{b} bits') for b in range(1, 17)}, 6),
+    (3, 7,  'HD2_AmpLine6Clarity', 'Bass', 'Filter', 'Filter', 'knob', (0.0, 1.0), 0.7),
+    (4, 8,  'HD2_FM4SynthOMatic', 'Wave', 'Pattern', 'Pattern', LIST, {0: 'Off', **{k: str(k) for k in range(1, 9)}}, 1),
+    (5, 9,  'HD2_AmpLine6Clarity', 'Treble', 'Speed', 'Speed', 'hz', (0.5, 16.0), 4.0),
+    (6, 10, 'HD2_AmpLine6Clarity', 'Mid', 'Stutter', 'Stutter', 'percent', (0.0, 1.0), 0.2),
+    (7, 11, 'HD2_AmpLine6Clarity', 'Presence', 'Output', 'Output', 'db', (-36.0, 12.0), -6.0),
+    (8, 13, 'HD2_AmpLine6Clarity', 'ChVol', 'Mix', 'Mix', 'percent', (0.0, 1.0), 1.0),
+)
+SYNTAX_PARAMS = (      # as GEIGER_PARAMS; the kernel reads words 5..11 and 13 (effects/syntax/sharc)
+    (1, 5,  'HD2_AmpLine6Clarity', 'Drive', 'Drive', 'Drive', 'db', (0.0, 36.0), 12.0),
+    (2, 6,  'HD2_AmpLine6Clarity', 'Bass', 'Shift', 'Shift', 'hz', (1.0, 1000.0), 150.0),
+    (3, 7,  'HD2_FM4SynthOMatic', 'Wave', 'Pattern', 'Pattern', LIST, {0: 'Off', **{k: str(k) for k in range(1, 9)}}, 1),
+    (4, 8,  'HD2_AmpLine6Clarity', 'Mid', 'Speed', 'Speed', 'hz', (0.5, 16.0), 4.0),
+    (5, 9,  'HD2_AmpLine6Clarity', 'Treble', 'Glide', 'Glide', 'knob', (0.0, 1.0), 0.2),
+    (6, 10, 'HD2_AmpLine6Clarity', 'Presence', 'Tone', 'Tone', 'knob', (0.0, 1.0), 0.7),
+    (7, 11, 'HD2_AmpLine6Clarity', 'ChVol', 'Output', 'Output', 'db', (-36.0, 12.0), -6.0),
+    (8, 13, 'HD2_AmpLine6Clarity', 'Sag', 'Mix', 'Mix', 'percent', (0.0, 1.0), 1.0),
+)
+DOOMCHUG_KEYS = ['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#']
+DOOMCHUG_PARAMS = (    # as GEIGER_PARAMS; the kernel reads words 5..11 and 13 (effects/doomchug/sharc)
+    (1, 5,  'HD2_DelayMultiPassMono', 'Pattern', 'Key', 'Key', LIST, dict(enumerate(DOOMCHUG_KEYS)), 0),
+    (2, 6,  'HD2_FM4SynthOMatic', 'Wave', 'Pattern', 'Pattern', LIST, {0: 'Off', **{k: str(k) for k in range(1, 9)}}, 1),
+    (3, 7,  'HD2_AmpLine6Clarity', 'Drive', 'Rate', 'Rate', 'knob', (0.0, 1.0), 0.5),
+    (4, 8,  'HD2_AmpLine6Clarity', 'Bass', 'Drift', 'Drift', 'knob', (0.0, 1.0), 0.35),
+    (5, 9,  'HD2_AmpLine6Clarity', 'Mid', 'Warble', 'Warble', 'knob', (0.0, 1.0), 0.5),
+    (6, 10, 'HD2_AmpLine6Clarity', 'Treble', 'Chug', 'Chug', 'knob', (0.0, 1.0), 0.4),
+    (7, 11, 'HD2_AmpLine6Clarity', 'Presence', 'Tone', 'Tone', 'knob', (0.0, 1.0), 0.25),
+    (8, 13, 'HD2_AmpLine6Clarity', 'ChVol', 'Level', 'Level', 'percent', (0.0, 1.0), 0.5),
+)
 # the Block 3 kernels after NAM, in packing order: model, name, display, Entry 0 cost, primitive, knobs, entry symbol
 EFFECTS = {
     'geiger': dict(takeover=GEIGER_TAKEOVER, name=GEIGER_NAME, display=GEIGER_DISPLAY, cost=GEIGER_COST, prim=GEIGER_PRIM,
@@ -100,8 +139,21 @@ EFFECTS = {
                       params=COMMANDER_PARAMS, entry='COMMANDER_ENTRY'),   # measured worst 3,441 cycles of ~150,000 (2.3 %)
     'corrupt': dict(takeover=CORRUPT_TAKEOVER, name='HD2_DistCorrupt', display='Corrupt', cost=700, prim=0x0838,
                     params=CORRUPT_PARAMS, entry='CORRUPT_ENTRY'),         # measured worst 3,545
+    # an overlay: the code and data travel inside Blob 0; only its stub is in the boot stream (ovl_stub_kernel.py)
+    'ottobit': dict(takeover='HD2_DistBitcrusherMono', name='HD2_DistOttobit', display='Ottobit', cost=700, prim=0x2392,
+                    params=OTTOBIT_PARAMS, entry='OVL_ENTRY_OTTOBIT'),   # measured mean 2,450 cycles of ~150,000
+    'syntax': dict(takeover='HD2_DistPocketFuzzMono', name='HD2_DistSyntax', display='Syntax', cost=1200, prim=0x238F,
+                   params=SYNTAX_PARAMS, entry='OVL_ENTRY_SYNTAX'),   # measured worst 5,670
+    # resident, not an overlay: it is meant to run beside Ottobit, and a swap costs ~28,000 cycles
+    'doomchug': dict(takeover='HD2_DistPocketFuzzMono', name='HD2_DistDoomChug', display='Doom Chug', cost=500, prim=0x238F,
+                     params=DOOMCHUG_PARAMS, entry='DOOMCHUG_ENTRY'),
+    # --probe: a diagnostic on Geiger's host instead of Geiger (effects/probe/sharc/probe_kernel.asm)
+    'probe': dict(takeover=GEIGER_TAKEOVER, name='HD2_DistProbe', display='Probe', cost=300, prim=GEIGER_PRIM,
+                  params=GEIGER_PARAMS, entry='PROBE_ENTRY'),
 }
 BLOB0_WORDS_5 = 0x7B000                # five host graphs
+BLOB0_WORDS_OVL = 0x7E000              # six host graphs and the overlay payload
+GEIGER_CURVES_WORDS = 16 * 65
 NAM_FAR_D_EXTRA = 17                   # NAM's layout when the extra kernels are in
 
 
@@ -114,6 +166,11 @@ class Kernel:
             import geiger_kernel as m
             self.places = m.PLACES
             self._asm = m.assemble
+            self._check = lambda sec, pl: m.check(sec, pl)
+        elif key == 'ovl_stub':
+            import ovl_stub_kernel as m
+            self.places = m.SPEC.places
+            self._asm = m.SPEC.assemble
             self._check = lambda sec, pl: m.check(sec, pl)
         elif key == 'commander_corrupt':                 # both in one kernel, two entry points
             import commander_corrupt_kernel as m
@@ -142,6 +199,23 @@ class Kernel:
 
     def check(self, seconds):
         return self._check(seconds, self.place)
+
+
+def append_blob0(e4, words):   # (unused: words past the last structure froze the unit)
+    """Entry 4 with `words` appended to Blob 0 (the blobs after it move up; stock blobs stay)."""
+    w4 = list(struct.unpack('<%dI' % (len(e4) // 4), e4))
+    nblobs, dir_off = w4[2], w4[3]
+    b0_len, b0_off = w4[dir_off], w4[dir_off + 1]
+    end = b0_off + b0_len
+    assert w4[4] == b0_off and all(w4[dir_off + 2 * k + 1] + w4[dir_off + 2 * k] <= dir_off or
+                                   w4[dir_off + 2 * k + 1] >= end for k in range(1, nblobs))
+    for k in range(1, nblobs):
+        if w4[dir_off + 2 * k + 1] >= end:
+            w4[dir_off + 2 * k + 1] += len(words)
+    w4[dir_off] = b0_len + len(words)
+    w4 = w4[:end] + list(words) + w4[end:]
+    w4[5] = len(w4)
+    return struct.pack('<%dI' % len(w4), *w4), b0_len
 
 
 def b3_normal(a48):
@@ -218,23 +292,63 @@ def knob_params(pa, e3, info, spec):
     return out
 
 
+NAM_HOSTS = {'regal': 'HD2_DistRegalBassDIMono', 'ir': None}   # --nam-host; None: the 1024 IR (be.TAKEOVER)
+NAM_LIST_SLOTS = 21                                  # the longest list stock shows
+
+
+def nam_off_ir(pa_params):
+    """Model on a non-IR block: IR Select's 'dynamicList' display exists only on IR blocks, so a plain list of
+    User IR slots 1..21, the same parameter and instance word."""
+    p = pa_params[0]
+    assert p['name'] == 'Index' and p['type'] == 2
+    p['raw'][5], p['raw'][6], p['raw'][7] = 1, NAM_LIST_SLOTS, 1
+    p['default_word'] = 1
+    p['meta'] = [('displayType', 7, 'list'), ('displayName', 7, 'Model'), ('displayNameShort', 7, 'Model')] + \
+        [(str(k), 7, str(k)) for k in range(1, NAM_LIST_SLOTS + 1)]
+    return pa_params
+
+
+DEFAULT_EXTRAS = ('commander', 'corrupt', 'ottobit', 'doomchug')   # what a plain build_all.py builds
+
+
 def main():
     argv = sys.argv[1:]
     if '-h' in argv or '--help' in argv:
         sys.exit(__doc__)
-    extras = argv[argv.index('--with') + 1].split(',') if '--with' in argv else []
-    if extras not in ([], ['commander'], ['commander', 'corrupt']):
-        sys.exit('build_all.py: --with takes commander, or commander,corrupt')
-    fx = ['geiger'] + extras                             # the models after NAM and Click
+    probe = '--probe' in argv
+    with_arg = argv[argv.index('--with') + 1] if '--with' in argv else None
+    extras = [] if with_arg == 'none' or (probe and with_arg is None) else \
+        with_arg.split(',') if with_arg else list(DEFAULT_EXTRAS)
+    if extras not in ([], ['commander'], ['commander', 'corrupt'], ['commander', 'corrupt', 'ottobit'],
+                      ['commander', 'corrupt', 'ottobit', 'syntax'], ['commander', 'corrupt', 'ottobit', 'doomchug']):
+        sys.exit('build_all.py: --with takes none, commander, commander,corrupt, commander,corrupt,ottobit, commander,corrupt,ottobit,syntax or commander,corrupt,ottobit,doomchug')
+    overlays = [k for k in extras if k in ('ottobit', 'syntax')]         # sharing one internal region
+    overlay = bool(overlays)
+    if probe and extras:
+        sys.exit('build_all.py: --probe goes alone')
+    first = 'probe' if probe else 'geiger'
+    fx = [first] + extras                                # the models after NAM and Click
     # the Block 3 kernels after NAM, in packing order: Commander and Corrupt together share one kernel
-    blocks = ['geiger'] + (['commander_corrupt'] if 'corrupt' in extras else extras)
+    blocks = [first] + (['commander_corrupt'] if 'corrupt' in extras else extras[:1])
+    if 'doomchug' in extras:
+        blocks += ['doomchug']
+    if overlay:
+        blocks += ['ovl_stub']                           # the overlays' shared region, then their resident stub
     entries_of = {k: [k] for k in blocks}
     entries_of['commander_corrupt'] = ['commander', 'corrupt']
+    entries_of['ovl_stub'] = overlays
     stock = os.path.abspath(argv.pop(0)) if argv and not argv[0].startswith('-') else \
         os.path.join(HERE, 'firmware', 'HX_Effects_v3.80.0_0xd97239907.hxf')
     if not os.path.isfile(stock) or hashlib.md5(open(stock, 'rb').read()).hexdigest() != STOCK_MD5:
         sys.exit(f'{stock}: missing or not the HX Effects 3.80.0 firmware (MD5 {STOCK_MD5}).')
-    suffix = ''.join('_' + k.capitalize() for k in extras)
+    meter = '--meter' in argv                            # the overlays report their real cycle cost by sound
+    host_arg = argv[argv.index('--nam-host') + 1] if '--nam-host' in argv else 'regal'
+    if host_arg not in NAM_HOSTS:
+        sys.exit('build_all.py: --nam-host takes ' + ' or '.join(NAM_HOSTS))
+    nam_host = NAM_HOSTS[host_arg]
+    nam_takeover = nam_host or be.TAKEOVER
+    suffix = '_Probe' if probe else ''.join('_' + k.capitalize() for k in extras) + ('_Meter' if meter else '') + \
+        ('' if nam_host else '_NamIR')
     out = os.path.abspath(argv[argv.index('-o') + 1]) if '-o' in argv else \
         os.path.join(HERE, 'build', f'HX_Effects_v3.80.0_All{suffix}.hxf')
     build = os.path.join(HERE, 'build')
@@ -242,9 +356,19 @@ def main():
     nam_asm = os.path.join(build, 'nam_lite_2slots.asm' if not extras else f'nam_lite_2slots_fd{NAM_FAR_D_EXTRA}.asm')
     image = os.path.join(build, f'all{suffix.lower()}.l6ia')
     manifest_path = os.path.join(build, f'all{suffix.lower()}_manifest.json')
-    blob0_words = BLOB0_WORDS_5 if extras else bnc.BLOB0_WORDS_ALL
+    blob0_words = BLOB0_WORDS_OVL if overlay else BLOB0_WORDS_5 if extras else bnc.BLOB0_WORDS_ALL
     sdr_base = bnc.BLOB0_BASE + blob0_words            # NAM's DDR2 slots just above the Blob 0 buffer
     env = dict(os.environ, NAM_DEVICE='effects', NAM_SDR_BASE=hex(sdr_base))
+    ring0 = sdr_base + NAM_SLOTS * 0x5000                # Ottobit's rings, above NAM's slots
+    if overlay:
+        import geiger_kernel
+        import ottobit_kernel
+        import ovl_stub_kernel
+        import syntax_kernel
+        OVL_MODS = {'ottobit': ottobit_kernel, 'syntax': syntax_kernel}
+        geiger_kernel.EXT_CURVES = 0x3F0000              # for the check; the real address once Blob 0 is laid out
+        ottobit_kernel.SPEC = ottobit_kernel.make_spec(ring0)
+        assert ring0 + ottobit_kernel.RING_N * ottobit_kernel.NSLOTS <= 0x2A8DF6, 'the rings run past the free DDR2'
     check = '--no-check' not in argv
     run = bnc.run
 
@@ -257,8 +381,21 @@ def main():
     click_data0 = click_kernel.PLACES['b3'][2]
     code48_limit = 0xE0000 + (click_data0 - 0xE0000) * 2 // 3
     ks = {k: Kernel(k) for k in blocks}
+    ovk = {k: Kernel(k) for k in overlays}
     cursor = (nam_b3[1] + 0xF) & ~0xF
+    if overlay:                                          # the stub is measured with as many members as it will have
+        ovl_stub_kernel.configure(meter=meter, members=[dict(name=k.upper(), src_code=0x3E0000, n_code=660, src_data=0x3E1000,
+                                                             n_data=300, slots_off=200, kernel=0xE5000, pattern_word=8) for k in overlays])
     for k in blocks:
+        if k == 'ovl_stub':                              # the shared region: the largest data, then the largest code
+            sizes = [ovk[m].measure(cursor) for m in overlays]
+            o_data_end, o_code_n = max(x[0] for x in sizes), max(x[1] for x in sizes)
+            o_code48 = b3_code48(o_data_end)
+            for m in overlays:
+                ovk[m].set_place(o_code48, code48_limit, cursor)
+            o_region = (cursor, o_data_end, o_code48, o_code_n + (o_code_n & 1))
+            ovl_stub_kernel.MEMBERS[:] = [(m.upper(), OVL_MODS[m].SPEC, 'b3', f'{m.upper()}_ENTRY', OVL_MODS[m]) for m in overlays]
+            cursor = (b3_normal(o_code48 + o_region[3]) + 0xF) & ~0xF
         data_end, n_code = ks[k].measure(cursor)
         code48 = b3_code48(data_end)
         ks[k].set_place(code48, code48_limit, cursor)
@@ -293,8 +430,8 @@ def main():
     e4 = pa.get_entry_swapped(l6ia_bytes, 4)
     info = pa.parse_entry3_full(e3)
     clone = pa.find_model(info, be.CLONE)
-    targets = {'nam': pa.find_model(info, be.TAKEOVER), 'click': pa.find_model(info, bc.TAKEOVER)}
-    params = {'nam': pa.nam_params(e3, info), 'click': bc.click_params(pa, e3, info)}
+    targets = {'nam': pa.find_model(info, nam_takeover), 'click': pa.find_model(info, bc.TAKEOVER)}
+    params = {'nam': nam_off_ir(pa.nam_params(e3, info)) if nam_host else pa.nam_params(e3, info), 'click': bc.click_params(pa, e3, info)}
     for k in fx:
         targets[k] = pa.find_model(info, EFFECTS[k]['takeover'])
         params[k] = knob_params(pa, e3, info, EFFECTS[k]['params'])
@@ -304,8 +441,42 @@ def main():
     e4n, b_c, c_c = pa.add_model_entry4(e4n, clone['blob_index'], params['click'], 0, blob_fn=bc.click_host_blob, prim_id=CLICK_PRIM)
     blobs, comps = {'nam': b_n, 'click': b_c}, {'nam': c_n, 'click': c_c}
     for k in fx:
-        e4n, blobs[k], comps[k] = pa.add_model_entry4(e4n, clone['blob_index'], params[k], 0, prim_id=EFFECTS[k]['prim'])
+        pad = ()
+        if overlay and k == fx[-1]:            # inside Blob 0, before the last model's own table copy
+            w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
+            b0_len = w4[w4[3]]
+            curves = geiger_kernel.tables()
+            assert len(curves) == GEIGER_CURVES_WORDS
+            base = bnc.BLOB0_BASE + b0_len
+            o_words, ovl = ovl_stub_kernel.layout([m[:4] for m in ovl_stub_kernel.MEMBERS], base + len(curves))
+            pad = curves + o_words
+            geiger_kernel.EXT_CURVES = base
+            ovl_stub_kernel.configure(**ovl)
+            print(f'[+] Entry 4: inside Blob 0 at DDR2 {base:#x}: Geiger\'s curves ({len(curves)} words), the overlays '
+                  f'({", ".join(f"{m["name"]} {m["n_code"]}+{m["n_data"]}" for m in ovl["members"])}); rings at {ring0:#x}')
+        if k == 'probe':        # the magic word and the routine inside Blob 0, before the probe's own table copy
+            import probe_kernel
+            w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
+            b0_len = w4[w4[3]]
+            probe_kernel.EXT['tail'] = (b0_len + 1) & ~1
+            _, _, p_syms, _, _ = ks['probe'].assemble()
+            pad = [0] * (probe_kernel.EXT['tail'] - b0_len) + probe_kernel.tail_words(p_syms)
+        e4n, blobs[k], comps[k] = pa.add_model_entry4(e4n, clone['blob_index'], params[k], 0, prim_id=EFFECTS[k]['prim'],
+                                                      b0_pad=pad)
     print('[+] Entry 4: ' + ', '.join(f'{k} blob {blobs[k]} on {comps[k]:#x}' for k in blobs))
+    if probe:                                            # where the probe's words landed, checked
+        w4 = struct.unpack('<%dI' % (len(e4n) // 4), e4n)
+        d = w4[3]
+        b0 = list(w4[w4[d + 1]: w4[d + 1] + w4[d]])
+        t = probe_kernel.EXT['tail']
+        assert len(b0) <= blob0_words, f'Blob 0 {len(b0):#x} words, its buffer {blob0_words:#x}'
+        assert pa.sharc_blob0_check(b0, blob0_words) is None
+        assert b0[t] == probe_kernel.MAGIC and b0[t: t + len(probe_kernel.tail_words(p_syms))] == probe_kernel.tail_words(p_syms)
+        assert b0[0x10] > t, 'the probe words are not before the last composite table'
+        print(f'[+] Entry 4: Blob 0 {len(b0):#x} words, the probe words inside it at {t:#x} (table at {b0[0x10]:#x}): '
+              f'magic at DDR2 {probe_kernel.magic_addr():#x}')
+        if check:
+            probe_kernel.check(0.25, ks['probe'].place)
 
     # 3. Entry 2: Blob 0's buffer and Heap 6
     entries = l6ia.parse(l6ia_bytes)
@@ -313,7 +484,7 @@ def main():
     e2_raw, _ = pa.expand_sharc_blob0_buffer(e2_raw)
 
     # 4. Entry 3: the models, descriptors copied over their targets
-    e3n, id_n, _ = pa.add_model_entry3(e3, clone, be.NAME, be.DISPLAY, b_n, params['nam'])
+    e3n, id_n, _ = pa.add_model_entry3(e3, targets['nam'] if nam_host else clone, be.NAME, be.DISPLAY, b_n, params['nam'])
     e3n, id_c, _ = pa.add_model_entry3(e3n, targets['click'], bc.NAME, bc.DISPLAY, b_c, params['click'],
                                        meta_set={'displayNameShort': bc.SHORT, 'displayParamCount': str(len(params['click']) - 2)})
     ids = {'nam': id_n, 'click': id_c}
@@ -337,7 +508,7 @@ def main():
 
     # 5. Entry 0
     e0n, *_ = pa.takeover_entry0_effects(e0, targets['nam']['words'][2], be.DISPLAY, short_name=be.SHORT,
-                                         dsp_cost=be.DSP_COST, n_params=len(params['nam']), strip_title=be.STRIP_TITLE)
+                                         dsp_cost=be.DSP_COST, n_params=len(params['nam']), strip_title=None if nam_host else be.STRIP_TITLE)
     e0n, *_ = pa.takeover_entry0_effects(e0n, targets['click']['words'][2], bc.DISPLAY, short_name=bc.SHORT,
                                          dsp_cost=bc.DSP_COST, n_params=len(params['click']), strip_title=None,
                                          n_display=len(params['click']) - 2)
@@ -366,6 +537,9 @@ def main():
     regions = {who: [(*bnc.byte_range(s.kind, s.addr, len(s.words)), f'{who} {s.kind} {s.addr:#x}+{len(s.words)}')
                      for s in secs] for who, (secs, _, _) in kernels.items()}
     regions['NAM'].append((*bnc.byte_range('dm', nam_b3[0], nam_b3[1] - nam_b3[0]), f'NAM Block 3 {nam_b3[0]:#x}..{nam_b3[1]:#x}'))
+    if overlay:                                          # not in the boot stream, but the shared region is taken
+        regions['the overlay region'] = [(*bnc.byte_range('dm', o_region[0], o_region[1] - o_region[0]), f'overlay data {o_region[0]:#x}'),
+                                         (*bnc.byte_range('pm', o_region[2], o_region[3]), f'overlay code {o_region[2]:#x}')]
     owners = list(regions)
     for i, a in enumerate(owners):
         for b in owners[i + 1:]:
@@ -384,6 +558,8 @@ def main():
     for secs, _, _ in kernels.values():
         for s in secs:
             ldr += pa.pack_init_l48(s.addr, s.words) if s.kind == 'pm' else ldr_l32(pa, s.addr, s.words, bool(extras))
+    if probe:                                            # the overlay test region: free, below Click's data
+        assert bnc.byte_range('dm', probe_kernel.normal_of(probe_kernel.REG), probe_kernel.NWORDS)[2] <= bnc.byte_range('dm', click_data0, 1)[1]
     table, _ = pa.sharc_prim_table(e2_raw)
     template = pa.sharc_prim_record(e2_raw, 0x822)
     for who, (_, entry, prim) in kernels.items():
@@ -402,7 +578,7 @@ def main():
     import json
     manifest = dict(input=os.path.basename(stock), input_md5=STOCK_MD5,
                     output=os.path.relpath(out, HERE), output_md5=hashlib.md5(open(out, 'rb').read()).hexdigest(),
-                    nam=dict(model=be.TAKEOVER, primitive=NAM_PRIM, slots=NAM_SLOTS, block3=list(nam_b3),
+                    nam=dict(model=nam_takeover, moved=bool(nam_host), primitive=NAM_PRIM, slots=NAM_SLOTS, block3=list(nam_b3),
                              sdram_base=sdr_base, dsp_cost=be.DSP_COST, **({'far_d': NAM_FAR_D_EXTRA} if extras else {})),
                     click=dict(model=bc.TAKEOVER, primitive=CLICK_PRIM, place=list(click_kernel.PLACES['b3']), dsp_cost=bc.DSP_COST))
     for k in fx:
@@ -411,6 +587,8 @@ def main():
                            data=list(placed[k][1]), dsp_cost=EFFECTS[k]['cost'], **({'kernel': b} if b != k else {}))
     if extras:
         manifest['extras'] = extras
+    if overlay:
+        manifest['overlay'] = dict(ovl, meter=meter, ring0=ring0, curves=geiger_kernel.EXT_CURVES, place=list(ovk[overlays[0]].places['b3']), names=overlays)
     manifest.update(blob0_words=blob0_words, checked=check)
     json.dump(manifest, open(manifest_path, 'w'), indent=1)
     print(f'\nDone: {out}\nFlash: python3 tools/flash.py flash {os.path.relpath(out, HERE)}')

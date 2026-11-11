@@ -1,5 +1,5 @@
 """Read an all-in-one image back and check it, using its manifest (written by build_all.py; default
-build/all_manifest.json, or e.g. build/all_commander_corrupt_manifest.json) for the addresses and the
+build/all_commander_corrupt_ottobit_doomchug_manifest.json, or e.g. build/all_manifest.json) for the addresses and the
 single-effect images for comparison:
 
 - NAM (model 72) and Click (model 48): parameters, metadata, states and Entry 0 rows as in their own
@@ -21,7 +21,7 @@ import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', 'effects/geiger/sharc', 'effects/common',
-          'effects/commander/sharc', 'effects/corrupt/sharc', '.'):
+          'effects/commander/sharc', 'effects/corrupt/sharc', 'effects/ottobit/sharc', '.'):
     sys.path.insert(0, os.path.join(ROOT, p))
 os.environ['NAM_DEVICE'] = 'effects'
 import build_all  # noqa: E402
@@ -39,8 +39,23 @@ def check(c, msg):
     ok &= bool(c)
 
 
-man = json.load(open(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'all_manifest.json')))
+man = json.load(open(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'build', 'all_commander_corrupt_ottobit_doomchug_manifest.json')))
 FX = ['geiger'] + man.get('extras', [])
+OVL = man.get('overlay')
+if OVL:                                               # what the build set: the kernels assemble as they did for the image
+    import geiger_kernel  # noqa: E402
+    import importlib  # noqa: E402
+    import ottobit_kernel  # noqa: E402
+    import ovl_stub_kernel  # noqa: E402
+    sys.path.insert(0, os.path.join(ROOT, 'effects', 'syntax', 'sharc'))
+    geiger_kernel.EXT_CURVES = OVL['curves']
+    ottobit_kernel.SPEC = ottobit_kernel.make_spec(OVL['ring0'])
+    OVL_MEMBERS = []
+    for n in OVL['names']:
+        mod = importlib.import_module(f'{n}_kernel')
+        mod.SPEC.places['b3'] = tuple(OVL['place'])
+        OVL_MEMBERS.append((n.upper(), mod.SPEC, 'b3', f'{n.upper()}_ENTRY'))
+    ovl_stub_kernel.configure(code_n=OVL['code_n'], data0=OVL['data0'], members=OVL['members'], meter=OVL.get('meter', False))
 
 
 def load(name):
@@ -98,6 +113,20 @@ def e0_rows(img, name):
 # NAM and Click: as in their own images
 for key, single in (('nam', nam_img), ('click', click_img)):
     name = man[key]['model']
+    if key == 'nam' and man['nam'].get('moved'):        # NAM on a non-IR block: same knobs but Model, the 1024 IR left stock
+        ir1024 = 'HD2_ImpulseResponse1024Mono'
+        a, ma = model(allimg, name)
+        b, mb = model(single, ir1024)
+        check(a['display'] == b['display'] and a['states'] == b['states'] and a['params'][1:] == b['params'][1:]
+              and a['params'][0][:3] == b['params'][0][:3], f'{name} ({a["display"]}): knobs and states as NAM\'s own, Model the same parameter')
+        check(dict(a['meta']).get('category') == 'distortion' and dict(a['meta']).get('subcategory') == 'mono', '  in Distortion > Mono')
+        check(dict(a['params'][0][4]).get('displayType') == 'list' and a['params'][0][3][:2] == (1, build_all.NAM_LIST_SLOTS), '  Model a list of User IR slots')
+        ba, bb = blob(allimg, ma['blob_index']), blob(single, mb['blob_index'])
+        tree = ba[2]
+        check(len(ba) == len(bb) and all(x == y or k == tree + 1 for k, (x, y) in enumerate(zip(ba, bb))),
+              f'  host blob {ma["blob_index"]} word for word as in its image, composite {ba[tree + 1]:#x}')
+        check(model(allimg, ir1024)[0] == model(stock, ir1024)[0] and e0_rows(allimg, ir1024) == e0_rows(stock, ir1024), '  the 1024 IR block is stock again')
+        continue
     a, ma = model(allimg, name)
     b, mb = model(single, name)
     check(a == b, f'{name} ({a["display"]}): parameters, metadata and states as in its own image')
@@ -112,7 +141,8 @@ for k in FX:
     E = build_all.EFFECTS[k]
     g, mg = model(allimg, man[k]['model'])
     gmeta = dict(g['meta'])
-    check(g['display'] == E['display'] and gmeta.get('category') == 'distortion' and gmeta.get('subcategory') == 'mono',
+    cat = E.get('category', ('distortion', 'mono'))
+    check(g['display'] == E['display'] and gmeta.get('category') == cat[0] and gmeta.get('subcategory') == cat[1],
           f'{man[k]["model"]} (model {mg["model_id"]}) is {g["display"]}, {gmeta.get("category")} > {gmeta.get("subcategory")}')
     got = [(p[2], p[0], dict(p[4]).get('displayName')) for p in g['params']]
     check(got == [(s[0], s[3], s[4]) for s in E['params']], f'  eight knobs: {[x[2] for x in got]}')
@@ -140,6 +170,17 @@ for cid in range(0x6001c1, 0x6001c1 + len(order)):
     prims[cid] = b0[hdr[3] + 20 + 6]
 want = {0x6001c1 + j: man[k]['primitive'] for j, k in enumerate(order)}
 check(prims == want, f'Blob 0 host composites on primitives { {hex(k): hex(v) for k, v in prims.items()} }')
+if OVL:
+    base = pa.SHARC_BLOB0_BASE
+    t = OVL['curves'] - base
+    curves = geiger_kernel.tables()
+    o_words, o_cfg = ovl_stub_kernel.layout(OVL_MEMBERS, OVL['curves'] + len(curves))
+    want_pad = curves + o_words
+    check(b0[t: t + len(want_pad)] == want_pad and o_cfg['members'] == OVL['members'],
+          f'Blob 0 carries Geiger\'s curves and the overlays at {t:#x} ({len(want_pad)} words), as assembled')
+    check(ctab == t + len(want_pad), '  right before the last composite table')
+    h = b0[ctab + 7 * (b0[0xf] - 1): ctab + 7 * b0[0xf]]
+    check(h[5] + 4 * h[4] == len(b0), '  Blob 0 still ends at its last composite')
 err = pa.sharc_blob0_check(list(b0), man['blob0_words'])
 check(err is None, f'Blob 0 ({len(b0):#x} words) fits the {man["blob0_words"]:#x}-word buffer{"" if err is None else ": " + err}')
 
