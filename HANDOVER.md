@@ -248,6 +248,12 @@ stock's end and ours (not in the partition table; presets and IRs live elsewhere
     (DYLD_INSERT_LIBRARIES, as for Line 6 Updater; HX Edit may have a hardened runtime, then another capture
     route is needed), decode it with `tools/usb/decode.py` (expected: the same 16‑byte message framing as the
     flasher, port 0x1001 -> 0x03ef, unconfirmed), then replay it as flash.py does and check the slot reads back.
+11. ~~Level-match captures~~ — done 2026‑11‑13: `nam2ir.py --match [DB]` (default −18) scales the head's output
+    scale (the last weight; the head is linear) so the capture plays at DB on a fixed test signal (strummed E‑A‑D
+    chord, 1 s, −10 dBFS peak, times the kernel's input trim), K‑weighted per BS.1770. `tools/sharc/nam_level.py`
+    runs the network in numpy (float64), checked against nam_a2.asm in ssim to 1.3e‑6 on a high-gain capture; ssim
+    itself is too slow (over 50 M instructions for 0.5 s). A set of 19 user captures measured −29.1 .. −11.0 dB
+    before matching. Only the output-scale word changes; the rest of the stream is identical.
 
 ## Don'ts
 

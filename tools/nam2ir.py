@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """nam2ir.py - a NAM A2 Lite model (3 channels) as an HX Stomp User IR, for NAM A2 Lite.
 
-usage: nam2ir.py <model.nam> -o model.wav [--no-level]
+usage: nam2ir.py <model.nam> -o model.wav [--no-level] [--match [DB]]
+
+--match level-matches captures: it measures how loud the capture plays on the unit (nam_level.py: the model on a
+fixed strummed-chord test signal at its input trim, K-weighted as LUFS) and scales the model's output (its last
+weight, the head's scale: level only) to DB, default -18. Captures converted with --match play at about the same
+volume at the same Ch Vol, whenever they were converted.
 
 A capture that gives its interface's level (metadata input_level_dbu, the dBu
 at 0 dBFS) has it in IR word 5 (nam_lite.level_word); the kernel then trims
@@ -28,6 +33,7 @@ under 15.5). The unit stores and passes the words to the SHARC unchanged, at
 boot and on import, for every slot.
 """
 import json
+import math
 import os
 import struct
 import sys
@@ -36,6 +42,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(here, "sharc"))
 import nam_lite   # noqa: E402
 import nam_pack   # noqa: E402
+import nam_level  # noqa: E402  (--match; needs numpy)
 
 
 def write_wav(path, words, rate=48000):
@@ -82,6 +89,13 @@ def main():
     if len(argv) < 3 or "-o" not in argv:
         sys.exit(__doc__)
     out = argv.pop(argv.index("-o") + 1)
+    target = None
+    if "--match" in argv:
+        k = argv.index("--match")
+        target = nam_level.TARGET
+        if k + 1 < len(argv) and argv[k + 1].lstrip("-").replace(".", "", 1).isdigit():
+            target = float(argv.pop(k + 1))
+        argv.pop(k)
     src = [a for a in argv if a not in ("-o", "--no-level")][0]
     w, c = nam_pack.load(src, channels=nam_lite.C)
     if c != nam_lite.C:
@@ -90,6 +104,10 @@ def main():
     if bad:
         sys.exit(f"{src}: not an A2 Lite capture the kernel can run: " + "; ".join(bad))
     dbu = None if "--no-level" in argv else nam_pack.input_level_dbu(src)
+    if target is not None:
+        g, db = nam_level.gain_for(w, dbu, target)
+        w = list(w[:-1]) + [w[-1] * g]                # the head's output scale: level only
+        print(f"level {db:.1f} dB on the test signal: {20 * math.log10(g):+.1f} dB to {target:g}")
     try:
         words = nam_lite.ir_samples(w, dbu)
     except ValueError as e:

@@ -369,9 +369,10 @@ Updater with a logging libusb shim, `decode.py` reads the log), and `.venv/bin/p
 
 1. Convert a capture to a User IR:
    ```
-   python3 tools/nam2ir.py "My Amp.nam" -o "My Amp NAM.wav"
+   python3 tools/nam2ir.py "My Amp.nam" -o "My Amp NAM.wav" --match
    ```
-   The `.wav` is about 8 KB: it is not a sound, it carries the capture's weights.
+   The `.wav` is about 8 KB: it is not a sound, it carries the capture's weights. `--match` level-matches
+   the capture (below); leave it out to keep the capture's own output level.
 2. In HX Edit's **Impulses** tab, import the `.wav` into a User IR slot (say slot 5). Do this with a
    preset selected that has no NAM block in it; HX Edit does not understand the NAM block (see Limits).
 3. On the unit, add a block, choose **Distortion → Mono → NAM A2 Lite** (all‑in‑one image) or
@@ -380,6 +381,16 @@ Updater with a logging libusb shim, `decode.py` reads the log), and `.venv/bin/p
 
 Captures and cab IRs share the 128 User IR slots. A layout that's easy to remember helps: for example
 captures in slots 1–20 (the all‑in‑one image's Model knob reaches 1–21) and cab IRs from 22.
+
+**Level matching.** Captures come out at very different volumes: each keeps its amp's own output level, and the
+unit's input trim (from the capture's recorded interface level) drives some harder than others. A set of 19 measured
+here spread over 18 dB. `--match` measures how loud the capture plays on the unit, by running the model in numpy (the
+same network as the kernel, checked against it) on a fixed strummed-chord test signal at its input trim and
+weighting the result as loudness meters do (LUFS, ITU-R BS.1770). It then scales the model's output to −18 dB on
+that scale (`--match -14` picks another level). Only the output level changes, not the tone or how hard the model is
+driven. Clean and high-gain captures still differ a little by ear, but within a few dB instead of up to 18. Converted
+with `--match`, captures play at about the same volume at the same Ch Vol, whenever they were converted.
+`python3 tools/sharc/nam_level.py *.nam` prints each capture's level without converting.
 
 For a batch, number the output files after the slot each one will go in (`01 Clean.wav`, `02 Lead.wav`, …),
 so the file name tells you the Model setting. A capture that holds several sizes (an A2 `.nam` with a
@@ -535,7 +546,7 @@ captures/                 demo NAM A2 Lite captures, already converted to User I
 README.md                 this file
 HANDOVER.md               the state of play and how things were found, for picking the project up
 build/                    the output (created by the build)
-tools/                    hxf.py, l6ia.py, l6ia_verify.py, patch_amp.py, nam2ir.py
+tools/                    hxf.py, l6ia.py, l6ia_verify.py, patch_amp.py, nam2ir.py (sharc/nam_level.py: --match)
 tools/flash.py            USB flasher with boot check (see Flashing from the command line)
 tools/usb/                usblog.c + build_shim.sh + capture.sh (log Line 6 Updater's USB traffic), decode.py
 tools/sharc/              the kernel (nam_multi.py, nam_multi_kernel.asm), nam_lite.py, nam_pack.py,
