@@ -242,6 +242,12 @@ stock's end and ours (not in the partition table; presets and IRs live elsewhere
 9. More effects (Stutter, Grains, Sequence, Warp) need overlays, a stock block each (the user's choices:
    Bleat Chop Trem, Pitch Echo, Mystery Filter, 4-Voice Chorus) and somewhere in DDR2 for the larger
    rings. Two overlays in one preset swap every call: about 28,000 cycles a swap on the unit.
+10. **User IR upload without HX Edit** (user asked 2026‑11‑13; to do). A `tools/ir_upload.py` that writes `.wav`
+    files (and `.nam`, converting on the way) into numbered User IR slots over USB, e.g. a folder of `01 …wav`
+    .. `19 …wav` into slots 1..19. Plan: capture HX Edit importing one IR with `tools/usb/usblog.dylib`
+    (DYLD_INSERT_LIBRARIES, as for Line 6 Updater; HX Edit may have a hardened runtime, then another capture
+    route is needed), decode it with `tools/usb/decode.py` (expected: the same 16‑byte message framing as the
+    flasher, port 0x1001 -> 0x03ef, unconfirmed), then replay it as flash.py does and check the slot reads back.
 
 ## Don'ts
 

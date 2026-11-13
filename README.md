@@ -381,6 +381,11 @@ Updater with a logging libusb shim, `decode.py` reads the log), and `.venv/bin/p
 Captures and cab IRs share the 128 User IR slots. A layout that's easy to remember helps: for example
 captures in slots 1–20 (the all‑in‑one image's Model knob reaches 1–21) and cab IRs from 22.
 
+For a batch, number the output files after the slot each one will go in (`01 Clean.wav`, `02 Lead.wav`, …),
+so the file name tells you the Model setting. A capture that holds several sizes (an A2 `.nam` with a
+"SlimmableContainer") converts fine: `nam2ir.py` takes its 3‑channel Lite size. Getting the files onto the unit
+still needs HX Edit; a USB upload tool like the flasher is on the to‑do list (HANDOVER.md, Open / next).
+
 ## Try it quickly: the demo captures
 
 The `captures/` folder holds a few NAM A2 Lite captures **already converted** with `tools/nam2ir.py`,
