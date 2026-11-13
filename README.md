@@ -29,9 +29,11 @@ It also adds effects of our own, each an original algorithm running on the same 
 - **Ottobit**, a sequenced bit crusher with random stutters ([Ottobit](#ottobit-a-sequenced-bit-crusher))
 - **Doom Chug**, a low drone generator to feed the glitch effects ([Doom Chug](#doom-chug-a-low-drone-generator))
 
-**The recommended build is the all‑in‑one image**, `python3 build_all.py`: NAM and all six effects in
-one firmware, with NAM moved out of the IR category so a cab IR can follow it. This is the image
-running on the maintainer's unit (2026‑11‑11). The NAM‑only build (`build_effects.py`) is still there.
+There are two builds, one command each (see [Build](#build)): `python3 build.py nam` for NAM and Click, and
+`python3 build.py full` for NAM, Click and the five other effects. In both, NAM sits under Distortion → Mono
+(out of the IR category), so a cab IR can follow it. **The full image is the recommended one**, and it's what
+runs on the maintainer's unit (2026‑11‑13). The original NAM‑only build (`build_effects.py`, NAM in the IR
+category) is still there.
 
 **You do this at your own risk! Do not attempt it if you are not comfortable with running command line tools and 
 potentially having to recover your unit yourself!**

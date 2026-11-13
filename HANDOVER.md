@@ -1,9 +1,11 @@
 # Handover: NAM A2 Lite on the Line 6 HX Effects
 
-Working state as of 2026‑11‑11 (first written 2026‑11‑01). Two builds work on the unit: the NAM‑only
-image (`build_effects.py`) and the all‑in‑one image (`build_all.py`: NAM, Click, Geiger, Commander,
-Corrupt, Ottobit and Doom Chug, with NAM on the mono Regal Bass DI). The all‑in‑one default image
-(MD5 `7b291b5f…`) is what runs on the unit. A USB flasher installs either without Line 6 Updater.
+Working state as of 2026‑11‑13 (first written 2026‑11‑01). `build.py` makes the two images in use, each
+built, verified and printed with its MD5: `nam` (NAM + Click, `build_nam_click.py --nam-host regal`) and `full`
+(`build_all.py`: NAM, Click, Geiger, Commander, Corrupt, Ottobit and Doom Chug), both with NAM on the mono Regal
+Bass DI. The full default image (MD5 `7b291b5f…`) is what runs on the unit. The original NAM‑only image
+(`build_effects.py`, NAM in the IR category) still builds. Line 6's stock amps were tried and dropped (last
+section). A USB flasher installs either without Line 6 Updater.
 This note is for picking the project up in Claude Code (or anywhere) without re‑deriving anything;
 the dated sections further down record how things were found.
 
