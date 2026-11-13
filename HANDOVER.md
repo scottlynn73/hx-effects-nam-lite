@@ -3,7 +3,7 @@
 Working state as of 2026‑11‑11 (first written 2026‑11‑01). Two builds work on the unit: the NAM‑only
 image (`build_effects.py`) and the all‑in‑one image (`build_all.py`: NAM, Click, Geiger, Commander,
 Corrupt, Ottobit and Doom Chug, with NAM on the mono Regal Bass DI). The all‑in‑one default image
-plus the stock US Small Tweed amp (MD5 `ed65e7b1…`) is what runs on the unit. A USB flasher installs either without Line 6 Updater.
+(MD5 `7b291b5f…`) is what runs on the unit. A USB flasher installs either without Line 6 Updater.
 This note is for picking the project up in Claude Code (or anywhere) without re‑deriving anything;
 the dated sections further down record how things were found.
 
@@ -17,8 +17,11 @@ pushed 2026‑11‑11. Pushing from Claude's shell has failed before: push from 
   <https://github.com/nocaseguy/hx-stomp-nam-lite> with all the edits applied by `apply_effects*.py`,
   plus the bisection scripts, `*_parts/` entry dumps, `stomp_e2.txt`/`effects_e2.txt`, `*_ddr.txt`).
   Not needed to build; useful if the offsets ever have to be re‑mapped.
+- **Two builds (2026-11-13):** `python3 build.py nam|full` = NAM + Click / + the extra effects, each built, verified
+  and printed with its MD5, NAM on the Regal Bass DI in both (`nam_host.py`, shared by build_all.py and
+  build_nam_click.py, which gained `--nam-host` and writes a manifest for verify_nam_click.py).
 - **Build:** `cd /Users/scott/hx-effects-nam-lite && source .venv/bin/activate`, then
-  `python3 build_all.py` (all‑in‑one, the default image, MD5 `ed65e7b10b70cb0efcd8b341af2a8c06`; check
+  `python3 build_all.py` (all‑in‑one, the default image, MD5 `7b291b5f27ad8bb7c121c15528dbc5d2`; check
   it with `python3 tools/verify/verify_all.py`) or `python3 build_effects.py` (NAM only, MD5
   `aaa5186b41f8db6f7a05487355706bb1` since the 2300 cost; verify_all compares against it, so rebuild it
   after any change to NAM). Both read `firmware/HX_Effects_v3.80.0_0xd97239907.hxf` (MD5
@@ -80,9 +83,8 @@ subfolder counts `0x281003dc`/`0x281003e4`, names `0x28100074`/`0x281004e8`. `bt
 | Corrupt | Distortion → Legacy | Octave Fuzz | (shared), 0x0838 | works |
 | Ottobit | Distortion → Mono | mono Bitcrusher | overlay, stub on 0x2392, rings in DDR2 | works |
 | Doom Chug | Distortion → Mono | mono Pocket Fuzz | Block 3 resident, 0x238f, 1 slot | works; Chug knob barely audible |
-| US Small Tweed | Distortion → Mono | mono Tycoctavia Fuzz | stock amp: its own params, states and blob 574, no new code | works |
 
-Options: `--amp none` leaves the amp out (suffix `_NoAmp`, MD5 `7b291b5f…`, the previous default), `--with none | commander | commander,corrupt | commander,corrupt,ottobit |
+Options: `--with none | commander | commander,corrupt | commander,corrupt,ottobit |
 commander,corrupt,ottobit,syntax` for other sets, `--nam-host ir` for NAM on the 1024 IR (suffix
 `_NamIR`, MD5 `d372b440…` with the default set), `--meter` for the cycle-meter build, `--probe` for the
 memory probe, `--no-check` to skip the simulator checks. Room left: about 2 KB of Entry 2 and a few dozen
@@ -260,30 +262,29 @@ the older proven MD5s (899f6904 NAM+Click+Geiger, a486dbed +Commander, e0a3f744 
 Doom Chug image) are 2700 builds. Rebuilt now they should differ only in that cost and Entry 0's checksum
 (checked for the default image).
 
-## Stock amps (2026-11-11)
+## Stock amps: tried and dropped (2026-11-11 to 13)
 
-The firmware still holds Line 6's 224 amp and preamp models (Entry 3, Table 2 rows, graphs in Entry 4, every
-primitive in the boot stream) but none has a Table 1 row, so the app never lists them. Test: `build_all.py
---amp moonjump` gave the mono Tycoctavia Fuzz the stock Moo)))n Jump amp's own parameters, states and blob 748,
-unchanged (MD5 e776338a…, verify_all OK). On the unit: silent, and turning Nrm Drive locked the interface. The
-default image was flashed back. Most likely an amp graph only runs inside Line 6's amp harness (on the Stomp,
-composites 0x60000c/d/f around a model placeholder), which the HX Effects app never builds. The option stays in
-`build_all.py` for further experiments; don't flash it again as it is.
+The firmware holds all 224 of Line 6's amp and preamp models with every DSP primitive they need, but no Table 1
+row, so the app never lists them. What was tried, all as takeovers of stock mono distortions (the amp's own
+parameters, states and graph blob; no new code):
 
-What the follow-up tests found (same day, all on the Tycoctavia slot): every effect block is bound into the
-placeholder 0x6000c4 at member 5 of harness 0x600005, with DM 0x38b (907), PM 0x14e (334) and SDRAM 0x60400;
-the slot wrapper 0x600004 m5 allows DM 0x3a2. VIC Dynamic Bloom uses exactly 907/334, so those limits are
-real. Moo)))n needs DM 1013: too big. Agua 51 (DM 629, no send/receive links, no power-amp knobs) plays.
-Tweed Blues (Bassman, DM 846, PM 265) locked the unit when scrolled over: cause unknown (not the member count,
-since stock effects with 85+ members run; not the link primitives 0x23a1/0x23a2 alone, since Shimmer and
-Barberpole use them). US Small Tweed (DM 410, with links and power-amp knobs) plays and is now in the default
-image (`DEFAULT_AMPS`). Open: why Tweed Blues fails; whether the amp wrapper (harness 0x60000d, placeholder
-DM 0x596) could be used instead.
+- **As effect blocks** (inside FxHarnessMono 0x600005, placeholder 0x6000c4: DM 907, PM 334): US Small Tweed (DM 410)
+  and Agua 51 (629) played; Divided Duo (816), Line 6 2204 Mod (833), Tweed Blues (846) and Moo)))n Jump (1013) were
+  silent and locked the interface. US Small Tweed was in the committed default (8107954).
+- **As amp blocks:** the harness is chosen only by the block type at block+0x28 (tbh at 0x280f3ee0; 0x11 ->
+  HD2_AppAmpHarness, placeholder DM 0x596, PM 0x1fa). The placement check at 0x280f221c refuses amp blocks above a
+  per-DSP limit of 0 (`cmp r3,#0` at 0x280f2296); patched to 1 (`01 2b`) with the browser item type set to 0x11.
+  Tweed Blues Brt on the Arbitrator Fuzz (image a3b295be) played, saved, recalled and bypassed on 2026-11-12.
+  Every other amp then locked the screen the moment it was reached in the browser (the previous block stays shown):
+  EV Panama Red, Archetype Lead (on Valve Driver, Industrial Fuzz), US Double Nrm (on Hedgehog D9 and on the
+  Arbitrator itself, alone). Not size, link count, knob names, host block, amp count or the moved effects. Finally the
+  byte-identical a3b295be crashed on Tweed Blues too, in an empty preset: something on the unit (settings/presets
+  surviving a flash?) changed after the first success. Unresolved; the user dropped the idea. A global-settings reset
+  and a retest of a3b295be was the next suggested step.
+- Costs: the HX Stomp 3.80 Table 1 (Stomp Entry 0, rows from offset 0x28657, unaligned) has every amp's cost; the
+  two units agree on all 463 shared models (about 75 units per Benvesco percent).
 
-DSP costs (2026-11-11): the HX Effects has no Table 1 row for its hidden amps, so `STOCK_AMPS` uses the HX Stomp
-3.80.0 Table 1 cost (`~/hx-stomp-nam-lite/HX_Stomp_v3.80.0_0x103966115.hxf`): all 463 models the two share have
-identical costs. US Small Tweed 1209, Agua 51 1900, Tweed Blues Brt 2324, Moo)))n Jump 2850, Clarity 1700. These
-match Benvesco's Helix DSP allocation table at ~75 per percent (US Small Tweed 16.12 %, Tweed Blues ~31 %, Agua 51
-25.33 %), so the README's old "hundredths of a percent" reading of costs was wrong: NAM's 2300 is ~31 % on that
-scale against its measured 23 % of cycles (not changed; the user chose 2300). The default image with cost 1209 is
-`ed65e7b1…` (the first one, cost 3000, was `ef5deee7…`).
+The code (STOCK_AMPS, `patch_amp.effects_allow_amps`, browser btype, verify checks) was removed; the effect-block
+version is in commit 8107954 (the amp-block version was never committed). Its US Small Tweed default is reverted: the default image is the
+no-amp one again (7b291b5f…).
+

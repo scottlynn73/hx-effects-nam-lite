@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Build HX Effects firmware 3.80.0 with both NAM A2 Lite and the Click metronome in one image.
 
-usage: python3 build_nam_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--no-check]
+usage: python3 build_nam_click.py [HX_Effects_v3.80.0_0xd97239907.hxf] [-o out.hxf] [--nam-host ir|regal] [--no-check]
+
+  --nam-host regal  NAM on the mono Regal Bass DI (Distortion > Mono) instead of the 1024 IR, so a cab IR can
+                    follow it, as in build_all.py (file name gets _NamRegal)
+  Each run writes build/nam_click<suffix>_manifest.json for tools/verify/verify_nam_click.py.
 
   NAM A2 Lite   as build_effects.py: the 1024 IR block (IR > Single), primitive 0x9c75, kernel in Block 2's
                 free tail (PM 0xc4ef8..), its slots in Block 3 (0xe4850..0xe7c14); but its DDR2 blocks
@@ -32,6 +36,7 @@ sys.path.insert(0, os.path.join(HERE, 'effects', 'metronome', 'sharc'))
 
 import build_click as bc  # noqa: E402  (Click's knobs, map builder, names)
 import build_effects as be  # noqa: E402  (NAM's names and cost)
+import nam_host as nh  # noqa: E402  (where NAM sits)
 
 STOCK_MD5 = '7c2ebdf1bffb6bcc5f89dda97f91e40c'
 NAM_PRIM, CLICK_PRIM = 0x9c75, 0x0128
@@ -71,12 +76,18 @@ def main():
         os.path.join(HERE, 'firmware', 'HX_Effects_v3.80.0_0xd97239907.hxf')
     if not os.path.isfile(stock) or hashlib.md5(open(stock, 'rb').read()).hexdigest() != STOCK_MD5:
         sys.exit(f'{stock}: missing or not the HX Effects 3.80.0 firmware (MD5 {STOCK_MD5}).')
+    host_arg = argv[argv.index('--nam-host') + 1] if '--nam-host' in argv else 'ir'
+    if host_arg not in nh.NAM_HOSTS:
+        sys.exit('build_nam_click.py: --nam-host takes ' + ' or '.join(nh.NAM_HOSTS))
+    nam_host = nh.NAM_HOSTS[host_arg]
+    suffix = '_NamRegal' if nam_host else ''
     out = os.path.abspath(argv[argv.index('-o') + 1]) if '-o' in argv else \
-        os.path.join(HERE, 'build', 'HX_Effects_v3.80.0_NAM_Click.hxf')
+        os.path.join(HERE, 'build', f'HX_Effects_v3.80.0_NAM_Click{suffix}.hxf')
     build = os.path.join(HERE, 'build')
     os.makedirs(build, exist_ok=True)
     nam_asm = os.path.join(build, 'nam_lite.asm')
-    image = os.path.join(build, 'nam_click.l6ia')
+    image = os.path.join(build, f'nam_click{suffix.lower()}.l6ia')
+    manifest_path = os.path.join(build, f'nam_click{suffix.lower()}_manifest.json')
     env = dict(os.environ, NAM_DEVICE='effects', NAM_SDR_BASE=hex(NAM_SDR_BASE))
     check = '--no-check' not in argv
 
@@ -108,9 +119,9 @@ def main():
     e4 = pa.get_entry_swapped(l6ia_bytes, 4)
     info = pa.parse_entry3_full(e3)
     clone = pa.find_model(info, be.CLONE)
-    nam_tgt = pa.find_model(info, be.TAKEOVER)
+    nam_tgt = pa.find_model(info, nam_host or be.TAKEOVER)
     click_tgt = pa.find_model(info, bc.TAKEOVER)
-    nam = pa.nam_params(e3, info)
+    nam = nh.nam_off_ir(pa.nam_params(e3, info)) if nam_host else pa.nam_params(e3, info)
     click = bc.click_params(pa, e3, info)
 
     # 2. Entry 4: two host graphs, both copies of the 2048 IR block's, on different primitives
@@ -128,7 +139,7 @@ def main():
     e2_raw, _ = pa.expand_sharc_blob0_buffer(e2_raw)
 
     # 4. Entry 3: both models, each descriptor copied over its takeover target's
-    e3n, nam_id, _ = pa.add_model_entry3(e3, clone, be.NAME, be.DISPLAY, nam_blob, nam)
+    e3n, nam_id, _ = pa.add_model_entry3(e3, nam_tgt if nam_host else clone, be.NAME, be.DISPLAY, nam_blob, nam)
     e3n, click_id, _ = pa.add_model_entry3(e3n, click_tgt, bc.NAME, bc.DISPLAY, click_blob, click,
                                            meta_set={'displayNameShort': bc.SHORT,
                                                      'displayParamCount': str(len(click) - 2)})
@@ -144,11 +155,12 @@ def main():
     chk = pa.parse_entry3_full(e3n)['models']
     assert chk[nam_tgt['model_id']]['displayName'] == be.DISPLAY and chk[nam_tgt['model_id']]['blob_index'] == nam_blob
     assert chk[click_tgt['model_id']]['displayName'] == bc.DISPLAY and chk[click_tgt['model_id']]['blob_index'] == click_blob
-    print(f'[+] Entry 3: {be.TAKEOVER} -> {be.DISPLAY} ({len(nam)} knobs); {bc.TAKEOVER} -> {bc.DISPLAY} ({len(click)} parameters)')
+    print(f'[+] Entry 3: {nam_tgt["name"]} -> {be.DISPLAY} ({len(nam)} knobs); {bc.TAKEOVER} -> {bc.DISPLAY} ({len(click)} parameters)')
 
     # 5. Entry 0: both rows
     e0n, pid_n, _, hits_n = pa.takeover_entry0_effects(e0, nam_tgt['words'][2], be.DISPLAY, short_name=be.SHORT,
-                                                       dsp_cost=be.DSP_COST, n_params=len(nam), strip_title=be.STRIP_TITLE)
+                                                       dsp_cost=be.DSP_COST, n_params=len(nam),
+                                                       strip_title=None if nam_host else be.STRIP_TITLE)
     e0n, pid_c, _, hits_c = pa.takeover_entry0_effects(e0n, click_tgt['words'][2], bc.DISPLAY, short_name=bc.SHORT,
                                                        dsp_cost=bc.DSP_COST, n_params=len(click), strip_title=None,
                                                        n_display=len(click) - 2)
@@ -197,6 +209,11 @@ def main():
     if 'ALL OK' not in run(sys.executable, os.path.join(TOOLS, 'l6ia_verify.py'), image):
         sys.exit('build_nam_click.py: the image failed its checksum check')
     run(sys.executable, os.path.join(TOOLS, 'hxf.py'), 'pack', image, out, '--donor', stock)
+    import json
+    man = dict(output=os.path.relpath(out, HERE), output_md5=hashlib.md5(open(out, 'rb').read()).hexdigest(),
+               nam=dict(model=nam_host or be.TAKEOVER, moved=bool(nam_host)))
+    json.dump(man, open(manifest_path, 'w'), indent=1)
+    print(f'[+] manifest {os.path.relpath(manifest_path, HERE)}')
     print(f'\nDone: {out}\nFlash: python3 tools/flash.py flash {os.path.relpath(out, HERE)}')
 
 

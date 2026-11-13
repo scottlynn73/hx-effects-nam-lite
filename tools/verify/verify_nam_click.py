@@ -11,7 +11,12 @@ unit (build_effects.py's NAM image, build_click.py's Click image) and the stock 
 - Entry 0: both rows as in their own images;
 - every other entry identical to stock.
 
-usage: python3 tools/verify/verify_nam_click.py   (after build_effects.py, build_click.py, build_nam_click.py)
+With a manifest (build/nam_click<suffix>_manifest.json, written by build_nam_click.py) it checks that image
+instead; when NAM sits on the mono Regal Bass DI it checks NAM's knobs against its own image but for Model (a
+list of User IR slots) and the 1024 IR block stock again.
+
+usage: python3 tools/verify/verify_nam_click.py [manifest.json]   (after build_effects.py, build_click.py,
+       build_nam_click.py)
 """
 import os
 import struct
@@ -21,9 +26,13 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 for p in ('tools', 'tools/sharc', 'effects/metronome/sharc', '.'):
     sys.path.insert(0, os.path.join(ROOT, p))
 os.environ['NAM_DEVICE'] = 'effects'
+import json  # noqa: E402
+
 import click_kernel  # noqa: E402
 import l6ia  # noqa: E402
 import patch_amp as pa  # noqa: E402
+import build_effects as be  # noqa: E402
+import nam_host as nh  # noqa: E402
 
 ok = True
 
@@ -40,7 +49,10 @@ def load(name):
     return img
 
 
-combo = load('build/HX_Effects_v3.80.0_NAM_Click.hxf')
+man = json.load(open(sys.argv[1])) if len(sys.argv) > 1 else \
+    dict(output='build/HX_Effects_v3.80.0_NAM_Click.hxf', nam=dict(model='HD2_ImpulseResponse1024Mono', moved=False))
+combo = load(man['output'])
+NAM_MODEL, MOVED = man['nam']['model'], man['nam'].get('moved', False)
 nam_img = load('build/HX_Effects_v3.80.0_NAM_A2_Lite.hxf')
 click_img = load('build/HX_Effects_v3.80.0_Click.hxf')
 stock = load('firmware/HX_Effects_v3.80.0_0xd97239907.hxf')
@@ -70,8 +82,28 @@ def blob_words(img, idx):
     return list(w4[off:off + ln]), w4
 
 
+if 'output_md5' in man:
+    import hashlib
+    check(hashlib.md5(open(os.path.join(ROOT, man['output']), 'rb').read()).hexdigest() == man['output_md5'],
+          f'{man["output"]} is the image the manifest describes ({man["output_md5"]})')
+
 # Entry 3
-for name, single in (('HD2_ImpulseResponse1024Mono', nam_img), ('HD2_DelayModChorusEchoMono', click_img)):
+IR1024 = 'HD2_ImpulseResponse1024Mono'
+if MOVED:                                             # NAM on a non-IR block: same knobs but Model; the 1024 IR stock
+    a, ma = model_view(combo, NAM_MODEL)
+    b, mb = model_view(nam_img, IR1024)
+    check(a['display'] == b['display'] and a['states'] == b['states'] and a['params'][1:] == b['params'][1:]
+          and a['params'][0][:3] == b['params'][0][:3], f'{NAM_MODEL} ({a["display"]}): knobs and states as NAM\'s own, Model the same parameter')
+    check(dict(a['meta']).get('category') == 'distortion' and dict(a['meta']).get('subcategory') == 'mono', '  in Distortion > Mono')
+    check(dict(a['params'][0][4]).get('displayType') == 'list' and a['params'][0][3][:2] == (1, nh.NAM_LIST_SLOTS),
+          '  Model a list of User IR slots')
+    ba, _ = blob_words(combo, ma['blob_index'])
+    bb, _ = blob_words(nam_img, mb['blob_index'])
+    tree = ba[2]
+    check(len(ba) == len(bb) and all(x == y or k == tree + 1 for k, (x, y) in enumerate(zip(ba, bb))),
+          f'  host blob {ma["blob_index"]} word for word as in its image, composite {ba[tree + 1]:#x}')
+    check(model_view(combo, IR1024)[0] == model_view(stock, IR1024)[0], '  the 1024 IR block is stock again')
+for name, single in (((NAM_MODEL, nam_img),) if not MOVED else ()) + (('HD2_DelayModChorusEchoMono', click_img),):
     a, ma = model_view(combo, name)
     b, mb = model_view(single, name)
     check(a == b, f'{name} ({a["display"]}): same parameters, metadata and states as in its own image')
@@ -156,8 +188,12 @@ def row(img, name):
     return t1, t2
 
 
-for name, single in (('HD2_ImpulseResponse1024Mono', nam_img), ('HD2_DelayModChorusEchoMono', click_img)):
+for name, single in (((NAM_MODEL, nam_img),) if not MOVED else ()) + (('HD2_DelayModChorusEchoMono', click_img),):
     check(row(combo, name) == row(single, name), f'Entry 0 rows of {name} as in its own image')
+if MOVED:
+    check(row(combo, IR1024) == row(stock, IR1024), f'Entry 0 rows of {IR1024} stock')
+    t1, t2 = row(combo, NAM_MODEL)
+    check(t1[3] == be.DSP_COST and t2[4:4 + len(b'NAM A2 Lite')] == b'NAM A2 Lite', f'Entry 0: NAM on {NAM_MODEL}, dsp_cost {t1[3]}')
 
 others = [k for k in range(len(l6ia.parse(combo))) if k not in (0, 2, 3, 4)]
 check(all(entry(combo, k) == entry(stock, k) for k in others), f'entries {others} identical to stock')
