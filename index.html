@@ -234,7 +234,7 @@
 
   <div class="warning"><b>Unofficial and experimental.</b> This isn't made or supported by Line 6. Installing modified
     firmware is at your own risk and may void your warranty. If anything goes wrong, <a href="#recovery">Recovery</a>
-    puts the normal firmware back; your presets and IRs survive it.</div>
+    puts the normal firmware back, from this page or with Line 6 Updater; your presets and IRs survive it.</div>
 
   <div class="warning"><b>Good to know before you start</b>
     <ul class="plain" style="margin-top:6px">
@@ -295,8 +295,8 @@
         <small>The above, plus the HX Stomp's 111 amps and 112 preamps.</small></span></label>
       <label><input type="radio" name="build" value="full" checked><span><b>NAM + Amps + Effects</b> (everything)
         <small>The above, plus the extra effects, including <b>Drum Chapel, a basic drum machine</b> that follows tap
-        tempo (grooves, seven kits, one of them sampled acoustic drums). The others: Geiger, Commander, Corrupt,
-        Ottobit, Doom Chug, Pure Whitey, Greasy Strangler, Bethblahem and Puggy Puncher.</small></span></label>
+        tempo (grooves, seven kits, one of them sampled acoustic drums). The others: Bolt, Rocket!, Garrrry Tank,
+        Quality Polis, Bam Crusher, Doom Chug, Pure Whitey, Greasy Strangler, Bethblahem and Puggy Puncher.</small></span></label>
     </div>
 
     <div id="fwOffline" class="status bad" hidden>
@@ -447,28 +447,10 @@
         capture in its slot.</li>
       <li>With the amps: the HX Stomp's amps are under <span class="path">Distortion › Amps</span> and its preamps under
         <span class="path">EQ › Preamps</span>. There are no cabs: put an IR block after the amp.</li>
-      <li>Click (the metronome) is under <span class="path">Delay › Mono</span>. With the effects: Geiger, Commander,
+      <li>Click (the metronome) is under <span class="path">Delay › Mono</span>. With the effects: Bolt, Rocket!, Garrrry Tank,
         Doom Chug and the rest are in the Distortion and Delay lists. The drum machine, <b>Drum Chapel</b>, is under
         <span class="path">Delay › Mono</span>: pick a groove and a kit, and set the tempo with tap tempo. Heavy blocks use a lot of the DSP, so the unit may refuse one more in a full preset.</li>
     </ul>
-  </section>
-
-  <!-- Recovery -->
-  <section class="step recovery" id="recovery" aria-labelledby="hrs">
-    <div class="step-head">
-      <span class="n">!</span>
-      <h2 id="hrs">Recovery, or going back to normal</h2>
-      <p>If the HX Effects won't start properly, or you just want Line 6's firmware back.</p>
-    </div>
-    <ol class="how">
-      <li>Quit HX Edit. Turn the HX Effects off, with USB still connected.</li>
-      <li><b>Hold the right arrow (&gt;) button while you turn it on</b>, and keep holding for about three seconds. It
-        starts in update mode.</li>
-      <li>In Line 6 Updater, click the HX Effects, click <b>Choose File</b> and pick Line 6's own file from step 1
-        (<code>HX_Effects_v3.80.0_0xd97239907.hxf</code>). Let it finish, then turn the unit off and on.</li>
-    </ol>
-    <p>This works because the new firmware never touches the part of the unit that starts it up. Your presets, IRs and
-      settings stay.</p>
   </section>
 
   <section class="step" aria-labelledby="hqs">
@@ -494,6 +476,59 @@
         version of the capture.</p></details>
   </section>
 
+  <!-- Rescue -->
+  <section class="step recovery" id="recovery" aria-labelledby="hrs">
+    <div class="step-head">
+      <span class="n">!</span>
+      <h2 id="hrs">Rescue: put Line 6's firmware back</h2>
+      <p>If the HX Effects won't start, stops on the splash screen or says "Boot Failure", or you just want the normal
+        firmware back. Your presets, IRs and settings stay.</p>
+    </div>
+    <p>Don't worry: the new firmware never touches the part of the unit that starts it up, so it can always be
+      rescued.</p>
+
+    <h3>1. Start the HX Effects in update mode</h3>
+    <ol class="how">
+      <li>Quit HX Edit and Line 6 Updater. Connect the HX Effects to the computer with USB.</li>
+      <li>Turn it off. <b>Hold the right arrow (&gt;) button while you turn it on</b>, and keep holding for about three
+        seconds. It starts in update mode (the screen stays dark or shows an update message).</li>
+    </ol>
+    <p class="note" style="color:var(--muted); font-size:14.5px">If it still starts up normally, that's fine too: the
+      rescue works from there as well.</p>
+
+    <h3>2. Reinstall Line 6's firmware from this page</h3>
+    <p>In <b>Chrome</b> or <b>Edge</b>: drop Line 6's own file here
+      (<code>HX_Effects_v3.80.0_0xd97239907.hxf</code>, the one from step 1; you can download it again from
+      <a href="https://line6.com/software/" target="_blank" rel="noopener">line6.com/software</a>), then click
+      <b>Rescue my HX Effects</b> and pick it in the browser's list.</p>
+    <label class="drop" id="resDrop">
+      <svg class="jack" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="10" y="6" width="28" height="36" rx="3"/><path d="M17 15h14M17 22h14M17 29h8"/>
+      </svg>
+      <strong>Drop Line 6's HX_Effects_v3.80.0_0xd97239907.hxf here</strong>
+      <small>or click to choose it · it stays on this computer</small>
+      <input id="resPick" type="file" accept=".hxf">
+    </label>
+    <div class="row-actions">
+      <button class="btn primary" id="resGo" type="button" disabled>Rescue my HX Effects</button>
+      <button class="btn primary" id="resNext" type="button" hidden>Continue</button>
+      <span class="note" id="resWhy">Drop Line 6's file above first.</span>
+    </div>
+    <div class="status" id="resStatus" hidden>
+      <span class="title" id="resTitle"></span>
+      <div class="bar" id="resBarWrap"><i id="resBar"></i></div>
+      <p id="resText"></p>
+      <details class="log"><summary>Technical details</summary><pre id="resLog"></pre></details>
+    </div>
+
+    <h3>Or: with Line 6 Updater</h3>
+    <p>If this page can't find the unit (for example on Windows, where Line 6's driver may hide it from the browser):
+      start it in update mode as above, open <b>Line 6 Updater</b>, click the HX Effects, click <b>Choose File</b> and
+      pick Line 6's own file. Let it finish, then turn the unit off and on.</p>
+    <p class="tip">Still stuck after both? Turn the unit off for a minute, try another USB cable and port, and run the
+      rescue again. A failed or interrupted rescue can always be run again.</p>
+  </section>
+
   <footer>
     <span>Unofficial. Not affiliated with or endorsed by Line 6 or Yamaha Guitar Group. Neural Amp Modeler is the work
       of its own authors.</span>
@@ -505,6 +540,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script src="nam2ir-core.js"></script>
 <script src="flasher.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -687,6 +723,68 @@
   $("usbGo").addEventListener("click", install);
   $("usbNext").addEventListener("click", function () { $("usbNext").hidden = true; if (nextResolve) { var r = nextResolve; nextResolve = null; r(); } });
   usbWhy();
+
+
+  // ---- Rescue: flash Line 6's own file with flasher.js ----
+  var rescueFile = null, resBusy = false, resNextResolve = null;
+  function resWhy(msg) {
+    var why = msg != null ? msg : !hasUsb ? "This browser can't reach USB devices: use Chrome or Edge, or Line 6 Updater (below)." :
+              !/^https?:$/.test(location.protocol) ? "Open this page from its web address to use this." :
+              !rescueFile ? "Drop Line 6's file above first." : "";
+    $("resWhy").textContent = why;
+    $("resGo").disabled = resBusy || !!why || !rescueFile;
+  }
+  function resShow(kind, title, text) {
+    $("resStatus").hidden = false;
+    $("resStatus").className = "status" + (kind ? " " + kind : "");
+    $("resTitle").textContent = title;
+    $("resText").textContent = text || "";
+    $("resBarWrap").hidden = kind !== "";
+  }
+  function pickRescue(files) {
+    if (!files || !files.length || resBusy) return;
+    var f = files[0];
+    rescueFile = null; $("resStatus").hidden = true;
+    f.arrayBuffer().then(function (buf) {
+      if (SparkMD5.ArrayBuffer.hash(buf) !== STOCK_MD5) {
+        resWhy("");
+        resShow("bad", "That isn't Line 6's HX Effects 3.80.0 file.", "Use Line 6's own file, unchanged: HX_Effects_v3.80.0_0xd97239907.hxf (download it again from line6.com/software if you need to). A file made on this page won't do here.");
+        resWhy("Drop Line 6's file above first.");
+        return;
+      }
+      rescueFile = new Uint8Array(buf);
+      resShow("ok", "Line 6's file is ready.", "Start the HX Effects in update mode (above), then click Rescue my HX Effects.");
+      resWhy();
+    }, function () { resShow("bad", "The file could not be read.", "Choose it again; if it's on a USB stick or network drive, copy it to the computer first."); });
+  }
+  $("resPick").addEventListener("change", function (e) { pickRescue(e.target.files); e.target.value = ""; });
+  dropZone($("resDrop"), pickRescue);
+  $("resGo").addEventListener("click", async function () {
+    if (resBusy || !rescueFile) return;
+    resBusy = true; resWhy();
+    $("resLog").textContent = ""; $("resBar").style.width = "0%";
+    var title = "Rescuing… don't unplug or switch off the HX Effects";
+    resShow("", title, STAGE.pick);
+    try {
+      await FLASHER.flash({
+        hxf: rescueFile, usb: navigator.usb, inflate: pako.inflate,
+        log: function (s) { var p = $("resLog"); p.textContent += s; p.scrollTop = p.scrollHeight; },
+        stage: function (s) { $("resBar").style.width = "0%"; resShow("", title, STAGE[s] || ""); },
+        progress: function (f) { $("resBar").style.width = Math.round(100 * f) + "%"; if ($("resText").textContent.indexOf("Writing") === 0) $("resText").textContent = "Writing the firmware: " + Math.floor(100 * f) + "%"; },
+        ask: function (s) { resShow("", title, ASK[s]); $("resNext").hidden = false; return new Promise(function (r) { resNextResolve = r; }); },
+        unask: function () { $("resNext").hidden = true; resNextResolve = null; }
+      });
+      resShow("ok", "Rescued: the HX Effects is running Line 6's firmware again.", "Everything is back to normal. To try the new firmware again, start from step 2.");
+    } catch (e) {
+      $("resLog").textContent += "\nerror (" + (e.code || "?") + "): " + e.message + "\n";
+      var msg = e.code === "cancel" ? "No device was picked. Click Rescue to try again; if the unit isn't in the list, start it in update mode (above)." :
+                e.code === "busy" ? "Another program is using the HX Effects. Quit HX Edit and Line 6 Updater, then click Rescue again." :
+                "Turn the HX Effects off, start it in update mode again (hold >), and click Rescue again. If the browser can't find it, use Line 6 Updater (below).";
+      resShow("bad", "The rescue stopped.", msg);
+    } finally { resBusy = false; $("resNext").hidden = true; resWhy(); }
+  });
+  $("resNext").addEventListener("click", function () { $("resNext").hidden = true; if (resNextResolve) { var r = resNextResolve; resNextResolve = null; r(); } });
+  resWhy();
 
   // ---- Step 4: captures (nam2ir-core.js) ----
   var items = [];
