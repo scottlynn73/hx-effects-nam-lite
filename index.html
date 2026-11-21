@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HX Effects NAM Setup</title>
+<meta name="description" content="Put NAM captures, the HX Stomp amps and extra effects on your Line 6 HX Effects: make the firmware from your own Line 6 file, install it, and convert your captures. Runs in your browser on Mac or Windows; nothing is uploaded.">
+<style>
+  /* Layout: one column of numbered steps (a step nav on top), each a card; the firmware builder and the
+     capture converter live inside their steps. Recovery is its own card after the steps. */
+  :root {
+    --bg: #f3f4f6;
+    --panel: #ffffff;
+    --ink: #1b1e24;
+    --muted: #5d6470;
+    --line: #d9dce2;
+    --accent: #c24a12;
+    --accent-ink: #ffffff;
+    --accent-soft: #fbe9df;
+    --ok: #1d7a46;
+    --ok-soft: #e1f3e8;
+    --bad: #b3261e;
+    --bad-soft: #fbe5e3;
+    --warn: #8a5a00;
+    --warn-soft: #fbf0d5;
+    --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --r: 10px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121418; --panel: #1b1e24; --ink: #eceef2; --muted: #a0a7b3; --line: #2e333c;
+      --accent: #f07a3c; --accent-ink: #1b0d05; --accent-soft: #3a2014;
+      --ok: #5fcf8d; --ok-soft: #143222; --bad: #ff8a80; --bad-soft: #3b1715; --warn: #f2c050; --warn-soft: #362a0f;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121418; --panel: #1b1e24; --ink: #eceef2; --muted: #a0a7b3; --line: #2e333c;
+    --accent: #f07a3c; --accent-ink: #1b0d05; --accent-soft: #3a2014;
+    --ok: #5fcf8d; --ok-soft: #143222; --bad: #ff8a80; --bad-soft: #3b1715; --warn: #f2c050; --warn-soft: #362a0f;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 var(--font-ui);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 32px 56px;
+  }
+  [hidden] { display: none !important; }
+  .wrap { max-width: 780px; margin: 0 auto; display: grid; gap: 20px; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--font-mono); font-size: .9em; }
+  code { overflow-wrap: anywhere; }
+
+  header { display: grid; gap: 8px; }
+  .eyebrow { font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 0; font-size: clamp(28px, 5vw, 38px); line-height: 1.12; letter-spacing: -.01em; text-wrap: balance; }
+  .lede { margin: 0; color: var(--muted); max-width: 62ch; font-size: 17px; }
+
+  .warning {
+    padding: 12px 14px; border-radius: var(--r); background: var(--warn-soft); color: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); font-size: 14.5px;
+  }
+  .warning b { color: var(--warn); }
+
+  nav.steps-nav { position: sticky; top: 0; z-index: 2; margin-inline: -4px; padding: 8px 4px; background: var(--bg); }
+  nav.steps-nav ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  nav.steps-nav a {
+    display: grid; justify-items: center; gap: 4px; padding: 8px 4px; border-radius: 8px; text-decoration: none;
+    color: var(--muted); font-size: 12.5px; line-height: 1.2; text-align: center; border: 1px solid var(--line); background: var(--panel);
+  }
+  nav.steps-nav a:hover { border-color: var(--accent); color: var(--ink); }
+  nav.steps-nav .n {
+    display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font: 700 12px/1 var(--font-mono);
+  }
+  nav.steps-nav a.done .n { background: var(--ok-soft); color: var(--ok); }
+  @media (max-width: 560px) { nav.steps-nav .t { display: none; } }
+
+  section.step {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 22px 22px 24px; display: grid; gap: 14px; scroll-margin-top: 72px;
+  }
+  @media (max-width: 520px) { section.step { padding: 18px 16px 20px; } }
+  .step-head { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 4px 12px; align-items: center; }
+  .step-head .n {
+    display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-ink); font: 700 16px/1 var(--font-mono);
+  }
+  .step.done .step-head .n { background: var(--ok); color: var(--panel); }
+  .step-head h2 { margin: 0; font-size: 21px; line-height: 1.25; }
+  .step-head p { grid-column: 2; margin: 0; color: var(--muted); font-size: 15px; }
+  .step p { margin: 0; }
+  h3 { margin: 6px 0 0; font-size: 15px; }
+
+  ol.how { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+  ol.how li::marker { color: var(--accent); font-weight: 700; }
+  ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+  .checks { display: grid; gap: 8px; }
+  .checks label {
+    display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; cursor: pointer;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  }
+  .checks label:hover { border-color: var(--muted); }
+  .checks input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--ok); }
+  .checks small { display: block; color: var(--muted); font-size: 13.5px; }
+
+  .files { display: grid; gap: 6px; font-size: 14px; }
+  .files div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); }
+  .files b { font-weight: 600; }
+  @media (max-width: 520px) { .files div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+  .drop {
+    position: relative; display: grid; place-items: center; gap: 8px; text-align: center;
+    padding: 30px 20px; border: 2px dashed var(--line); border-radius: var(--r);
+    background: var(--bg); cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .drop strong { font-size: 17px; }
+  .drop small { color: var(--muted); }
+  .drop.busy { pointer-events: none; opacity: .55; }
+  .jack { width: 40px; height: 40px; color: var(--accent); }
+
+  .status { display: grid; gap: 10px; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); }
+  .status.ok { background: var(--ok-soft); border-color: transparent; }
+  .status.bad { background: var(--bad-soft); border-color: transparent; }
+  .status.bad .title { color: var(--bad); }
+  .status.ok .title { color: var(--ok); }
+  .status .title { font-weight: 700; }
+  .bar { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; border: 1px solid var(--line); }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  details.log summary { cursor: pointer; color: var(--muted); font-size: 13.5px; }
+  details.log pre {
+    margin: 8px 0 0; max-height: 260px; overflow: auto; padding: 10px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--line); font: 12px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  .list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .list-head h3 { margin: 0; }
+  .list { display: grid; gap: 8px; }
+  .row {
+    display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 4px 14px; align-items: center;
+    padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  }
+  .row.bad { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+  .mark {
+    grid-row: span 2; align-self: start; display: grid; place-items: center; width: 32px; height: 32px;
+    border-radius: 50%; background: var(--ok-soft); color: var(--ok); font: 700 15px/1 var(--font-ui);
+  }
+  .row.bad .mark { background: var(--bad-soft); color: var(--bad); }
+  .name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+  .name .out { display: block; font: 400 13px/1.4 var(--font-mono); color: var(--muted); }
+  .meta { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  .chip { font: 600 11.5px/1 var(--font-mono); padding: 5px 7px; border-radius: 999px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .err { grid-column: 2 / -1; color: var(--bad); background: var(--bad-soft); padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+  .actions { grid-row: span 2; display: flex; gap: 6px; align-items: center; }
+  @media (max-width: 520px) {
+    .row { grid-template-columns: 32px minmax(0, 1fr); }
+    .meta, .err { order: 1; }
+    .actions { grid-column: 1 / -1; grid-row: auto; order: 2; }
+    .actions .btn.primary { flex: 1; }
+  }
+  .empty { padding: 14px; border: 1px dashed var(--line); border-radius: var(--r); color: var(--muted); font-size: 14px; }
+
+  .btn {
+    font: 600 14px/1 var(--font-ui); padding: 10px 15px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); text-decoration: none; display: inline-block;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.big { font-size: 16px; padding: 13px 20px; }
+  .btn.icon { padding: 8px 10px; color: var(--muted); }
+  .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .tip { padding: 10px 12px; background: var(--accent-soft); border-radius: 8px; font-size: 14.5px; }
+  .knob { font: 600 13px/1 var(--font-mono); padding: 2px 6px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); white-space: nowrap; }
+  .path { font: 600 14px/1.4 var(--font-ui); white-space: nowrap; }
+
+  table.knobs { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  table.knobs th, table.knobs td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.knobs th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  table.knobs td:first-child { white-space: nowrap; }
+
+  section.recovery { border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+  section.recovery .step-head .n { background: var(--bad); color: var(--panel); }
+
+  details.faq { border-top: 1px solid var(--line); padding-top: 10px; }
+  details.faq + details.faq { border-top: 1px solid var(--line); }
+  details.faq summary { cursor: pointer; font-weight: 600; }
+  details.faq p, details.faq ul { margin: 8px 0 4px; color: var(--muted); font-size: 15px; }
+
+  footer { color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+  footer a { color: inherit; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } html { scroll-behavior: auto; } }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .xlang { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  .xlang svg { width: 16px; height: 16px; }
+  .xlang select {
+    font: 500 14px/1.2 var(--font-ui); color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; max-width: 160px;
+  }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .xlang select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .trybox { display: grid; gap: 10px; padding: 14px 16px; border: 1px dashed var(--line); border-radius: var(--r); background: var(--bg); }
+  .trybox h3 { margin: 0; }
+  .trybox .status { background: var(--panel); }
+  .trybox .note { color: var(--muted); font-size: 14px; }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">HX Effects · NAM, Amps and Effects</span>
+    <h1>Put NAM captures and amps on your HX Effects</h1>
+    <p class="lede">This page does everything for you, step by step: it makes the new firmware from Line 6's own file,
+      shows you how to install it, and turns your <b>.nam</b> captures into files the HX Effects can play. It works in
+      your browser on a Mac or a Windows PC. Nothing is installed and nothing is uploaded anywhere.</p>
+  </header>
+
+  <div class="warning"><b>Unofficial and experimental.</b> This isn't made or supported by Line 6. Installing modified
+    firmware is at your own risk and may void your warranty. If anything goes wrong, <a href="#recovery">Recovery</a>
+    puts the normal firmware back; your presets and IRs survive it.</div>
+
+  <div class="warning"><b>Good to know before you start</b>
+    <ul class="plain" style="margin-top:6px">
+      <li><b>HX Edit only works for loading files.</b> You can still use it to import IRs and NAM captures (the
+        .wav files from step 4) and to back up. It can't show or edit NAM, the amps or the new effects: build and
+        edit presets that use them on the HX Effects itself.</li>
+      <li><b>Too many heavy blocks in one preset can freeze or restart the unit.</b> NAM, the amps and some of the
+        effects use a lot of the processor. Add heavy blocks one at a time, and <b>save your presets often</b> so
+        nothing is lost if the unit restarts.</li>
+    </ul>
+  </div>
+
+  <nav class="steps-nav" aria-label="Steps">
+    <ol>
+      <li><a href="#s1" id="nav1"><span class="n">1</span><span class="t">Get ready</span></a></li>
+      <li><a href="#s2" id="nav2"><span class="n">2</span><span class="t">Make firmware</span></a></li>
+      <li><a href="#s3" id="nav3"><span class="n">3</span><span class="t">Install</span></a></li>
+      <li><a href="#s4" id="nav4"><span class="n">4</span><span class="t">Add captures</span></a></li>
+      <li><a href="#s5" id="nav5"><span class="n">5</span><span class="t">Play</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section class="step" id="s1" aria-labelledby="h1s">
+    <div class="step-head">
+      <span class="n">1</span>
+      <h2 id="h1s">Get ready</h2>
+      <p>About 10 minutes. Tick these off as you go.</p>
+    </div>
+    <div class="checks" id="checks">
+      <label><input type="checkbox"><span>I have a Line 6 <b>HX Effects</b>.
+        <small>Not an HX Stomp, Helix or POD Go: their firmware is different, and this page refuses their files.</small></span></label>
+      <label><input type="checkbox"><span><b>HX Edit</b> and <b>Line 6 Updater</b> are installed on this computer.
+        <small>Both are free from <a href="https://line6.com/software/" target="_blank" rel="noopener">line6.com/software</a>
+        (pick HX Effects). Updater installs the firmware; HX Edit loads your captures.</small></span></label>
+      <label><input type="checkbox"><span>I backed up my presets and IRs in HX Edit.
+        <small>In HX Edit, use <b>File › Backup</b>. Installing firmware normally keeps them, but a backup takes a minute.</small></span></label>
+      <label><input type="checkbox"><span>I downloaded Line 6's firmware file, version <b>3.80.0</b>.
+        <small>On <a href="https://line6.com/software/" target="_blank" rel="noopener">line6.com/software</a>, choose
+        <b>HX Effects</b>, then <b>Firmware</b>, and download 3.80.0. The file is called
+        <code>HX_Effects_v3.80.0_0xd97239907.hxf</code>. Don't open it or change it.</small></span></label>
+    </div>
+    <p class="tip">Keep that Line 6 file somewhere safe: it's also what you use to go back to the normal firmware.</p>
+  </section>
+
+  <!-- 2 -->
+  <section class="step" id="s2" aria-labelledby="h2s">
+    <div class="step-head">
+      <span class="n">2</span>
+      <h2 id="h2s">Make your firmware</h2>
+      <p>Choose what you want, then drop Line 6's file here. The page gives you a new file to install.</p>
+    </div>
+
+    <div class="checks" id="buildPick" role="radiogroup" aria-label="What to install">
+      <label><input type="radio" name="build" value="nam"><span><b>NAM only</b>
+        <small>NAM A2 Lite (plays your .nam captures) and Click, a metronome.</small></span></label>
+      <label><input type="radio" name="build" value="amps"><span><b>NAM + Amps</b>
+        <small>The above, plus the HX Stomp's 111 amps and 112 preamps.</small></span></label>
+      <label><input type="radio" name="build" value="full" checked><span><b>NAM + Amps + Effects</b> (everything)
+        <small>The above, plus the extra effects: Geiger, Commander, Corrupt, Ottobit, Doom Chug, Drum Chapel, Pure
+        Whitey, Greasy Strangler, Bethblahem and Puggy Puncher.</small></span></label>
+    </div>
+
+    <div id="fwOffline" class="status bad" hidden>
+      <span class="title">Open this page from its web address.</span>
+      <p>You opened it as a file on your computer, and browsers don't let a file page do this step. Use the page's web
+        address instead.</p>
+    </div>
+
+    <label class="drop" id="fwDrop">
+      <svg class="jack" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="10" y="6" width="28" height="36" rx="3"/><path d="M17 15h14M17 22h14M17 29h8"/>
+      </svg>
+      <strong>Drop HX_Effects_v3.80.0_0xd97239907.hxf here</strong>
+      <small>or click to choose it · about 4 MB · it stays on this computer</small>
+      <input id="fwPick" type="file" accept=".hxf">
+    </label>
+
+    <div class="status" id="fwStatus" hidden>
+      <span class="title" id="fwTitle"></span>
+      <div class="bar" id="fwBarWrap"><i id="fwBar"></i></div>
+      <p id="fwText"></p>
+      <div class="row-actions" id="fwActions" hidden>
+        <button class="btn primary big" id="fwSave" type="button">Download your firmware</button>
+        <a class="btn" href="#s3">Or install it from this page</a>
+      </div>
+      <details class="log"><summary>Technical details</summary><pre id="fwLog"></pre></details>
+    </div>
+    <p style="color:var(--muted); font-size:14px">Takes 10–40 seconds. You can change your mind later: make another
+      file here and install it the same way. Every choice also shows sharps (A#) instead of flats (Bb) in the tuner.</p>
+  </section>
+
+  <!-- 3 -->
+  <section class="step" id="s3" aria-labelledby="h3s">
+    <div class="step-head">
+      <span class="n">3</span>
+      <h2 id="h3s">Install it</h2>
+      <p>Two ways: straight from this page, or with Line 6 Updater. Both write the same file.</p>
+    </div>
+
+    <div class="trybox" id="usbBox">
+      <h3>Option A: install from this page</h3>
+      <p class="note">Needs <b>Chrome</b> or <b>Edge</b> (Safari and Firefox can't reach USB devices). Works on a Mac; on
+        Windows, Line 6's driver may keep the browser from seeing the unit, so use option B there if it isn't found.</p>
+      <ol class="how">
+        <li>Make your firmware in step 2 first.</li>
+        <li><b>Quit HX Edit and Line 6 Updater</b>: they hold the USB connection.</li>
+        <li>Connect the HX Effects with USB, turn it on, and click <b>Install on my HX Effects</b>. Pick the
+          <b>HX Effects</b> in the browser's list. The unit restarts twice during the install; when the page asks,
+          click <b>Continue</b> and pick it again (it may show up as "LPC" or an unknown device).</li>
+        <li>Wait about two minutes, until the page says it's done. <b>Don't unplug or switch off the HX Effects</b>
+          meanwhile.</li>
+      </ol>
+      <div class="row-actions">
+        <button class="btn primary" id="usbGo" type="button">Install on my HX Effects</button>
+        <button class="btn primary" id="usbNext" type="button" hidden>Continue</button>
+        <span class="note" id="usbWhy"></span>
+      </div>
+      <div class="status" id="usbStatus" hidden>
+        <span class="title" id="usbTitle"></span>
+        <div class="bar" id="usbBarWrap"><i id="usbBar"></i></div>
+        <p id="usbText"></p>
+        <details class="log"><summary>Technical details</summary><pre id="usbLog"></pre></details>
+      </div>
+    </div>
+
+    <h3>Option B: install with Line 6 Updater</h3>
+    <ol class="how">
+      <li>Click <b>Download your firmware</b> in step 2.</li>
+      <li><b>Quit HX Edit</b> if it's open. Updater can't reach the HX Effects while HX Edit is using it.</li>
+      <li>Connect the HX Effects to the computer with USB and turn it on.</li>
+      <li>Open <b>Line 6 Updater</b>, sign in, and click your HX Effects.</li>
+      <li>Click <b>Choose File</b> (not the normal update) and pick the downloaded file,
+        <code id="fwName">HX_Effects_v3.80.0_NAM_Amps_Effects.hxf</code>.</li>
+      <li>Let it finish, about two minutes. <b>Don't unplug or switch off the HX Effects</b> while it updates. It
+        restarts by itself. If Updater says something went wrong, run it again with the same file.</li>
+    </ol>
+    <h3>Check it worked</h3>
+    <p>Add a block on the HX Effects and open <span class="path">Distortion › Mono</span>: you'll see <b>NAM A2
+      Lite</b>. With the amps, there's also a new <span class="path">Distortion › Amps</span> group.</p>
+    <p class="tip">Stuck on the splash screen, or it says "Boot Failure"? Don't worry: follow <a href="#recovery">Recovery</a>.</p>
+  </section>
+
+  <!-- 4 -->
+  <section class="step" id="s4" aria-labelledby="h4s">
+    <div class="step-head">
+      <span class="n">4</span>
+      <h2 id="h4s">Add your NAM captures</h2>
+      <p>The HX Effects plays NAM captures from its User IR slots. First turn each <b>.nam</b> into a <b>.wav</b>, then
+        load it into a slot.</p>
+    </div>
+    <label class="drop" id="drop">
+      <svg class="jack" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M24 6v20"/><path d="M16 18l8 8 8-8"/><rect x="8" y="32" width="32" height="10" rx="3"/>
+      </svg>
+      <strong>Drop .nam files here</strong>
+      <small>or click to choose · several at once is fine</small>
+      <input id="pick" type="file" accept=".nam,application/json" multiple>
+    </label>
+    <div class="checks"><label><input type="checkbox" id="match" checked><span>Make every capture about the same loudness
+      <small>Recommended. Captures are made at very different volumes; this evens them out so switching between them
+      doesn't jump in level.</small></span></label></div>
+
+    <div class="list-head">
+      <h3 id="count">No captures yet</h3>
+      <div style="display:flex; gap:8px">
+        <button class="btn" id="clear" type="button" hidden>Clear</button>
+        <button class="btn primary" id="all" type="button" hidden>Download all</button>
+      </div>
+    </div>
+    <div class="list" id="list">
+      <div class="empty" id="empty">Converted captures appear here. Only the <b>A2 Lite</b> size works (on ToneHunt and
+        similar sites, look for "A2 Lite" or a file that offers several sizes).</div>
+    </div>
+
+    <h3>Load them into the HX Effects</h3>
+    <ol class="how">
+      <li>Open <b>HX Edit</b> with the HX Effects connected. First pick a preset <b>without</b> a NAM block in it.</li>
+      <li>Open the <b>Impulses</b> list and drag a <b>.wav</b> onto a slot from <b>1 to 21</b>. <b>Note its number</b>,
+        for example 5.</li>
+    </ol>
+    <p class="tip">The .wav isn't a sound you can hear: it carries the capture's numbers. Don't use it in a Cab or IR
+      block; it's only for the NAM A2 Lite block.</p>
+  </section>
+
+  <!-- 5 -->
+  <section class="step" id="s5" aria-labelledby="h5s">
+    <div class="step-head">
+      <span class="n">5</span>
+      <h2 id="h5s">Play</h2>
+      <p>On the HX Effects itself (HX Edit can't edit the new blocks).</p>
+    </div>
+    <ol class="how">
+      <li>Add a block and pick <span class="path">Distortion › Mono › NAM A2 Lite</span>.</li>
+      <li>Turn <span class="knob">Model</span> to the slot number from step 4. You hear the capture.</li>
+    </ol>
+    <table class="knobs">
+      <thead><tr><th>Knob</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><span class="knob">Model</span></td><td>Which capture plays: the User IR slot (1–21) that holds it.</td></tr>
+        <tr><td><span class="knob">Input</span></td><td>Level into the capture, −20 to +20 dB. 5.0 is unchanged.</td></tr>
+        <tr><td><span class="knob">Bass</span> <span class="knob">Mid</span><br><span class="knob">Treble</span> <span class="knob">Presence</span></td><td>Tone, ±12 dB. 5.0 is flat.</td></tr>
+        <tr><td><span class="knob">Ch Vol</span></td><td>Output level. 5.0 is unchanged.</td></tr>
+        <tr><td><span class="knob">Polarity</span></td><td>Normal or Inverted.</td></tr>
+      </tbody>
+    </table>
+    <ul class="plain">
+      <li>Up to two NAM blocks in a preset, each with its own capture. Presets remember the slot number, so keep each
+        capture in its slot.</li>
+      <li>With the amps: the HX Stomp's amps are under <span class="path">Distortion › Amps</span> and its preamps under
+        <span class="path">EQ › Preamps</span>. There are no cabs: put an IR block after the amp.</li>
+      <li>Click (the metronome) is under <span class="path">Delay › Mono</span>. With the effects: Geiger, Commander,
+        Doom Chug, Drum Chapel and the rest are in the Distortion and Delay lists. Heavy blocks use a lot of the DSP, so the unit may refuse one more in a full preset.</li>
+    </ul>
+  </section>
+
+  <!-- Recovery -->
+  <section class="step recovery" id="recovery" aria-labelledby="hrs">
+    <div class="step-head">
+      <span class="n">!</span>
+      <h2 id="hrs">Recovery, or going back to normal</h2>
+      <p>If the HX Effects won't start properly, or you just want Line 6's firmware back.</p>
+    </div>
+    <ol class="how">
+      <li>Quit HX Edit. Turn the HX Effects off, with USB still connected.</li>
+      <li><b>Hold the right arrow (&gt;) button while you turn it on</b>, and keep holding for about three seconds. It
+        starts in update mode.</li>
+      <li>In Line 6 Updater, click the HX Effects, click <b>Choose File</b> and pick Line 6's own file from step 1
+        (<code>HX_Effects_v3.80.0_0xd97239907.hxf</code>). Let it finish, then turn the unit off and on.</li>
+    </ol>
+    <p>This works because the new firmware never touches the part of the unit that starts it up. Your presets, IRs and
+      settings stay.</p>
+  </section>
+
+  <section class="step" aria-labelledby="hqs">
+    <div class="step-head">
+      <span class="n">?</span>
+      <h2 id="hqs">Questions</h2>
+    </div>
+    <details class="faq"><summary>Why do I need Line 6's file?</summary>
+      <p>The firmware belongs to Line 6, so this project can't hand it out. The page takes your copy and adds the new
+        parts to it on your computer.</p></details>
+    <details class="faq"><summary>Is anything uploaded?</summary>
+      <p>No. Everything happens inside this browser tab. Your firmware and captures never leave your computer.</p></details>
+    <details class="faq"><summary>How do I know the new file is right?</summary>
+      <p>The page checks your Line 6 file's fingerprint (MD5) first, and the finished file's fingerprint at the end.
+        It only says <b>Verified</b> when the result is exactly, byte for byte, the file the project tested on a real
+        HX Effects.</p></details>
+    <details class="faq"><summary>It says it isn't the right firmware file.</summary>
+      <ul><li>It must be HX Effects version 3.80.0, exactly as Line 6 made it. Older or newer versions don't work.</li>
+        <li>Don't pick a file made here (it ends in <code>_NAM_Amps_Effects.hxf</code>).</li>
+        <li>A renamed file is fine: only what's inside counts.</li></ul></details>
+    <details class="faq"><summary>My capture says "No 3-channel A2 Lite model inside".</summary>
+      <p>NAM captures come in several sizes, and the HX Effects can only run the A2 Lite size. Look for the A2 Lite
+        version of the capture.</p></details>
+  </section>
+
+  <footer>
+    <span>Unofficial. Not affiliated with or endorsed by Line 6 or Yamaha Guitar Group. Neural Amp Modeler is the work
+      of its own authors.</span>
+    <span>Based on <a href="https://github.com/nocaseguy/hx-stomp-nam-lite">hx-stomp-nam-lite</a>. GPL-3.0-or-later.
+      <a href="https://github.com/scottlynn73/hx-effects-nam-lite">Source</a>.</span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script src="nam2ir-core.js"></script>
+<script src="flasher.js"></script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var STOCK_MD5 = "7c2ebdf1bffb6bcc5f89dda97f91e40c";
+  var NAMES = { nam: "HX_Effects_v3.80.0_NAM.hxf", amps: "HX_Effects_v3.80.0_NAM_Amps.hxf", full: "HX_Effects_v3.80.0_NAM_Amps_Effects.hxf" };
+  var LABELS = { nam: "NAM only", amps: "NAM + Amps", full: "NAM + Amps + Effects" };
+  var OUT_NAME = NAMES.full, choice = "full";
+  function picked() { var r = document.querySelector('input[name="build"]:checked'); return r ? r.value : "full"; }
+  Array.prototype.slice.call(document.querySelectorAll('input[name="build"]')).forEach(function (r) {
+    r.addEventListener("change", function () {
+      if (built && picked() !== choice) {
+        built = null; $("fwStatus").hidden = true; $("nav2").classList.remove("done"); $("s2").classList.remove("done"); usbWhy();
+      }
+    });
+  });
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function saveBlob(blob, name) {
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+  function markDone(n) { $("nav" + n).classList.add("done"); $("s" + n).classList.add("done"); }
+  function dropZone(zone, onFiles) {
+    ["dragenter", "dragover"].forEach(function (ty) {
+      zone.addEventListener(ty, function (e) { e.preventDefault(); zone.classList.add("over"); });
+    });
+    ["dragleave", "drop"].forEach(function (ty) {
+      zone.addEventListener(ty, function (e) { e.preventDefault(); zone.classList.remove("over"); });
+    });
+    zone.addEventListener("drop", function (e) { onFiles(e.dataTransfer.files); });
+  }
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) { e.preventDefault(); });
+
+  // ---- Step 1 ----
+  var boxes = Array.prototype.slice.call($("checks").querySelectorAll("input"));
+  boxes.forEach(function (b) {
+    b.addEventListener("change", function () {
+      if (boxes.every(function (x) { return x.checked; })) markDone(1);
+      else { $("nav1").classList.remove("done"); $("s1").classList.remove("done"); }
+    });
+  });
+
+  // ---- Step 2: firmware (firmware-worker.js) ----
+  var STEPS = 6, built = null, busy = false;
+  var TEXT = { 1: "Reading your file…", 2: "Checking it's Line 6's 3.80.0 file…", 3: "Adding NAM, the amps and the effects…",
+               4: "Compressing the new firmware…", 5: "Packing the file…", 6: "Checking the result…" };
+  if (!/^https?:$/.test(location.protocol)) { $("fwOffline").hidden = false; $("fwDrop").hidden = true; }
+
+  function fwShow(kind, title, text) {
+    $("fwStatus").hidden = false;
+    $("fwStatus").className = "status" + (kind ? " " + kind : "");
+    $("fwTitle").textContent = title;
+    $("fwText").textContent = text || "";
+    $("fwBarWrap").hidden = kind !== "";
+    $("fwActions").hidden = kind !== "ok";
+  }
+  function fwLog(s) { $("fwLog").textContent += s + "\n"; }
+
+  function buildFirmware(files) {
+    if (busy || !files || !files.length) return;
+    var file = files[0];
+    if (/\.nam$/i.test(file.name)) { fwShow("bad", "That's a NAM capture, not firmware.", "Captures go in step 4, below. Here, drop Line 6's firmware file (it ends in .hxf)."); return; }
+    if (/_NAM(_Amps)?(_Effects)?\.hxf$/i.test(file.name)) { fwShow("bad", "That file was already made here.", "Drop Line 6's own file (HX_Effects_v3.80.0_0xd97239907.hxf). To install the file you made, go to step 3."); return; }
+    if (file.size < 2e6 || file.size > 20e6) {
+      fwShow("bad", "This doesn't look like the HX Effects firmware file.", "“" + file.name + "” is " + (file.size / 1e6).toFixed(1) + " MB; Line 6's file is about 3.9 MB and ends in .hxf.");
+      return;
+    }
+    busy = true; built = null; choice = picked(); OUT_NAME = NAMES[choice];
+    $("fwDrop").classList.add("busy");
+    $("fwLog").textContent = "";
+    $("fwBar").style.width = "4%";
+    fwShow("", "Making your firmware…", "Reading " + file.name + "…");
+    fwLog("file: " + file.name + ", " + file.size + " bytes");
+    var worker;
+    function finish() { busy = false; $("fwDrop").classList.remove("busy"); if (worker) worker.terminate(); }
+    file.arrayBuffer().then(function (buf) {
+      worker = new Worker("firmware-worker.js");
+      worker.onmessage = function (e) {
+        var m = e.data;
+        if (m.type === "progress") {
+          $("fwBar").style.width = Math.round(100 * (m.step - 0.5) / STEPS) + "%";
+          $("fwText").textContent = "Step " + m.step + " of " + STEPS + ": " + TEXT[m.step];
+          fwLog("step " + m.step + ": " + TEXT[m.step]);
+        } else if (m.type === "done") {
+          finish();
+          built = new Blob([m.bytes], { type: "application/octet-stream" });
+          fwLog("result: " + OUT_NAME + ", MD5 " + m.md5 + " (the tested build)");
+          $("fwName").textContent = OUT_NAME;
+          fwShow("ok", "Verified: your " + LABELS[choice] + " firmware is ready.", "It's byte for byte the file that was tested on a real HX Effects. Install it from this page in step 3, or download it for Line 6 Updater.");
+          markDone(2);
+          usbWhy();
+        } else if (m.type === "error") {
+          finish();
+          fwLog("error: " + m.code);
+          if (m.code === "notStock" || m.code === "notHxf") fwShow("bad", "This isn't the right firmware file.", "Use Line 6's own HX Effects 3.80.0 file, unchanged: HX_Effects_v3.80.0_0xd97239907.hxf. See “Questions” below.");
+          else fwShow("bad", "That didn't work.", "Nothing was changed. Check your internet connection and try again; if it happens again, send the technical details below to the project.");
+        }
+      };
+      worker.onerror = function (e) {
+        finish();
+        fwLog("worker: " + (e.message || "error"));
+        fwShow("bad", "That didn't work.", "Your browser couldn't run this step. Try a current Chrome, Edge, Firefox or Safari.");
+      };
+      worker.postMessage({ stock: buf, build: choice }, [buf]);
+    }, function () {
+      finish();
+      fwShow("bad", "The file could not be read.", "Choose it again; if it's on a USB stick or network drive, copy it to the computer first.");
+    });
+  }
+  $("fwPick").addEventListener("change", function (e) { buildFirmware(e.target.files); e.target.value = ""; });
+  dropZone($("fwDrop"), buildFirmware);
+  $("fwSave").addEventListener("click", function () { if (built) { saveBlob(built, OUT_NAME); markDone(3); } });
+
+
+  // ---- Step 3, option A: flasher.js (WebUSB) ----
+  var hasUsb = !!(navigator.usb && navigator.usb.requestDevice), usbBusy = false, nextResolve = null;
+  var STAGE = { pick: "Pick the HX Effects in the browser's list.", reboot: "Asking the HX Effects to restart in update mode…",
+                dfu: "Loading the updater…", updater: "", write: "Writing the firmware…", boot: "Waiting for the HX Effects to start…" };
+  var ASK = { dfu: "The HX Effects restarted in update mode. Click Continue and pick it in the browser's list (it may be called “LPC” or an unknown device).",
+              updater: "The updater is running. Click Continue and pick the HX Effects in the browser's list." };
+  function usbWhy() {
+    var why = !hasUsb ? "This browser can't reach USB devices: use Chrome or Edge, or option B." :
+              !/^https?:$/.test(location.protocol) ? "Open this page from its web address to use this." :
+              !built ? "Make your firmware in step 2 first." : "";
+    $("usbWhy").textContent = why;
+    $("usbGo").disabled = usbBusy || !!why;
+  }
+  function usbShow(kind, title, text) {
+    $("usbStatus").hidden = false;
+    $("usbStatus").className = "status" + (kind ? " " + kind : "");
+    $("usbTitle").textContent = title;
+    $("usbText").textContent = text || "";
+    $("usbBarWrap").hidden = kind !== "";
+  }
+  function usbLog(s) { var p = $("usbLog"); p.textContent += s; p.scrollTop = p.scrollHeight; }
+  var ERR = {
+    busy: "Another program is using the HX Effects. Quit HX Edit and Line 6 Updater, then click Install again.",
+    cancel: "No device was picked. Click Install to try again.",
+    file: "The firmware file failed its checks. Make it again in step 2.",
+    boot: "The firmware was written, but the HX Effects didn't start normally. Follow Recovery below; it puts Line 6's firmware back.",
+    gone: "The HX Effects didn't come back. Turn it off and on; if it doesn't start normally, follow Recovery below."
+  };
+  async function install() {
+    if (usbBusy || !built) return;
+    usbBusy = true; usbWhy();
+    $("usbLog").textContent = ""; $("usbBar").style.width = "0%";
+    usbShow("", "Installing…", STAGE.pick);
+    try {
+      await FLASHER.flash({
+        hxf: new Uint8Array(await built.arrayBuffer()), usb: navigator.usb, inflate: pako.inflate, log: usbLog,
+        stage: function (s) { $("usbBar").style.width = "0%"; usbShow("", "Installing… don't unplug or switch off the HX Effects", STAGE[s] || ""); },
+        progress: function (f) { $("usbBar").style.width = Math.round(100 * f) + "%"; if ($("usbText").textContent.indexOf("Writing") === 0) $("usbText").textContent = "Writing the firmware: " + Math.floor(100 * f) + "%"; },
+        ask: function (s) {
+          usbShow("", "Installing… don't unplug or switch off the HX Effects", ASK[s]);
+          $("usbNext").hidden = false;
+          return new Promise(function (r) { nextResolve = r; });
+        },
+        unask: function () { $("usbNext").hidden = true; nextResolve = null; }
+      });
+      usbShow("ok", "Installed: the HX Effects is running your new firmware.", "Check it worked (below), then go to step 4.");
+      markDone(3);
+    } catch (e) {
+      usbLog("\nerror (" + (e.code || "?") + "): " + e.message + "\n");
+      usbShow("bad", "The install stopped.", ERR[e.code] || "Turn the HX Effects off and on. If it starts normally, try again; if not, follow Recovery below. The technical details say what happened.");
+    } finally {
+      usbBusy = false; $("usbNext").hidden = true; usbWhy();
+    }
+  }
+  $("usbGo").addEventListener("click", install);
+  $("usbNext").addEventListener("click", function () { $("usbNext").hidden = true; if (nextResolve) { var r = nextResolve; nextResolve = null; r(); } });
+  usbWhy();
+
+  // ---- Step 4: captures (nam2ir-core.js) ----
+  var items = [];
+  function wavName(name) { return name.replace(/\.nam$/i, "") + ".wav"; }
+  function draw() {
+    var list = $("list");
+    Array.prototype.slice.call(list.querySelectorAll(".row")).forEach(function (r) { r.remove(); });
+    var good = items.filter(function (it) { return it.wav; }).length;
+    $("empty").hidden = items.length > 0;
+    $("count").textContent = items.length ? good + " of " + items.length + " converted" : "No captures yet";
+    $("clear").hidden = !items.length;
+    $("all").hidden = good < 2;
+    items.forEach(function (it, i) {
+      var row = el("div", "row" + (it.wav ? "" : " bad"));
+      row.appendChild(el("span", "mark", it.wav ? "✓" : "!"));
+      var name = el("div", "name", it.name);
+      if (it.wav) name.appendChild(el("span", "out", wavName(it.name)));
+      row.appendChild(name);
+      var actions = el("div", "actions");
+      if (it.wav) {
+        var dl = el("button", "btn primary", "Download");
+        dl.type = "button";
+        dl.addEventListener("click", function () { saveBlob(new Blob([it.wav], { type: "audio/wav" }), wavName(it.name)); markDone(4); });
+        actions.appendChild(dl);
+      }
+      var rm = el("button", "btn icon", "✕");
+      rm.type = "button";
+      rm.setAttribute("aria-label", "Remove " + it.name);
+      rm.addEventListener("click", function () { items.splice(i, 1); draw(); });
+      actions.appendChild(rm);
+      row.appendChild(actions);
+      if (it.wav) {
+        var meta = el("div", "meta");
+        meta.appendChild(el("span", "chip ok", "A2 Lite"));
+        if (it.info.gear) meta.appendChild(el("span", "chip", it.info.gear));
+        if (it.info.matchDb != null) meta.appendChild(el("span", "chip", "level " + (it.info.matchDb >= 0 ? "+" : "") + it.info.matchDb.toFixed(1) + " dB"));
+        (it.info.warnings || []).forEach(function (w) { meta.appendChild(el("span", "chip warn", w)); });
+        row.appendChild(meta);
+      } else {
+        row.appendChild(el("div", "err", it.error));
+      }
+      $("list").appendChild(row);
+    });
+  }
+  function addCaptures(files) {
+    Array.prototype.slice.call(files || []).forEach(function (f) {
+      if (/\.hxf$/i.test(f.name)) { items.push({ name: f.name, error: "That's a firmware file. Drop it in step 2, above." }); draw(); return; }
+      f.text().then(function (text) {
+        try {
+          var r = NAM2IR.convert(text, { match: $("match").checked });
+          items.push({ name: f.name, wav: r.wav, info: r.info });
+        } catch (err) {
+          items.push({ name: f.name, error: err.message });
+        }
+        draw();
+      }, function () { items.push({ name: f.name, error: "The file could not be read." }); draw(); });
+    });
+  }
+  $("pick").addEventListener("change", function (e) { addCaptures(e.target.files); e.target.value = ""; });
+  dropZone($("drop"), addCaptures);
+  $("clear").addEventListener("click", function () { items = []; draw(); });
+  $("all").addEventListener("click", function () {
+    items.filter(function (it) { return it.wav; }).forEach(function (it, k) {
+      setTimeout(function () { saveBlob(new Blob([it.wav], { type: "audio/wav" }), wavName(it.name)); }, 400 * k);
+    });
+    markDone(4);
+  });
+})();
+</script>
+</body>
+</html>
