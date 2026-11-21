@@ -419,7 +419,212 @@
     if (!ok) throw fail("boot", "the unit did not start its main app after the update");
   }
 
-  var api = { flash: flash, firmware: firmware, Commands: Commands, fletcher: fletcher, CODES: CODES, MAIN: MAIN, DFU: DFU };
+  // ---- User IR slots (tools/ir_upload.py): the same channel, service 2, old-spec msgpack requests ----
+  // Request: [u16 1][u16 2][u32 n] {102: id, 100: op, 101: args}; answer {102: id, 103: status, 104: result}.
+  // op 13 {101: 2}: the list [{112: index, 109: name, 104: MD5 hex}]; op 9: import {112: index, 113: the samples'
+  // 32-bit words summed, 109: name, 114: 1, 115: 3, 123: false, 124: false, 125: 0, 110: samples}. The unit refuses
+  // str8/bin (newer msgpack) and drops samples whose sum is wrong; it answers an import "working" (1), and the list
+  // shows the samples' MD5 when it is done.
+  function MpMap(pairs) { this.pairs = pairs; }
+  function M() { return new MpMap(Array.prototype.slice.call(arguments)); }   // M([k, v], ...)
+  function mpEncode(v) {
+    var out = [];
+    function u8(x) { out.push(x & 255); }
+    function be(x, n) { for (var i = n - 1; i >= 0; i--) out.push(Math.floor(x / Math.pow(256, i)) & 255); }
+    function enc(x) {
+      if (x === null || x === undefined) u8(0xC0);
+      else if (x === false) u8(0xC2);
+      else if (x === true) u8(0xC3);
+      else if (typeof x === "number") {
+        if (x >= 0 && x < 128) u8(x); else if (x >= 0 && x < 256) { u8(0xCC); u8(x); }
+        else if (x >= 0 && x < 65536) { u8(0xCD); be(x, 2); } else if (x >= 0 && x <= 0xFFFFFFFF) { u8(0xCE); be(x, 4); }
+        else throw new Error("mpEncode: number " + x);
+      } else if (x instanceof Uint8Array) {     // raw (old spec): fixraw, raw16, raw32
+        if (x.length < 32) u8(0xA0 | x.length); else if (x.length < 65536) { u8(0xDA); be(x.length, 2); } else { u8(0xDB); be(x.length, 4); }
+        for (var i = 0; i < x.length; i++) out.push(x[i]);
+      } else if (x instanceof MpMap) {          // a map in the given key order (HX Edit's order)
+        if (x.pairs.length < 16) u8(0x80 | x.pairs.length); else { u8(0xDE); be(x.pairs.length, 2); }
+        x.pairs.forEach(function (p) { enc(p[0]); enc(p[1]); });
+      } else throw new Error("mpEncode: " + typeof x);
+    }
+    enc(v);
+    return new Uint8Array(out);
+  }
+  function mpDecode(b) {
+    var o = 0, v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    function str(n) { var r = b.slice(o, o + n); o += n; return r; }      // raw: names are decoded by txt(), samples stay bytes
+    function arr(n) { var a = []; for (var i = 0; i < n; i++) a.push(dec()); return a; }
+    function map(n) { var m = {}; for (var i = 0; i < n; i++) { var k = dec(); m[k] = dec(); } return m; }
+    function dec() {
+      var t = b[o++], r;
+      if (t < 0x80) return t;
+      if (t >= 0xE0) return t - 256;
+      if ((t & 0xF0) === 0x80) return map(t & 15);
+      if ((t & 0xF0) === 0x90) return arr(t & 15);
+      if ((t & 0xE0) === 0xA0) return str(t & 31);
+      switch (t) {
+        case 0xC0: return null; case 0xC2: return false; case 0xC3: return true;
+        case 0xC4: r = b[o]; o += 1; return b.slice(o, (o += r));
+        case 0xC5: r = v.getUint16(o); o += 2; return b.slice(o, (o += r));
+        case 0xC6: r = v.getUint32(o); o += 4; return b.slice(o, (o += r));
+        case 0xCA: r = v.getFloat32(o); o += 4; return r;
+        case 0xCB: r = v.getFloat64(o); o += 8; return r;
+        case 0xCC: return b[o++];
+        case 0xCD: r = v.getUint16(o); o += 2; return r;
+        case 0xCE: r = v.getUint32(o); o += 4; return r;
+        case 0xCF: r = v.getUint32(o) * 4294967296 + v.getUint32(o + 4); o += 8; return r;
+        case 0xD0: return v.getInt8(o++);
+        case 0xD1: r = v.getInt16(o); o += 2; return r;
+        case 0xD2: r = v.getInt32(o); o += 4; return r;
+        case 0xD9: r = b[o]; o += 1; return str(r);
+        case 0xDA: r = v.getUint16(o); o += 2; return str(r);
+        case 0xDB: r = v.getUint32(o); o += 4; return str(r);
+        case 0xDC: r = v.getUint16(o); o += 2; return arr(r);
+        case 0xDD: r = v.getUint32(o); o += 4; return arr(r);
+        case 0xDE: r = v.getUint16(o); o += 2; return map(r);
+        case 0xDF: r = v.getUint32(o); o += 4; return map(r);
+      }
+      throw new Error("mpDecode: type 0x" + t.toString(16));
+    }
+    return dec();
+  }
+  function wordSum(s) {
+    var v = new DataView(s.buffer, s.byteOffset, s.byteLength), t = 0;
+    for (var i = 0; i + 3 < s.length; i += 4) t = (t + v.getUint32(i, true)) % 4294967296;
+    return t;
+  }
+  function txt(x) {          // a NUL-terminated string from the unit as text
+    if (!(x instanceof Uint8Array)) return x == null ? "" : String(x);
+    var n = x.indexOf(0); if (n < 0) n = x.length;
+    var s = ""; for (var i = 0; i < n; i++) s += String.fromCharCode(x[i]);
+    try { return decodeURIComponent(escape(s)); } catch (e) { return s; }
+  }
+  function utf8z(s) { var u = unescape(encodeURIComponent(s)), b = new Uint8Array(u.length + 1); for (var i = 0; i < u.length; i++) b[i] = u.charCodeAt(i); return b; }
+
+  // The samples of a 48 kHz mono 32-bit float .wav (what nam2ir writes), or throws.
+  function wavSamples(raw) {
+    function tag(o) { return String.fromCharCode(raw[o], raw[o + 1], raw[o + 2], raw[o + 3]); }
+    var v = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+    if (raw.length < 12 || tag(0) !== "RIFF" || tag(8) !== "WAVE") throw fail("file", "not a .wav file");
+    var pos = 12, fmt = null, data = null;
+    while (pos + 8 <= raw.length) {
+      var id = tag(pos), n = v.getUint32(pos + 4, true);
+      if (id === "fmt ") fmt = [v.getUint16(pos + 8, true), v.getUint16(pos + 10, true), v.getUint32(pos + 12, true), v.getUint16(pos + 22, true)];
+      else if (id === "data") data = raw.slice(pos + 8, pos + 8 + n);
+      pos += 8 + n + (n & 1);
+    }
+    if (!fmt || !data) throw fail("file", "the .wav has no fmt or data chunk");
+    if (fmt[0] !== 3 || fmt[1] !== 1 || fmt[2] !== 48000 || fmt[3] !== 32) throw fail("file", "only 48 kHz mono 32-bit float .wav files (as this page makes)");
+    return data;
+  }
+
+  function Api(ch) { this.ch = ch; this.id = 1000; }
+  Api.prototype.open = async function () {
+    await this.ch.send(h("010002000100000002"));
+    var r = await this.ch.recv(9, 10);
+    if (r[0] || r[1]) throw fail("protocol", "unexpected service answer " + hex(r));
+  };
+  Api.prototype.request = async function (op, args, acceptWorking) {
+    var rid = this.id++, body = mpEncode(M([102, rid], [100, op], [101, args]));
+    var head = new Uint8Array(8), v = new DataView(head.buffer);
+    v.setUint16(0, 1, true); v.setUint16(2, 2, true); v.setUint32(4, body.length, true);
+    await this.ch.send(concat([head, body]));
+    var end = Date.now() + 30000;
+    while (Date.now() < end) {
+      var hd = await this.ch.recv(8, 30), hv = new DataView(hd.buffer, hd.byteOffset, 8);
+      var typ = hv.getUint16(2, true), n = hv.getUint32(4, true);
+      var m = mpDecode(await this.ch.recv(n, 30));
+      if (typ !== 4 && m && m[102] === rid) {       // type 2, or 10240 for a slot's samples
+        if (m[103] === 1 && acceptWorking) return { status: 1 };
+        if (m[103] === 1) continue;
+        return { status: m[103], result: m[104] };
+      }
+      if (typ === 4 && m && m[106] && m[106][102] === rid) return { status: m[106][103], result: m[106][104] };
+    }
+    throw fail("protocol", "no answer to request " + op);
+  };
+  Api.prototype.list = async function () {
+    var r = await this.request(13, M([101, 2]));
+    if (r.status !== 0) throw fail("refused", "the unit refused the IR list (" + r.status + ")");
+    return (r.result || []).map(function (e) {
+      return { slot: e[112] + 1, name: txt(e[109]), md5: txt(e[104]) };
+    });
+  };
+  // Write one slot and wait until the list shows these samples (md5: their MD5 as hex, from the caller).
+  Api.prototype.put = async function (slot, samples, name, md5, sleep) {
+    var r = await this.request(9, M([112, slot - 1], [113, wordSum(samples)], [109, utf8z(name)], [114, 1], [115, 3],
+                                    [123, false], [124, false], [125, 0], [110, samples]), true);
+    if (r.status !== 0 && r.status !== 1) throw fail("refused", "the unit refused slot " + slot + " (" + r.status + ")");
+    var end = Date.now() + 30000;
+    while (Date.now() < end) {
+      var e = (await this.list()).filter(function (x) { return x.slot === slot; })[0];
+      if (e && e.md5 === md5) return e;
+      await sleep(500);
+    }
+    throw fail("refused", "slot " + slot + " did not end up holding the capture");
+  };
+
+  Api.prototype.has = async function (slot) {
+    if (!(await this.list()).some(function (e) { return e.slot === slot && e.md5; })) throw fail("refused", "slot " + slot + " is empty");
+  };
+  Api.prototype.until = async function (slot, test, what, sleep) {
+    var end = Date.now() + 30000;
+    while (Date.now() < end) {
+      var e = (await this.list()).filter(function (x) { return x.slot === slot; })[0];
+      if (test(e)) return e;
+      await sleep(300);
+    }
+    throw fail("refused", "slot " + slot + " was not " + what);
+  };
+  // op 10: rename (answers "working", then done)
+  Api.prototype.rename = async function (slot, name, sleep) {
+    await this.has(slot);
+    var r = await this.request(10, M([112, slot - 1], [109, utf8z(name)]), true);
+    if (r.status !== 0 && r.status !== 1) throw fail("refused", "the unit refused to rename slot " + slot);
+    return this.until(slot, function (e) { return e && e.name === name; }, "renamed", sleep);
+  };
+  // op 15: delete (the unit never answers a samples request for an empty slot, so has() guards those)
+  Api.prototype.remove = async function (slot, sleep) {
+    var r = await this.request(15, M([112, slot - 1]));
+    if (r.status !== 0) throw fail("refused", "the unit refused to clear slot " + slot);
+    return this.until(slot, function (e) { return !e || !e.md5; }, "cleared", sleep);
+  };
+  // copy, as HX Edit does it: op 12 (name) + op 11 (samples) from one slot, op 9 into the other
+  Api.prototype.copy = async function (src, dst, md5of, sleep) {
+    await this.has(src);
+    var info = await this.request(12, M([112, src - 1]));
+    var data = await this.request(11, M([112, src - 1], [101, 2]));
+    if (info.status !== 0 || data.status !== 0) throw fail("refused", "the unit refused to read slot " + src);
+    var samples = data.result instanceof Uint8Array ? data.result : new Uint8Array(0);
+    return this.put(dst, samples, txt(info.result[109]), md5of(samples), sleep);
+  };
+
+  // irSession(o, fn): the running unit (the one the page may use, or the one picked), its API opened, fn(api) run.
+  // o: { usb, log, sleep }. The browser asks for the device when none is allowed yet (needs a click).
+  async function irSession(o, fn) {
+    o.sleep = o.sleep || realSleep; o.log = o.log || function () {};
+    var dev = await present(o, MAIN, 0xEF);
+    if (!dev) {
+      try { dev = await o.usb.requestDevice({ filters: MAIN }); }
+      catch (e) { throw fail("cancel", "no device chosen"); }
+    }
+    if (dev.deviceClass === 0) throw fail("protocol", "the unit is in update mode: turn it off and on first");
+    await claim(dev);
+    var ch = new Channel(dev, o);
+    try {
+      await ch.open();
+      var api = new Api(ch);
+      await api.open();
+      return await fn(api);
+    } finally {
+      await ch.close();
+      ch.reading = false;
+      await release(dev);
+    }
+  }
+
+  var api = { flash: flash, firmware: firmware, Commands: Commands, fletcher: fletcher, CODES: CODES, MAIN: MAIN, DFU: DFU,
+              irSession: irSession, wavSamples: wavSamples, wordSum: wordSum, mpEncode: mpEncode, mpDecode: mpDecode, M: M };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.FLASHER = api;
 })(typeof self !== "undefined" ? self : this);

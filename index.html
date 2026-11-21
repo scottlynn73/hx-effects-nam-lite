@@ -54,6 +54,8 @@
   }
   [hidden] { display: none !important; }
   .wrap { max-width: 780px; margin: 0 auto; display: grid; gap: 20px; }
+  .wrap > *, section.step > * { min-width: 0; }
+  .drop strong, .drop small, .step-head h2, .tip, .note { overflow-wrap: anywhere; }
   a { color: var(--accent); }
   code, .mono { font-family: var(--font-mono); font-size: .9em; }
   code { overflow-wrap: anywhere; }
@@ -70,7 +72,7 @@
   .warning b { color: var(--warn); }
 
   nav.steps-nav { position: sticky; top: 0; z-index: 2; margin-inline: -4px; padding: 8px 4px; background: var(--bg); }
-  nav.steps-nav ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  nav.steps-nav ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
   nav.steps-nav a {
     display: grid; justify-items: center; gap: 4px; padding: 8px 4px; border-radius: 8px; text-decoration: none;
     color: var(--muted); font-size: 12.5px; line-height: 1.2; text-align: center; border: 1px solid var(--line); background: var(--panel);
@@ -81,7 +83,7 @@
     background: var(--accent-soft); color: var(--accent); font: 700 12px/1 var(--font-mono);
   }
   nav.steps-nav a.done .n { background: var(--ok-soft); color: var(--ok); }
-  @media (max-width: 560px) { nav.steps-nav .t { display: none; } }
+  @media (max-width: 680px) { nav.steps-nav .t { display: none; } }
 
   section.step {
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
@@ -219,6 +221,10 @@
   .trybox h3 { margin: 0; }
   .trybox .status { background: var(--panel); }
   .trybox .note { color: var(--muted); font-size: 14px; }
+  #slotsTable td:last-child { white-space: nowrap; text-align: right; }
+  #slotsTable td:nth-child(2) { overflow-wrap: anywhere; }
+  #slotsTable .btn { padding: 6px 9px; font-size: 13px; }
+  #slotsTable tr.empty td { color: var(--muted); }
 </style>
 
 </head>
@@ -233,7 +239,7 @@
   </header>
 
   <div class="warning"><b>Unofficial and experimental.</b> This isn't made or supported by Line 6. Installing modified
-    firmware is at your own risk and may void your warranty. If anything goes wrong, <a href="#recovery">Recovery</a>
+    firmware is at your own risk and may void your warranty. If anything goes wrong, <a href="#recovery">Rescue</a> (at the bottom)
     puts the normal firmware back, from this page or with Line 6 Updater; your presets and IRs survive it.</div>
 
   <div class="warning"><b>Good to know before you start</b>
@@ -257,7 +263,9 @@
       <li><a href="#s2" id="nav2"><span class="n">2</span><span class="t">Make firmware</span></a></li>
       <li><a href="#s3" id="nav3"><span class="n">3</span><span class="t">Install</span></a></li>
       <li><a href="#s4" id="nav4"><span class="n">4</span><span class="t">Add captures</span></a></li>
-      <li><a href="#s5" id="nav5"><span class="n">5</span><span class="t">Play</span></a></li>
+      <li><a href="#s5" id="nav5"><span class="n">5</span><span class="t">Play NAM</span></a></li>
+      <li><a href="#s6" id="nav6"><span class="n">6</span><span class="t">Play amps</span></a></li>
+      <li><a href="#s7" id="nav7"><span class="n">7</span><span class="t">Play effects</span></a></li>
     </ol>
   </nav>
 
@@ -380,7 +388,7 @@
     <h3>Check it worked</h3>
     <p>Add a block on the HX Effects and open <span class="path">Distortion › Mono</span>: you'll see <b>NAM A2
       Lite</b>. With the amps, there's also a new <span class="path">Distortion › Amps</span> group.</p>
-    <p class="tip">Stuck on the splash screen, or it says "Boot Failure"? Don't worry: follow <a href="#recovery">Recovery</a>.</p>
+    <p class="tip">Stuck on the splash screen, or it says "Boot Failure"? Don't worry: follow <a href="#recovery">Rescue</a> at the bottom of this page.</p>
   </section>
 
   <!-- 4 -->
@@ -389,7 +397,7 @@
       <span class="n">4</span>
       <h2 id="h4s">Add your NAM captures</h2>
       <p>The HX Effects plays NAM captures from its User IR slots. First turn each <b>.nam</b> into a <b>.wav</b>, then
-        load it into a slot.</p>
+        send it to a slot, from this page or with HX Edit.</p>
     </div>
     <label class="drop" id="drop">
       <svg class="jack" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -415,8 +423,42 @@
         similar sites, look for "A2 Lite" or a file that offers several sizes).</div>
     </div>
 
-    <h3>Load them into the HX Effects</h3>
+    <div class="trybox" id="sendBox">
+      <h3>Option A: send them to the HX Effects from this page</h3>
+      <p class="note">Needs <b>Chrome</b> or <b>Edge</b>. Quit HX Edit and Line 6 Updater first, and on the HX Effects pick a
+        preset <b>without</b> a NAM block in it. The captures go into User IR slots one after another, starting at the slot
+        you choose; NAM A2 Lite's Model knob reaches slots <b>1 to 21</b>.</p>
+      <div class="row-actions">
+        <button class="btn" id="slotsShow" type="button">Show what's on my HX Effects</button>
+      </div>
+      <div id="slotsBox" hidden style="max-height: 480px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px">
+        <table class="knobs" id="slotsTable">
+          <thead><tr><th>Slot</th><th>Name</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="note" id="slotsNote"></p>
+      </div>
+      <div class="row-actions">
+        <label for="firstSlot">Start at slot</label>
+        <input id="firstSlot" type="number" min="1" max="21" value="1" style="width:5em; font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--ink)">
+        <button class="btn primary" id="sendCheck" type="button">Send to my HX Effects</button>
+        <span class="note" id="sendWhy"></span>
+      </div>
+      <div class="status" id="sendStatus" hidden>
+        <span class="title" id="sendTitle"></span>
+        <div class="bar" id="sendBarWrap"><i id="sendBar"></i></div>
+        <div id="sendPlan"></div>
+        <div class="row-actions" id="sendActions" hidden>
+          <button class="btn primary" id="sendGo" type="button">Replace and send</button>
+          <button class="btn" id="sendCancel" type="button">Cancel</button>
+        </div>
+        <details class="log"><summary>Technical details</summary><pre id="sendLog"></pre></details>
+      </div>
+    </div>
+
+    <h3>Option B: load them with HX Edit</h3>
     <ol class="how">
+      <li>Click <b>Download all</b> above (or Download on each capture).</li>
       <li>Open <b>HX Edit</b> with the HX Effects connected. First pick a preset <b>without</b> a NAM block in it.</li>
       <li>Open the <b>Impulses</b> list and drag a <b>.wav</b> onto a slot from <b>1 to 21</b>. <b>Note its number</b>,
         for example 5.</li>
@@ -429,8 +471,8 @@
   <section class="step" id="s5" aria-labelledby="h5s">
     <div class="step-head">
       <span class="n">5</span>
-      <h2 id="h5s">Play</h2>
-      <p>On the HX Effects itself (HX Edit can't edit the new blocks).</p>
+      <h2 id="h5s">Play NAM A2 Lite</h2>
+      <p>On the HX Effects itself (HX Edit can't edit the new blocks). In every choice from step 2.</p>
     </div>
     <ol class="how">
       <li>Add a block and pick <span class="path">Distortion › Mono › NAM A2 Lite</span>.</li>
@@ -447,13 +489,63 @@
       </tbody>
     </table>
     <ul class="plain">
-      <li>Up to two NAM blocks in a preset, each with its own capture. Presets remember the slot number, so keep each
-        capture in its slot.</li>
-      <li>With the amps: the HX Stomp's amps are under <span class="path">Distortion › Amps</span> and its preamps under
-        <span class="path">EQ › Preamps</span>. There are no cabs: put an IR block after the amp.</li>
-      <li>Click (the metronome) is under <span class="path">Delay › Mono</span>. With the effects: Bolt, Rocket!, Garrrry Tank,
-        Doom Chug and the rest are in the Distortion and Delay lists. The drum machine, <b>Drum Chapel</b>, is under
-        <span class="path">Delay › Mono</span>: pick a groove and a kit, and set the tempo with tap tempo. Heavy blocks use a lot of the DSP, so the unit may refuse one more in a full preset.</li>
+      <li>Up to two NAM blocks in a preset, each with its own capture.</li>
+      <li>Presets remember the slot number, not the capture, so keep each capture in its slot.</li>
+      <li>Most NAM captures are of an amp without its cabinet: put an IR or cab block after NAM A2 Lite.</li>
+      <li>Click, a metronome that follows tap tempo, is under <span class="path">Delay › Mono</span> in every choice too.</li>
+    </ul>
+  </section>
+
+  <!-- 6 -->
+  <section class="step" id="s6" aria-labelledby="h6s">
+    <div class="step-head">
+      <span class="n">6</span>
+      <h2 id="h6s">Play the HX amps</h2>
+      <p>If you chose NAM + Amps or NAM + Amps + Effects in step 2.</p>
+    </div>
+    <ol class="how">
+      <li>Add a block and open <span class="path">Distortion › Amps</span>: all 111 of the HX Stomp's amps, 94 guitar and
+        17 bass, with the Stomp's own knobs.</li>
+      <li>The preamps (the amps without their power amp section) are under <span class="path">EQ › Preamps</span>.</li>
+    </ol>
+    <ul class="plain">
+      <li>There are no cabs: put an IR block after the amp, with a cab IR in a User IR slot.</li>
+      <li>Up to three amps and preamps in a preset, together.</li>
+      <li>Amps are heavy blocks: next to NAM and the heavier effects, the unit may refuse one more.</li>
+    </ul>
+  </section>
+
+  <!-- 7 -->
+  <section class="step" id="s7" aria-labelledby="h7s">
+    <div class="step-head">
+      <span class="n">7</span>
+      <h2 id="h7s">Play the new effects</h2>
+      <p>If you chose NAM + Amps + Effects in step 2. Each one is in the list of the stock block it replaces (the
+        stereo version of that block stays).</p>
+    </div>
+    <table class="knobs">
+      <thead><tr><th>Effect</th><th>Where, and what it is</th></tr></thead>
+      <tbody>
+        <tr><td><b>Drum Chapel</b></td><td><span class="path">Delay › Mono</span>. A basic drum machine that follows tap
+          tempo: pick a groove and a kit (seven, one with sampled acoustic drums). The footswitch starts and stops it.</td></tr>
+        <tr><td><b>Bolt, Rocket!</b></td><td><span class="path">Distortion › Mono</span>. Bit crusher with 16 shaping curves.</td></tr>
+        <tr><td><b>Garrrry Tank</b></td><td><span class="path">Distortion › Mono</span>. Square-wave octave fuzz.</td></tr>
+        <tr><td><b>Quality Polis</b></td><td><span class="path">Distortion › Legacy</span>. A square-wave synth that follows
+          what you play.</td></tr>
+        <tr><td><b>Bam Crusher</b></td><td><span class="path">Distortion › Mono</span>. Sequenced bit crusher with stutters.</td></tr>
+        <tr><td><b>Doom Chug</b></td><td><span class="path">Distortion › Mono</span>. A low drone generator; try it into Bolt,
+          Rocket!, Quality Polis, Garrrry Tank or Bam Crusher.</td></tr>
+        <tr><td><b>Pure Whitey</b></td><td><span class="path">Distortion › Mono</span>. A glitchy sampler with eight modes.</td></tr>
+        <tr><td><b>Greasy Strangler</b></td><td><span class="path">Pitch/Synth › Mono</span>. A drone that follows your notes and
+          holds the last one.</td></tr>
+        <tr><td><b>Bethblahem</b></td><td><span class="path">Pitch/Synth › Mono</span>. A low theremin-style synth.</td></tr>
+        <tr><td><b>Puggy Puncher</b></td><td><span class="path">Delay › Mono</span>. A slot-machine glitch on every step,
+          in time with tap tempo.</td></tr>
+      </tbody>
+    </table>
+    <ul class="plain">
+      <li>Several of these use a lot of the processor. Add them one at a time; the unit refuses a block when a preset is
+        full. Save often.</li>
     </ul>
   </section>
 
@@ -801,6 +893,7 @@
     $("count").textContent = items.length ? good + " of " + items.length + " converted" : "No captures yet";
     $("clear").hidden = !items.length;
     $("all").hidden = good < 2;
+    if (typeof sendWhy === "function") sendWhy();
     items.forEach(function (it, i) {
       var row = el("div", "row" + (it.wav ? "" : " bad"));
       row.appendChild(el("span", "mark", it.wav ? "✓" : "!"));
@@ -856,6 +949,167 @@
     });
     markDone(4);
   });
+
+  // ---- Step 4, option A: send the converted captures to User IR slots (flasher.js irSession) ----
+  var sendBusy = false, sendPlanData = null;
+  function sendShow(kind, title) {
+    $("sendStatus").hidden = false;
+    $("sendStatus").className = "status" + (kind ? " " + kind : "");
+    $("sendTitle").textContent = title;
+    $("sendBarWrap").hidden = kind !== "";
+  }
+  function sendLog(s) { var p = $("sendLog"); p.textContent += s; p.scrollTop = p.scrollHeight; }
+  function sendWhy() {
+    var good = items.filter(function (it) { return it.wav; }).length;
+    var why = !hasUsb ? "This browser can't reach USB devices: use Chrome or Edge, or option B." :
+              !/^https?:$/.test(location.protocol) ? "Open this page from its web address to use this." :
+              !good ? "Convert some captures above first." : "";
+    $("sendWhy").textContent = why;
+    $("sendCheck").disabled = sendBusy || !!why;
+    $("slotsShow").disabled = sendBusy || (typeof slotsBusy !== "undefined" && slotsBusy) || !hasUsb;
+    $("firstSlot").disabled = sendBusy;
+  }
+  function slotName(it) { return it.name.replace(/\.nam$/i, "").slice(0, 60); }
+  function sendErr(e) {
+    sendLog("\nerror (" + (e.code || "?") + "): " + e.message + "\n");
+    var msg = e.code === "busy" ? "Another program is using the HX Effects. Quit HX Edit and Line 6 Updater, then try again." :
+              e.code === "cancel" ? "No device was picked. Click Send to try again." :
+              "Nothing more was sent. Turn the HX Effects off and on if it seems stuck, then try again; the technical details say what happened.";
+    sendShow("bad", "Sending stopped.");
+    $("sendPlan").textContent = msg;
+  }
+  // 1st click: read the slots, show what would be replaced
+  $("sendCheck").addEventListener("click", async function () {
+    if (sendBusy) return;
+    var first = parseInt($("firstSlot").value, 10), good = items.filter(function (it) { return it.wav; });
+    if (!(first >= 1 && first <= 21)) { sendShow("bad", "Choose a start slot from 1 to 21."); $("sendPlan").textContent = ""; return; }
+    if (first + good.length - 1 > 128) { sendShow("bad", "Too many captures for the slots after " + first + "."); return; }
+    sendBusy = true; sendWhy(); $("sendLog").textContent = ""; $("sendActions").hidden = true;
+    sendShow("", "Reading the HX Effects' IR slots…"); $("sendPlan").textContent = "Pick the HX Effects in the browser's list if it asks.";
+    try {
+      var slots = await FLASHER.irSession({ usb: navigator.usb, log: sendLog }, function (api) { return api.list(); });
+      var byslot = {}; slots.forEach(function (e) { byslot[e.slot] = e; });
+      sendPlanData = good.map(function (it, k) {
+        var u8 = new Uint8Array(it.wav.buffer, it.wav.byteOffset, it.wav.byteLength);
+        var samples = FLASHER.wavSamples(u8);
+        return { it: it, slot: first + k, name: slotName(it), samples: samples,
+                 md5: SparkMD5.ArrayBuffer.hash(samples.buffer.slice(samples.byteOffset, samples.byteOffset + samples.byteLength)),
+                 old: byslot[first + k] };
+      });
+      var plan = $("sendPlan"); plan.textContent = "";
+      var ul = el("ul", "plain");
+      var over21 = false, replaces = 0;
+      sendPlanData.forEach(function (p) {
+        var what = p.old && p.old.md5 ? "replaces “" + p.old.name + "”" : "empty slot";
+        if (p.old && p.old.md5) replaces++;
+        if (p.slot > 21) over21 = true;
+        ul.appendChild(el("li", null, "Slot " + p.slot + ": " + p.name + " (" + what + ")"));
+      });
+      plan.appendChild(ul);
+      if (over21) plan.appendChild(el("p", "note", "Slots above 21 can't be reached by NAM A2 Lite's Model knob."));
+      sendShow("", replaces ? replaces + " slot" + (replaces > 1 ? "s" : "") + " will be replaced. Send?" : "Ready to send.");
+      $("sendBarWrap").hidden = true;
+      $("sendActions").hidden = false;
+    } catch (e) { sendErr(e); }
+    finally { sendBusy = false; sendWhy(); }
+  });
+  $("sendCancel").addEventListener("click", function () { sendPlanData = null; $("sendStatus").hidden = true; });
+  // 2nd click: write them, each checked by reading the slot back
+  $("sendGo").addEventListener("click", async function () {
+    if (sendBusy || !sendPlanData) return;
+    var plan = sendPlanData; sendBusy = true; sendWhy(); $("sendActions").hidden = true;
+    sendShow("", "Sending… don't unplug the HX Effects"); $("sendBar").style.width = "0%";
+    var ul = el("ul", "plain"); $("sendPlan").textContent = ""; $("sendPlan").appendChild(ul);
+    try {
+      await FLASHER.irSession({ usb: navigator.usb, log: sendLog }, async function (api) {
+        for (var k = 0; k < plan.length; k++) {
+          var p = plan[k];
+          await api.put(p.slot, p.samples, p.name, p.md5, function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); });
+          ul.appendChild(el("li", null, "✓ Slot " + p.slot + ": " + p.name));
+          sendLog("slot " + p.slot + ": " + p.name + ", MD5 " + p.md5 + " read back\n");
+          $("sendBar").style.width = Math.round(100 * (k + 1) / plan.length) + "%";
+        }
+      });
+      sendShow("ok", "Sent: every capture is in its slot, checked by reading it back.");
+      if (slotsList) { try { await FLASHER.irSession({ usb: navigator.usb, log: sendLog }, async function (api) { slotsList = await api.list(); }); drawSlots(); } catch (e) { /* the table refreshes on the next Show */ } }
+      ul.appendChild(el("li", "note", "Now add NAM A2 Lite and turn its Model knob to a slot number (step 5)."));
+      markDone(4); sendPlanData = null;
+    } catch (e) { sendErr(e); }
+    finally { sendBusy = false; sendWhy(); }
+  });
+
+  // ---- Step 4: the unit's User IR slots: show, rename, copy, delete (flasher.js Api) ----
+  var slotsBusy = false, slotsList = null;
+  function sleepMs(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function md5of(u8) { return SparkMD5.ArrayBuffer.hash(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)); }
+  function slotsLock(on) {
+    slotsBusy = on;
+    Array.prototype.slice.call(document.querySelectorAll("#slotsTable button, #slotsShow")).forEach(function (b) { b.disabled = on; });
+  }
+  function drawSlots() {
+    if (!slotsList) return;
+    var by = {}; slotsList.forEach(function (e) { if (e.md5) by[e.slot] = e; });
+    var tb = $("slotsTable").querySelector("tbody"); tb.textContent = "";
+    var used = Object.keys(by).length;
+    function action(label, fn) { var b = el("button", "btn", label); b.type = "button"; b.addEventListener("click", fn); return b; }
+    for (var n = 1; n <= 128; n++) {
+      var e = by[n];
+      var tr = el("tr", e ? "" : "empty");
+      tr.appendChild(el("td", null, String(n)));
+      tr.appendChild(el("td", null, e ? e.name : "empty"));
+      var td = el("td");
+      if (e) {
+        (function (slot, name) {
+          td.appendChild(action("Rename", function () { renameSlot(slot, name); }));
+          td.appendChild(document.createTextNode(" "));
+          td.appendChild(action("Copy", function () { copySlot(slot, name); }));
+          td.appendChild(document.createTextNode(" "));
+          td.appendChild(action("Delete", function () { deleteSlot(slot, name); }));
+        })(n, e.name);
+      }
+      tr.appendChild(td);
+      tb.appendChild(tr);
+    }
+    $("slotsNote").textContent = used + " of 128 slots in use, " + (128 - used) + " empty. NAM A2 Lite's Model knob reaches slots 1–21.";
+    $("slotsBox").hidden = false;
+  }
+  async function slotsDo(title, fn) {
+    if (slotsBusy || sendBusy) return;
+    slotsLock(true);
+    sendShow("", title); $("sendPlan").textContent = "Pick the HX Effects in the browser's list if it asks."; $("sendActions").hidden = true;
+    try {
+      var done = await FLASHER.irSession({ usb: navigator.usb, log: sendLog }, async function (api) {
+        var r = await fn(api);
+        slotsList = await api.list();
+        return r;
+      });
+      drawSlots();
+      if (done) { sendShow("ok", done); $("sendPlan").textContent = ""; } else $("sendStatus").hidden = true;
+    } catch (e) { sendErr(e); }
+    finally { slotsLock(false); sendWhy(); }
+  }
+  $("slotsShow").addEventListener("click", function () { slotsDo("Reading the HX Effects' IR slots…", function () { return null; }); });
+  function renameSlot(slot, name) {
+    var nn = window.prompt("New name for slot " + slot + ":", name);
+    if (nn == null) return;
+    nn = nn.trim().slice(0, 60);
+    if (!nn || nn === name) return;
+    slotsDo("Renaming slot " + slot + "…", async function (api) { await api.rename(slot, nn, sleepMs); return "Slot " + slot + " is now “" + nn + "”."; });
+  }
+  function copySlot(slot, name) {
+    var t = window.prompt("Copy “" + name + "” (slot " + slot + ") to which slot? (1–128)", "");
+    if (t == null) return;
+    var dst = parseInt(t, 10);
+    if (!(dst >= 1 && dst <= 128) || dst === slot) { window.alert("Enter a slot number from 1 to 128, other than " + slot + "."); return; }
+    var there = (slotsList || []).filter(function (e) { return e.slot === dst && e.md5; })[0];
+    if (there && !window.confirm("Slot " + dst + " holds “" + there.name + "”. Replace it?")) return;
+    slotsDo("Copying slot " + slot + " to slot " + dst + "…", async function (api) { await api.copy(slot, dst, md5of, sleepMs); return "Copied “" + name + "” to slot " + dst + "."; });
+  }
+  function deleteSlot(slot, name) {
+    if (!window.confirm("Delete “" + name + "” from slot " + slot + "? This can't be undone on the unit (keep the .wav if you want it back).")) return;
+    slotsDo("Clearing slot " + slot + "…", async function (api) { await api.remove(slot, sleepMs); return "Slot " + slot + " is empty now."; });
+  }
+  sendWhy();
 })();
 </script>
 </body>
