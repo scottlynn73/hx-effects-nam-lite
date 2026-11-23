@@ -209,6 +209,8 @@
 
   footer { color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
   footer a { color: inherit; }
+  footer .disclaimer { margin: 0 0 8px; max-width: 80ch; line-height: 1.5; }
+  footer .disclaimer b { color: var(--text); }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } html { scroll-behavior: auto; } }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .xlang { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
@@ -243,7 +245,8 @@
   </header>
 
   <div class="warning"><b>Unofficial and experimental.</b> This isn't made or supported by Line 6. Installing modified
-    firmware is at your own risk and may void your warranty. If anything goes wrong, <a href="#recovery">Rescue</a> (at the bottom)
+    firmware is at your own risk and may void your warranty; it's your responsibility, and no liability is accepted
+    (<a href="#disclaimer">disclaimer</a> at the bottom). If anything goes wrong, <a href="#recovery">Rescue</a> (at the bottom)
     puts the normal firmware back, from this page or with Line 6 Updater; your presets and IRs survive it.</div>
 
   <div class="warning"><b>Good to know before you start</b>
@@ -631,6 +634,8 @@
   </section>
 
   <footer>
+    <p id="disclaimer" class="disclaimer"><b>Disclaimer.</b> Provided “as is”, without warranty of any kind. Using this page, installing modified firmware and sending anything to your unit is entirely your own decision and your own responsibility; back up first. To the fullest extent permitted by law, the author accepts no liability for any loss or damage, including to your HX Effects or other equipment, your presets, IRs or settings, your hearing, or your warranty. If you don't accept this, don't use
+      this page. GPL-3.0 sections 15 and 16 (no warranty, limitation of liability) also apply.</p>
     <span>Unofficial. Not affiliated with or endorsed by Line 6 or Yamaha Guitar Group. Neural Amp Modeler is the work
       of its own authors.</span>
     <span>Based on <a href="https://github.com/nocaseguy/hx-stomp-nam-lite">hx-stomp-nam-lite</a>. GPL-3.0-or-later.

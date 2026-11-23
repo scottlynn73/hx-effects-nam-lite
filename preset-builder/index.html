@@ -202,6 +202,10 @@
   dialog.unit .row-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
   dialog.unit.wide { max-width: 760px; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
+  footer.disclaimer { margin: 4px 12px 20px; color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 110ch; }
+  footer.disclaimer p { margin: 0 0 6px; }
+  footer.disclaimer strong { color: var(--text); }
+  footer.disclaimer a { color: inherit; }
   .subbar { display: flex; gap: 12px; align-items: flex-start; margin: 12px 12px 0; }
   .recovery { flex: 1; min-width: 0; padding: 10px 16px; font-size: 13px; }
   .to-setup { padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
@@ -677,13 +681,22 @@ function renderRecovery() {
       "Firmware and NAM captures: setup page →"));
 }
 
+// ---------- the disclaimer at the foot of the page (the README's Disclaimer, short) ----------
+function renderDisclaimer() {
+  return el("footer", { class: "disclaimer", id: "disclaimer" },
+    el("p", {}, el("strong", {}, "Disclaimer. "), 'Provided “as is”, without warranty of any kind. Using this page and sending presets to your unit is entirely your own decision and your own responsibility; back up first. To the fullest extent permitted by law, the author accepts no liability for any loss or damage, including to your HX Effects or other equipment, your presets, IRs or settings, your hearing, or your warranty.' +
+      " If you don't accept this, don't use this page. GPL-3.0 sections 15 and 16 (no warranty, limitation of liability) also apply."),
+    el("p", {}, "Unofficial: not affiliated with, endorsed or supported by Line 6 or Yamaha Guitar Group. ",
+      el("a", { href: "https://github.com/scottlynn73/hx-effects-nam-lite" }, "Source"), " (GPL-3.0-or-later)."));
+}
+
 function render() {
   const focusId = document.activeElement && document.activeElement.id;
   const caret = document.activeElement && document.activeElement.selectionStart;
   const scroll = document.querySelector(".models") && document.querySelector(".models").scrollTop;
   app.replaceChildren(el("div", { class: "app" }, renderHeader(), renderRecovery(),
     el("div", { class: "main" }, renderBrowser(),
-      el("div", { class: "work" }, renderToolbar(), renderChain(), renderEditor()))));
+      el("div", { class: "work" }, renderToolbar(), renderChain(), renderEditor())), renderDisclaimer()));
   if (focusId && !focusId.startsWith("slot-")) {
     const f = document.getElementById(focusId);
     if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch (e) {} }
@@ -1539,7 +1552,8 @@ async function unitDialog() {
   dlg.append(el("h2", {}, "Send to the HX Effects"),
     el("div", { class: "fw-warn", role: "alert" },
       el("p", {}, el("strong", {}, `This preset is built for the ${fwName}.`)),
-      el("p", {}, "Only send it to a unit running exactly that firmware. The page can't check what your unit runs. " +
+      el("p", {}, "Sending is your own decision and your responsibility; no liability is accepted (disclaimer at the foot of the page). " +
+        "Only send it to a unit running exactly that firmware. The page can't check what your unit runs. " +
         "On any other firmware the preset can load wrong: blocks can turn into different effects with nonsense settings, " +
         "or load with nothing running, and a bad preset can lock up the unit until it's switched off and on " +
         "(\"If a preset locks up the unit\", at the top of the page, says how to get it back). " +
