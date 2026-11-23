@@ -64,6 +64,8 @@
   .eyebrow { font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
   h1 { margin: 0; font-size: clamp(28px, 5vw, 38px); line-height: 1.12; letter-spacing: -.01em; text-wrap: balance; }
   .lede { margin: 0; color: var(--muted); max-width: 62ch; font-size: 17px; }
+  .to-builder { font-size: 15px; }
+  .to-builder a { font-weight: 600; }
 
   .warning {
     padding: 12px 14px; border-radius: var(--r); background: var(--warn-soft); color: var(--ink);
@@ -236,6 +238,8 @@
     <p class="lede">This page does everything for you, step by step: it makes the new firmware from Line 6's own file,
       shows you how to install it, and turns your <b>.nam</b> captures into files the HX Effects can play. It works in
       your browser on a Mac or a Windows PC. Nothing is installed and nothing is uploaded anywhere.</p>
+    <p class="lede to-builder">Firmware installed? Build presets for it, with NAM, the amps and the new effects, in the
+      <a class="builder-link" href="preset-builder/">preset builder</a>: it sends them straight to the unit.</p>
   </header>
 
   <div class="warning"><b>Unofficial and experimental.</b> This isn't made or supported by Line 6. Installing modified
@@ -246,7 +250,8 @@
     <ul class="plain" style="margin-top:6px">
       <li><b>HX Edit only works for loading files.</b> You can still use it to import IRs and NAM captures (the
         .wav files from step 4) and to back up. It can't show or edit NAM, the amps or the new effects: build and
-        edit presets that use them on the HX Effects itself.</li>
+        edit presets that use them on the HX Effects itself, or in the <a class="builder-link" href="preset-builder/">preset
+        builder</a>.</li>
       <li><b>Too many heavy blocks in one preset can freeze or restart the unit.</b> NAM, the amps and some of the
         effects use a lot of the processor. Add heavy blocks one at a time, and <b>save your presets often</b> so
         nothing is lost if the unit restarts.</li>
@@ -636,6 +641,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script src="nam2ir-core.js"></script>
 <script src="flasher.js"></script>
+<script>
+  // the preset builder: beside this page on the website (preset-builder/), in tools/ when run from the repo
+  if (location.pathname.includes("/web/"))
+    document.querySelectorAll("a.builder-link").forEach(a => { a.href = "../tools/preset-builder/"; });
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
 <script>
 (function () {

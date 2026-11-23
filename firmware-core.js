@@ -31,16 +31,28 @@
              size: le32(r, 52), nops: le32(r, 56), body: r };
   }
 
+  // stockArchive(stockBytes, pako) -> the .hxf's inner archive (L6IA), inflated
+  function stockArchive(stock, pako) {
+    var data = chunks(stock).filter(function (c) { return c.id === "data"; })[0];
+    if (!data) throw new Error("notHxf");
+    return pako.inflate(data.body);
+  }
+
   // build(stockBytes, recipeBytes (zlib), {pako, md5, progress}) -> { hxf: Uint8Array, md5 }
   // Throws Error("notHxf" | "notStock" | "badRecipe" | "archiveMismatch" | "hxfMismatch").
   function build(stock, recipeZ, env) {
     var p = env.progress || function () {};
+    var ch = chunks(stock);
+    var out = archive(stock, recipeZ, env), R = parseRecipe(env.pako.inflate(recipeZ));
+    return pack(ch, out, R, env, p);
+  }
+
+  // archive(stockBytes, recipeBytes (zlib), {pako, md5, progress}) -> the build's inner archive (checked)
+  function archive(stock, recipeZ, env) {
+    var p = env.progress || function () {};
     var R = parseRecipe(env.pako.inflate(recipeZ));
     p("read", 1);
-    var ch = chunks(stock);
-    var data = ch.filter(function (c) { return c.id === "data"; })[0];
-    if (!data) throw new Error("notHxf");
-    var old = env.pako.inflate(data.body);
+    var old = stockArchive(stock, env.pako);
     p("check", 2);
     if (env.md5(old) !== R.stockMd5) throw new Error("notStock");
     p("apply", 3);
@@ -57,6 +69,10 @@
       d += n;
     }
     if (d !== R.size || env.md5(out) !== R.archiveMd5) throw new Error("archiveMismatch");
+    return out;
+  }
+
+  function pack(ch, out, R, env, p) {
     p("compress", 4);
     var comp = env.pako.deflate(out, { level: 9 });
     p("pack", 5);
@@ -86,7 +102,7 @@
     return { hxf: hxf, md5: md5 };
   }
 
-  var api = { build: build, parseRecipe: parseRecipe, STEPS: 6 };
+  var api = { build: build, archive: archive, stockArchive: stockArchive, parseRecipe: parseRecipe, STEPS: 6 };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.FIRMWARE = api;
 })(this);

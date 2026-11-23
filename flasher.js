@@ -101,8 +101,12 @@
   }
 
   // ---- the message channel (flash.py Channel) over a WebUSB device, interface 0, bulk 0x01/0x81 ----
-  function Channel(dev, o) {
-    this.dev = dev; this.o = o;
+  // Several channels can share the endpoints (HX Edit opens one for requests, 0x1001-0x03ef service 2, and one for
+  // notifications, 0x1002-0x03f0 service 4). link(a, b): b reads through a's reader; each message goes to the channel
+  // whose unit port sent it, and pumping either keeps both acknowledged and heartbeating.
+  function Channel(dev, o, hostPort, devPort) {
+    this.dev = dev; this.o = o; this.hostPort = hostPort || HOST_PORT; this.devPort = devPort || DEV_PORT;
+    this.io = this; this.siblings = []; this.inbox = [];
     this.seq = 0; this.rx = new Uint8Array(0); this.txBytes = 0; this.acked = 0; this.rxBytes = 0;
     this.lastTx = 0; this.closed = false; this.connected = false; this.hostBase = 0x1000; this.devBase = 0x200;
     this.queue = []; this.waiter = null; this.reading = false; this.dead = null;
@@ -117,14 +121,16 @@
   Channel.prototype.write = function (kind, flags, payload) {
     payload = payload || new Uint8Array(0);
     var n = 8 + payload.length, m = new Uint8Array((16 + payload.length + 3) & ~3), v = new DataView(m.buffer);
-    v.setUint16(0, n, true); m[2] = 0; m[3] = kind; v.setUint16(4, HOST_PORT, true); v.setUint16(6, DEV_PORT, true);
+    v.setUint16(0, n, true); m[2] = 0; m[3] = kind; v.setUint16(4, this.hostPort, true); v.setUint16(6, this.devPort, true);
     m[8] = 0; m[9] = this.seq & 0xFF; v.setUint16(10, flags, false);
     v.setUint32(12, (this.hostBase + this.rxBytes) >>> 0, true);
     m.set(payload, 16);
     this.seq++;
     return this.raw(m);
   };
+  Channel.link = function (a, b) { b.io = a; a.siblings = [b]; b.siblings = [a]; };
   Channel.prototype.startReading = function () {
+    if (this.io !== this) return this.io.startReading();
     var self = this;
     if (this.reading) return;
     this.reading = true;
@@ -141,9 +147,9 @@
     })();
   };
   Channel.prototype.nextIn = function (ms) {
-    var self = this;
-    if (this.queue.length) return Promise.resolve(this.queue.shift());
-    if (!this.reading) return Promise.resolve(null);
+    var self = this.io;                                 // the shared reader (itself unless linked)
+    if (self.queue.length) return Promise.resolve(self.queue.shift());
+    if (!self.reading) return Promise.resolve(null);
     return new Promise(function (resolve) {
       var done = false;
       function finish() { if (done) return; done = true; self.waiter = null; resolve(self.queue.length ? self.queue.shift() : null); }
@@ -156,28 +162,38 @@
     if (buf) {
       var v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength), o = 0;
       while (o + 16 <= buf.length) {
-        var ln = v.getUint16(o, true), kind = buf[o + 3], flags = v.getUint16(o + 10, false), ack = v.getUint32(o + 12, true);
-        var payload = buf.slice(o + 16, o + 8 + ln);
+        var ln = v.getUint16(o, true), src = v.getUint16(o + 4, true);
+        var msg = { kind: buf[o + 3], flags: v.getUint16(o + 10, false), ack: v.getUint32(o + 12, true), payload: buf.slice(o + 16, o + 8 + ln) };
         o += (8 + ln + 3) & ~3;
-        if (kind === 0x28) { this.devBase = new DataView(payload.buffer).getUint32(0, true); this.connected = true; continue; }
-        if (kind !== 0x18) continue;
-        this.acked = Math.max(this.acked, (ack - this.devBase) >>> 0);
-        if (flags & 0x02) this.closed = true;
-        if (payload.length) {
-          this.rx = concat([this.rx, payload]);
-          this.rxBytes += payload.length;
-          await this.write(0x18, 0x08);
-        }
+        var other = this.siblings.filter(function (c) { return c.devPort === src; })[0];
+        (other || this).inbox.push(msg);
+      }
+    }
+    await this.handle();
+    for (var i = 0; i < this.siblings.length; i++) await this.siblings[i].handle();
+  };
+  Channel.prototype.handle = async function () {
+    var msgs = this.inbox; this.inbox = [];
+    for (var i = 0; i < msgs.length; i++) {
+      var m = msgs[i];
+      if (m.kind === 0x28) { this.devBase = new DataView(m.payload.buffer).getUint32(0, true); this.connected = true; continue; }
+      if (m.kind !== 0x18) continue;
+      this.acked = Math.max(this.acked, (m.ack - this.devBase) >>> 0);
+      if (m.flags & 0x02) this.closed = true;
+      if (m.payload.length) {
+        this.rx = concat([this.rx, m.payload]);
+        this.rxBytes += m.payload.length;
+        await this.write(0x18, 0x08);
       }
     }
     if (!this.closed && this.connected && Date.now() - this.lastTx > HEARTBEAT) await this.write(0x18, 0x10);
   };
   Channel.prototype.open = async function () {
     this.startReading();
-    while (await this.nextIn(100)) { /* purge anything stale */ }
+    if (this.io === this) while (await this.nextIn(100)) { /* purge anything stale */ }
     this.connected = false;
     var m = new Uint8Array(20), v = new DataView(m.buffer);
-    v.setUint16(0, 0x0C, true); m[3] = 0x28; v.setUint16(4, HOST_PORT, true); v.setUint16(6, DEV_PORT, true);
+    v.setUint16(0, 0x0C, true); m[3] = 0x28; v.setUint16(4, this.hostPort, true); v.setUint16(6, this.devPort, true);
     m.set(h("000000020001002100100000"), 8);
     await this.raw(m);
     this.seq = 2;
@@ -193,7 +209,7 @@
       var n = Math.min(MAX_PAYLOAD, data.length - o);
       while (this.txBytes - this.acked + n > WINDOW) {
         if (Date.now() - t > 10000) throw fail("protocol", "the unit stopped acknowledging");
-        if (this.dead) throw fail("gone", "the unit left USB");
+        if (this.io.dead) throw fail("gone", "the unit left USB");
         await this.pump(20);
       }
       await this.write(0x18, 0x04, data.subarray(o, o + n));
@@ -204,7 +220,7 @@
     var end = Date.now() + 1000 * (seconds || 30);
     while (this.rx.length < n) {
       if (this.closed) throw fail("refused", "the unit closed the connection");
-      if (this.dead) throw fail("gone", "the unit left USB");
+      if (this.io.dead) throw fail("gone", "the unit left USB");
       if (Date.now() > end) throw fail("protocol", "no reply from the unit");
       await this.pump(20);
     }
@@ -220,7 +236,7 @@
         while (!this.closed && Date.now() < end) await this.pump(50);
       }
     } catch (e) { /* it may be restarting */ }
-    this.reading = false;
+    if (this.io === this) this.reading = false;
   };
 
   // ---- the update protocol (flash.py Commands), on any stream with send(bytes) and recv(n, seconds) ----
@@ -524,10 +540,12 @@
     var r = await this.ch.recv(9, 10);
     if (r[0] || r[1]) throw fail("protocol", "unexpected service answer " + hex(r));
   };
-  Api.prototype.request = async function (op, args, acceptWorking) {
+  // typ 2: requests; typ 6: "live" requests (load, current preset). One id counter for both: the unit may answer a
+  // type-6 request as type 2, so answers are matched by id (tools/preset_send.py).
+  Api.prototype.request = async function (op, args, acceptWorking, typ) {
     var rid = this.id++, body = mpEncode(M([102, rid], [100, op], [101, args]));
     var head = new Uint8Array(8), v = new DataView(head.buffer);
-    v.setUint16(0, 1, true); v.setUint16(2, 2, true); v.setUint32(4, body.length, true);
+    v.setUint16(0, 1, true); v.setUint16(2, typ || 2, true); v.setUint32(4, body.length, true);
     await this.ch.send(concat([head, body]));
     var end = Date.now() + 30000;
     while (Date.now() < end) {
@@ -599,10 +617,72 @@
     return this.put(dst, samples, txt(info.result[109]), md5of(samples), sleep);
   };
 
+  // ---- presets (tools/preset_send.py; docs/hxedit-preset-format.md "On the wire") ----
+  Api.prototype.presetList = async function () {
+    var r = await this.request(1, M([107, 0], [101, 2]));
+    if (r.status !== 0) throw fail("refused", "the unit refused the preset list (" + r.status + ")");
+    return (r.result || []).map(function (e) {
+      var k = Object.keys(e)[0];
+      return { index: +k, name: txt(e[k][109]) };
+    });
+  };
+  // the preset's blob, or null for an empty slot
+  Api.prototype.presetRead = async function (n) {
+    var r = await this.request(4, M([107, 0], [108, n], [101, 2]));
+    if (r.status !== 0) throw fail("refused", "the unit refused to read preset " + n);
+    return r.result instanceof Uint8Array ? r.result : null;
+  };
+  // write a blob into a slot (HX Edit brackets it with 255/254); the caller checks it by reading it back
+  // Wait for the unit's "done" notification for request rid. Notifications come on their own connection (this.notes:
+  // 0x1002-0x03f0, service 4), as HX Edit opens it; false if none came in time.
+  Api.prototype.waitDone = async function (rid, ms) {
+    var ch = this.notes || this.ch, end = Date.now() + ms;
+    while (Date.now() < end) {
+      if (ch.rx.length < 8) { await ch.pump(20); continue; }
+      var hd = await ch.recv(8, 30), hv = new DataView(hd.buffer, hd.byteOffset, 8);
+      var typ = hv.getUint16(2, true), m = mpDecode(await ch.recv(hv.getUint32(4, true), 30));
+      if (typ === 4 && m && m[106] && m[106][102] === rid) return true;
+    }
+    return false;
+  };
+  Api.prototype.presetWrite = async function (n, blob, name, sleep) {
+    await this.request(255, M());
+    var r, rid;
+    try {
+      rid = this.id;
+      r = await this.request(8, M([107, 0], [108, n], [109, utf8z(name)], [123, false], [124, false], [125, 0], [110, blob]), true);
+      // 1 = "working": the unit stores the file after answering. HX Edit closes (254) only after the done
+      // notification; closing at once left slots with a scrambled start (tools/preset_send.py, 2026-11-22).
+      if (r.status === 1) this.lastDone = await this.waitDone(rid, 5000);
+    }
+    finally { await this.request(254, M()); }
+    if (r.status !== 0 && r.status !== 1) throw fail("refused", "the unit refused to write preset " + n + " (" + r.status + ")");
+    await sleep(500);
+  };
+  Api.prototype.presetLoad = async function (n) {
+    var r = await this.request(20, M([107, 0], [108, n]), true, 6);
+    if (r.status !== 0 && r.status !== 1) throw fail("refused", "the unit refused to load preset " + n);
+  };
+  Api.prototype.current = async function () {
+    var r = await this.request(23, null, false, 6);
+    if (r.status !== 0) throw fail("refused", "the unit refused the current preset");
+    return { index: r.result[108], name: txt(r.result[109]) };
+  };
+
   // irSession(o, fn): the running unit (the one the page may use, or the one picked), its API opened, fn(api) run.
   // o: { usb, log, sleep }. The browser asks for the device when none is allowed yet (needs a click).
-  async function irSession(o, fn) {
+  // One session at a time, and a short gap after the last one closed: a quick reconnect jammed the unit's USB
+  // (tools/preset_send.py tests, 2026-11-22). A page may start one per click.
+  var sessionQueue = Promise.resolve(), sessionEnd = 0, SESSION_GAP = 1500;
+  function irSession(o, fn) {
+    var run = sessionQueue.then(function () { return oneSession(o, fn); });
+    sessionQueue = run.then(function () {}, function () {});
+    return run;
+  }
+  async function oneSession(o, fn) {
     o.sleep = o.sleep || realSleep; o.log = o.log || function () {};
+    var wait = sessionEnd + SESSION_GAP - Date.now();
+    if (wait > 0) await realSleep(wait);
     var dev = await present(o, MAIN, 0xEF);
     if (!dev) {
       try { dev = await o.usb.requestDevice({ filters: MAIN }); }
@@ -610,16 +690,26 @@
     }
     if (dev.deviceClass === 0) throw fail("protocol", "the unit is in update mode: turn it off and on first");
     await claim(dev);
-    var ch = new Channel(dev, o);
+    // Two connections, as HX Edit opens them: requests (service 2) and notifications (service 4). Without the
+    // notification connection the unit took only about 16 preset writes per power-on (tools/preset_send.py, 2026-11-22).
+    var ch = new Channel(dev, o), notes = new Channel(dev, o, 0x1002, 0x03F0);
+    Channel.link(ch, notes);
     try {
       await ch.open();
+      await notes.open();
+      await notes.send(h("010004000100000004"));
+      var r = await notes.recv(9, 10);
+      if (r[0] || r[1]) throw fail("protocol", "unexpected notification service answer " + hex(r));
       var api = new Api(ch);
+      api.notes = notes;
       await api.open();
       return await fn(api);
     } finally {
+      await notes.close();
       await ch.close();
       ch.reading = false;
       await release(dev);
+      sessionEnd = Date.now();
     }
   }
 

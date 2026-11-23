@@ -1,0 +1,1664 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HX Effects Preset Builder</title>
+<style>
+  :root {
+    --bg: #0b0c0e; --panel: #141518; --panel-2: #1b1d21; --panel-3: #23262b; --line: #2b2e34; --line-2: #3a3e45;
+    --text: #eceef1; --muted: #8d939c; --faint: #5d626a; --accent: #3fb8ff; --warn: #ff6b5b; --ok: #46c37b;
+    --radius: 12px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* ---- top bar ---- */
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 16px;
+    background: #08090a; border-bottom: 1px solid var(--line); }
+  @media (min-width: 980px) { .topbar { position: sticky; top: 0; z-index: 5; } }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: .4px; font-size: 13px;
+    text-transform: uppercase; color: var(--muted); margin-right: 6px; }
+  .brand svg { color: var(--accent); }
+  .preset-name { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px;
+    font-size: 17px; font-weight: 600; width: 16ch; min-width: 0; }
+  .topbar select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
+  .spacer { flex: 1; }
+  .btn.ic { display: inline-flex; align-items: center; gap: 6px; }
+  .btn.ic:not(.primary) svg { color: var(--accent); }
+  .btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 8px 13px; font-size: 13px; }
+  .btn:hover { border-color: var(--line-2); background: var(--panel-3); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #04121c; font-weight: 700; }
+  .btn.primary:hover { filter: brightness(1.08); background: var(--accent); }
+  .btn.small { padding: 5px 10px; font-size: 12px; }
+  .btn.danger:hover { border-color: var(--warn); color: var(--warn); }
+  .btn-group { display: inline-flex; }
+  .btn-group .btn { border-radius: 0; margin-left: -1px; }
+  .btn-group .btn:first-child { border-radius: 9px 0 0 9px; margin-left: 0; }
+  .btn-group .btn:last-child { border-radius: 0 9px 9px 0; }
+  .meta { color: var(--muted); font-size: 12px; }
+
+  /* ---- main layout ---- */
+  .main { flex: 1; display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px; min-height: 0; }
+  @media (min-width: 980px) { .main { grid-template-columns: 290px minmax(0, 1fr); } }
+  .work { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
+  .panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .9px; color: var(--muted); margin: 0 0 10px; font-weight: 700; }
+
+  /* ---- sidebar: model browser ---- */
+  .sidebar { display: flex; flex-direction: column; min-height: 0; order: 2; }
+  @media (min-width: 980px) { .sidebar { order: 0; } }
+  @media (min-width: 980px) { .sidebar { position: sticky; top: 66px; max-height: calc(100vh - 78px); } }
+  .search { width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; margin-bottom: 10px; }
+  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 4px; margin-bottom: 10px; }
+  .grp-btn { display: flex; align-items: center; gap: 7px; background: transparent; border: 1px solid transparent; border-radius: 8px;
+    padding: 5px 7px; font-size: 12px; text-align: left; color: var(--muted); }
+  .grp-btn svg { color: var(--c); flex: none; }
+  .grp-btn:hover { background: var(--panel-2); color: var(--text); }
+  .grp-btn[aria-pressed="true"] { background: var(--panel-3); border-color: var(--c); color: var(--text); }
+  .models { flex: 1; min-height: 160px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px;
+    border-top: 1px solid var(--line); padding-top: 8px; }
+  @media (min-width: 980px) { .models { max-height: none; } }
+  .model { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; width: 100%; text-align: left;
+    background: transparent; border: 0; border-radius: 7px; padding: 7px 9px; }
+  .model:hover { background: var(--panel-2); }
+  .param select.ir-empty { border-color: var(--warn); }
+  .warn-text { color: var(--warn); }
+  .fw-load { max-width: 620px; margin: 60px auto; padding: 24px; }
+  .fw-load h1 { font-size: 20px; margin: 0 0 12px; }
+  .fw-drop { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 34px 16px; margin: 16px 0;
+    border: 2px dashed var(--line-2); border-radius: 14px; cursor: pointer; text-align: center; }
+  .fw-drop.over, .fw-drop:hover { border-color: var(--accent); background: rgba(63,184,255,.06); }
+  .side-foot a { color: var(--muted); }
+  .model.nofit { opacity: .35; cursor: not-allowed; }
+  .model.nofit:hover { background: transparent; }
+  .model .mg { font-size: 11px; color: var(--c, var(--muted)); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .empty-note { color: var(--muted); padding: 8px; }
+  .side-foot { margin-top: 10px; }
+
+  /* ---- toolbar: snapshots + DSP ---- */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; }
+  .seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: transparent; border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+    letter-spacing: .3px; color: var(--muted); }
+  .seg button:hover { color: var(--text); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #04121c; }
+  .seg.channels { display: flex; margin: 8px 0; }
+  .seg.channels button { flex: 1; padding: 5px 4px; }
+  .label-xs { font-size: 11px; text-transform: uppercase; letter-spacing: .9px; color: var(--muted); font-weight: 700; }
+  input.mini, select.mini { background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; font-size: 12px; }
+  input.mini { width: 8em; }
+  input.mini[type=number] { width: 5.5em; }
+  .dsp { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .meter { width: 140px; height: 6px; background: var(--panel-3); border-radius: 3px; overflow: hidden; }
+  .meter > div { height: 100%; background: var(--ok); transition: width .2s; }
+  .meter.over > div { background: var(--warn); }
+  .meter-label { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meter-label.over { color: var(--warn); }
+
+  /* ---- signal flow ---- */
+  .flow { padding: 16px 14px 12px; }
+  .flow-scroll { overflow-x: auto; }
+  .grid { position: relative; display: grid; grid-template-columns: repeat(11, minmax(50px, 1fr)); grid-template-rows: 108px 108px;
+    min-width: 560px; }
+  .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .wires path { fill: none; stroke: #6a7079; stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .wires path.idle { stroke: #3a3e45; stroke-dasharray: 5 5; }
+  .wires circle { fill: #9aa1aa; }
+  .io { align-self: center; justify-self: center; width: 54px; height: 54px; border-radius: 12px; background: var(--panel-2);
+    border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+    letter-spacing: .8px; color: var(--muted); position: relative; z-index: 1; }
+  .cell { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 0;
+    background: transparent; padding: 0; min-width: 0; border-radius: 12px; }
+  .cell.dragover { background: rgba(63,184,255,.08); }
+  .tile { width: 56px; height: 56px; border-radius: 14px; background: #0d0e10; border: 2px solid var(--c, #888);
+    display: flex; align-items: center; justify-content: center; color: var(--c); position: relative; z-index: 1;
+    box-shadow: 0 0 0 0 transparent; transition: box-shadow .15s, transform .1s; }
+  .cell:hover .tile { transform: translateY(-1px); }
+  .cell.sel .tile { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--c), 0 0 18px -2px var(--c); }
+  .cell.off .tile { border-style: dashed; opacity: .45; }
+  .tile .stereo { position: absolute; bottom: 3px; right: 5px; font-size: 9px; font-weight: 700; color: var(--muted); }
+  .tile .fs { position: absolute; top: -8px; right: -8px; background: var(--panel-3); border: 1px solid var(--line-2);
+    color: var(--text); font-size: 9px; font-weight: 700; border-radius: 6px; padding: 1px 4px; }
+  .cell .nm { position: absolute; bottom: 2px; left: 2px; right: 2px; font-size: 11px; color: var(--muted); text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cell.sel .nm { color: var(--text); }
+  .cell .pos { position: absolute; top: 4px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--faint); }
+  .node { width: 22px; height: 22px; border-radius: 50%; background: var(--bg); border: 1.5px solid #3a3e45; position: relative; z-index: 1;
+    display: flex; align-items: center; justify-content: center; color: transparent; font-size: 15px; line-height: 1; transition: all .12s; }
+  .cell:hover .node, .cell.dragover .node { border-color: var(--accent); color: var(--accent); width: 34px; height: 34px; }
+  .cell.sel .node { border-color: var(--accent); color: var(--accent); width: 38px; height: 38px; border-width: 2px; }
+  .junction { position: absolute; top: 25%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; z-index: 3;
+    background: #b4bac2; border: 3px solid var(--panel); box-shadow: 0 0 0 1.5px #b4bac2; cursor: ew-resize; touch-action: none;
+    transition: transform .12s, background .12s, box-shadow .12s; }
+  .junction:hover, .junction.drag, .junction:focus-visible { transform: scale(1.35); background: var(--accent); box-shadow: 0 0 0 1.5px var(--accent), 0 0 12px var(--accent); outline: none; }
+  .junction.sel { background: var(--accent); box-shadow: 0 0 0 1.5px var(--accent), 0 0 12px var(--accent); }
+  .junction.idle { background: #4a4f57; box-shadow: 0 0 0 1.5px #4a4f57; }
+  .flow-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .flow-foot label { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ---- editor ---- */
+  .ed-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .ed-icon { width: 40px; height: 40px; border-radius: 10px; border: 2px solid var(--c); color: var(--c); display: flex;
+    align-items: center; justify-content: center; background: #0d0e10; }
+  .ed-title { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
+  .ed-title .title { font-size: 18px; font-weight: 700; }
+  .ed-title .sub { font-size: 11px; color: var(--muted); }
+  .ed-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 16px; font-size: 12px; color: var(--muted); }
+  .ed-opts label { display: inline-flex; align-items: center; gap: 6px; }
+  .power { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--line-2); background: var(--panel-2);
+    display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+  .power[aria-pressed="true"] { border-color: var(--c, var(--accent)); color: var(--c, var(--accent)); box-shadow: 0 0 12px -3px var(--c, var(--accent)); }
+  .pill { border: 1px solid var(--line-2); background: var(--panel-2); border-radius: 999px; padding: 4px 11px; font-size: 12px; color: var(--muted); }
+  .pill[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: rgba(63,184,255,.12); }
+  .params { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 18px 12px; }
+  .param { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; text-align: center; }
+  .param .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); max-width: 100%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .param .val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); min-height: 18px; }
+  .param select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; max-width: 100%; }
+  .param .switch { border: 1px solid var(--line-2); background: var(--panel-2); border-radius: 999px; padding: 6px 16px; font-size: 12px; font-weight: 600; }
+  .param .switch[aria-pressed="true"] { border-color: var(--c); color: var(--c); }
+  .knob { width: 64px; height: 64px; touch-action: none; cursor: ns-resize; border-radius: 50%; }
+  .knob .track { fill: none; stroke: #2c3036; stroke-width: 5; stroke-linecap: round; }
+  .knob .arc { fill: none; stroke: var(--c, var(--accent)); stroke-width: 5; stroke-linecap: round; }
+  .knob .cap { fill: #17191c; stroke: #30343a; stroke-width: 1; }
+  .knob .ptr { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+  .knob.ctl .arc { stroke-dasharray: 3 3; }
+  .hint { color: var(--muted); }
+  .hint p { margin: 0 0 8px; }
+  kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  .unit-only { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border: 1px solid currentColor;
+    border-radius: 4px; padding: 0 4px; }
+  .fw-note { font-size: 12px; color: var(--muted); margin: -4px 0 14px; max-width: 80ch; }
+  .ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); width: 100%; }
+  .ctl select { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  .ctl select.on { border-color: var(--accent); color: var(--accent); }
+  .ctl-num { display: inline-flex; align-items: center; gap: 4px; }
+  .ctl-range { width: 60px; accent-color: var(--accent); }
+  .ctl-v { min-width: 3.2em; font-variant-numeric: tabular-nums; color: var(--text); }
+  .ctl-vals { display: flex; gap: 6px; font-variant-numeric: tabular-nums; flex-wrap: wrap; justify-content: center; }
+  .ctl-vals .cur { color: var(--accent); font-weight: 700; }
+
+  /* ---- misc ---- */
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #24282e; border: 1px solid var(--line-2);
+    padding: 10px 16px; border-radius: 10px; max-width: calc(100% - 32px); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+  #toast.show { opacity: 1; }
+  .missing { max-width: 640px; margin: 60px auto; padding: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .missing code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  #fsSel { font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 6px; }
+  dialog.unit { max-width: 520px; width: calc(100% - 32px); border-radius: 14px; border: 1px solid var(--line-2); padding: 18px; background: var(--panel); color: inherit; }
+  dialog.unit::backdrop { background: rgba(0,0,0,.6); }
+  dialog.unit h2 { margin: 0 0 8px; font-size: 18px; }
+  dialog.unit p { margin: 6px 0; font-size: 14px; }
+  dialog.unit select { width: 100%; font: inherit; padding: 7px; margin: 8px 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; }
+  dialog.unit .row-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
+  dialog.unit.wide { max-width: 760px; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .subbar { display: flex; gap: 12px; align-items: flex-start; margin: 12px 12px 0; }
+  .recovery { flex: 1; min-width: 0; padding: 10px 16px; font-size: 13px; }
+  .to-setup { padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .to-setup:hover { border-color: var(--accent); }
+  @media (max-width: 700px) { .subbar { flex-direction: column; align-items: stretch; } }
+  .recovery summary { cursor: pointer; font-weight: 600; color: var(--warn); }
+  .recovery ol { margin: 10px 0 6px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+  .recovery em { font-style: normal; color: var(--text); font-weight: 600; }
+  .fw-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .fw-warn { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--panel)); border-radius: 10px;
+    padding: 10px 12px; margin: 10px 0; }
+  .fw-warn strong { color: var(--warn); }
+  dialog.unit .fw-warn p { font-size: 13px; }
+  .fw-warn label { display: flex; gap: 8px; align-items: flex-start; font-weight: 600; margin-top: 8px; cursor: pointer; }
+  .fw-warn input { margin-top: 3px; accent-color: var(--warn); }
+  .unit-presets { max-height: min(60vh, 560px); overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding-right: 4px; }
+  .unit-presets .bank { display: grid; grid-template-columns: 28px repeat(4, minmax(0, 1fr)); gap: 4px; align-items: stretch; }
+  .unit-presets .bn { color: var(--faint); font-size: 12px; text-align: right; padding-right: 4px; align-self: center; }
+  .unit-presets .slot { display: flex; gap: 6px; align-items: baseline; min-width: 0; text-align: left; padding: 6px 8px; border-radius: 8px;
+    background: var(--panel-2); border: 1px solid var(--line); }
+  .unit-presets .slot:hover:not(:disabled) { border-color: var(--accent); }
+  .unit-presets .slot .sl { color: var(--muted); font-size: 11px; flex: none; }
+  .unit-presets .slot .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .unit-presets .slot.empty { background: transparent; color: var(--faint); }
+  .unit-presets .slot.cur { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--panel-2)); }
+  .unit-presets .slot:disabled { cursor: default; }
+  .unit-presets.busy .slot { opacity: .6; }
+  dialog.unit .log { font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); white-space: pre-wrap; max-height: 140px; overflow: auto; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
+<!-- ?v=: change it whenever these files change, so a browser never runs an old copy beside a new page -->
+<script src="preset-core.js?v=20261122b"></script>
+<script src="fw-reader.js?v=20261122b"></script>
+<script src="fw-catalog.js?v=20261123a"></script>
+<script>
+"use strict";
+// The setup page's files (flasher.js, firmware-core.js, the recipes): beside this page's folder on the website,
+// in web/ when served from the repository (python3 -m http.server from the repo root, README).
+const WEB = location.pathname.includes("/tools/preset-builder/") ? "../../web/" : "../";
+const app = document.getElementById("app");
+const loadScript = src => new Promise((ok, fail) => {
+  const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => fail(new Error("could not load " + src));
+  document.head.append(s);
+});
+
+// ---------- constants ----------
+// HX Effects only: one DSP, nine blocks on each of path A and path B of dsp0 (see docs/hxedit-preset-format.md)
+const SLOTS = 9;
+const DEVICES = {
+  hfx: { label: "HX Effects", rows: 2 },
+};
+const GROUPS = ["Distortion","Dynamics","EQ","Modulation","Delay","Reverb","Pitch/Synth","Filter","Wah",
+                "Amp","Preamp","IR","Volume/Pan","Send/Return","Looper"];
+const COLORS = {
+  "Distortion":"#f5901e","Dynamics":"#e3cf2a","EQ":"#b8bec6","Modulation":"#3d94f0","Delay":"#33c27a",
+  "Reverb":"#e7739a","Pitch/Synth":"#a07bff","Filter":"#cf74e0","Wah":"#c98a4b","Amp":"#ff5a4e",
+  "Preamp":"#ff8a7a","IR":"#8fb57a","Volume/Pan":"#86aec4","Send/Return":"#a5a8d6","Looper":"#d9b24c",
+};
+// the firmware's model categories -> the browser's groups
+const CATEGORY_GROUP = {
+  distortion: "Distortion", dynamics: "Dynamics", eq: "EQ", modulation: "Modulation", delay: "Delay", reverb: "Reverb",
+  pitch: "Pitch/Synth", synth: "Pitch/Synth", filter: "Filter", wah: "Wah", amp: "Amp", preamp: "Preamp", ir: "IR",
+  volume: "Volume/Pan", send: "Send/Return", return: "Send/Return", fxloop: "Send/Return", looper: "Looper",
+};
+const STORE_KEY = "hx-effects-preset-builder-v2";
+// This repo's firmware builds (build.py), each adding to the one before
+// named by what each adds (build.py nam|amps|full), never "full": the person has to recognise what their unit runs
+const BUILDS = { stock: "Stock 3.80 firmware", nam: "NAM firmware", amps: "NAM + Amps firmware", full: "NAM + Amps + Effects firmware" };
+const BUILD_ORDER = ["stock", "nam", "amps", "full"];
+const AMP_LIMIT = 3;   // amps + preamps per preset on the amp builds (docs/amps-findings.md)
+const TRAILS_TYPES = [8, 9, 13];   // delays/reverbs: a preset stores a Trails switch after their knobs (preset-core.js)
+// The firmware's DSP cost units per percent: the unit runs a preset up to about 7,500 units and loads one above that
+// empty (stock blocks only: 7,350 ran, 7,650 loaded empty; amp presets agree: 7,150 ran, 7,970 empty; 2026-11-22).
+const COST_PER_PERCENT = 75;
+// ids saved pages used for the custom effects before the page read the firmware -> their firmware names
+const OLD_IDS = { HD2_AmpNAMLite: "HD2_DistRegalBassDIMono", HD2_ClickMetronome: "HD2_DelayModChorusEchoMono",
+  HD2_DistGeiger: "HD2_DistMegaphoneMono", HD2_DistCommander: "HD2_DistXenomorphFuzzMono", HD2_DistCorrupt: "HD2_DM4OctaveFuzz",
+  HD2_DistOttobit: "HD2_DistBitcrusherMono", HD2_DistDoomChug: "HD2_DistPocketFuzzMono", HD2_DistPureWhitey: "HD2_DistTycoctaviaFuzzMono",
+  HD2_PitchGreasyStrangler: "VIC_PitchBoctaverMono", HD2_DelayDrumChapel: "VIC_DelayRatchetMono",
+  HD2_PitchBethblahem: "HD2_PitchTwinHarmonyMono", HD2_DelayPuggyPuncher: "HD2_DelaySweepEchoMono" };
+
+// ---------- the model data, read from the person's firmware file (fw-reader.js) ----------
+// FWCAT: {build: {firmware name: {pid, btype, cost, display, category, subcategory, params}}}, kept in IndexedDB.
+// From it: FWT (the tables preset-core.js builds presets with) and the browser's models for the chosen build.
+let FWCAT = null, FWT = {}, MODELS = [], byId = {}, byFw = {};
+const fwTable = () => FWT[state.build];
+const VALUE_TYPE = { 1: 2, 2: 0, 3: 1 };          // firmware knob type -> the page's valueType (2 switch, 0 whole, 1 decimal)
+
+function pageParam(fp) {
+  const m = fp.meta || {}, vt = VALUE_TYPE[fp.type];
+  const p = { symbolicID: fp.name, name: m.displayName || fp.name, valueType: vt, slot: fp.slot, displayType: m.displayType || "",
+              units: m.units, min: fp.min, max: fp.max, default: fp.default };
+  if (vt === 2) {
+    Object.assign(p, { min: false, max: true, default: !!fp.default });
+    if (m.false != null || m.true != null) p.labels = { 0: m.false ?? "Off", 1: m.true ?? "On" };
+  } else {
+    if (typeof p.default !== "number" || Number.isNaN(p.default)) p.default = p.min;
+    const labels = {};
+    for (const [k, v] of Object.entries(m)) if (/^-?\d+$/.test(k) && typeof v === "string") labels[k] = v;
+    if (vt === 0 && Object.keys(labels).length) p.labels = labels;
+    if (m.valueMinString) p.minString = m.valueMinString;
+    if (m.valueMaxString) p.maxString = m.valueMaxString;
+    if (m.valueMidString) p.midString = m.valueMidString;
+  }
+  return p;
+}
+const usable = fp => VALUE_TYPE[fp.type] != null && (fp.meta || {}).units !== "Hide";
+
+// One browser model per effect: a firmware model's mono and stereo versions together when they are the same effect
+// (same display name). A custom effect takes over a stock model's mono version only, so then they stand apart.
+function buildModels(build) {
+  const cat = FWCAT[build], stock = FWCAT.stock, groups = new Map();
+  for (const [name, fm] of Object.entries(cat)) {
+    const group = CATEGORY_GROUP[fm.category];
+    if (!group) continue;
+    const mm = name.match(/^(.*?)(Mono|Stereo)(V\d+)?$/);
+    const base = mm ? mm[1] + (mm[3] || "") : name, kind = mm ? mm[2].toLowerCase() : null;
+    const key = base + "|" + fm.display;
+    if (!groups.has(key)) groups.set(key, { base, display: fm.display, group, variants: {} });
+    groups.get(key).variants[kind || "only"] = name;
+  }
+  const out = [], taken = new Set();
+  for (const g of groups.values()) {
+    const v = g.variants, mono = v.mono || (v.only && !v.stereo ? v.only : null), stereo = v.stereo || null;
+    const main = cat[mono || stereo];
+    // the id: the effect's base name, unless another model of that base already has it (a custom effect's mono)
+    let id = g.base;
+    const sameBase = [...groups.values()].filter(x => x.base === g.base);
+    if (sameBase.length > 1 && !(stock[stereo || mono] && stock[stereo || mono].display === g.display)) id = mono || stereo;
+    if (taken.has(id)) id = mono || stereo;
+    taken.add(id);
+    const params = main.params.filter(usable).map(pageParam);
+    if (mono && stereo) {
+      for (const fp of cat[stereo].params.filter(usable)) {
+        const p = params.find(q => q.symbolicID === fp.name), sp = pageParam(fp);
+        if (!p) params.push({ ...sp, "stereo-only": true });
+        else {
+          if (sp.default !== p.default) p.default_stereo = sp.default;
+          if (sp.max !== p.max) p.max_stereo = sp.max;
+        }
+      }
+    }
+    const last = main.params[main.params.length - 1];
+    if (TRAILS_TYPES.includes(main.btype) && !(last && last.type === 1 && (last.name === "DryThru" || last.name === "Trails")))
+      params.push({ symbolicID: "@trails", name: "Trails", valueType: 2, min: false, max: true, default: false, labels: { 0: "Off", 1: "On" } });
+    const firstBuild = BUILD_ORDER.find(b => FWCAT[b] && FWCAT[b][mono || stereo] && FWCAT[b][mono || stereo].display === g.display);
+    const m = { id, name: g.display, group: g.group, amp: g.group === "Amp" || g.group === "Preamp",
+                mono: !!mono, stereo: !!stereo, fwNames: { mono, stereo }, btype: main.btype,
+                legacy: !!((mono && cat[mono].legacy) || (stereo && cat[stereo].legacy)),
+                load: mono ? cat[mono].cost / COST_PER_PERCENT : null, loadStereo: stereo ? cat[stereo].cost / COST_PER_PERCENT : null, params };
+    if (firstBuild && firstBuild !== "stock") m.fw = { build: firstBuild };
+    out.push(m);
+  }
+  // names the firmware shares between models: the IR blocks are all "IR", both loopers "Looper ..."
+  for (const m of out) {
+    const n = m.fwNames.mono || m.fwNames.stereo, ir = /ImpulseResponse(\d+)(Dual)?/.exec(n), lp = /LooperOneSwitch(Mono|Stereo)/.exec(n);
+    if (ir) m.name = ir[2] ? `Dual IR ${ir[1]}` : `IR ${ir[1]}`;
+    if (lp) m.name = `1-Switch Looper ${lp[1]}`;
+  }
+  // models that share a name in a group (legacy versions and the like): add what tells them apart
+  const seen = {};
+  for (const m of out) (seen[m.group + "|" + m.name] ||= []).push(m);
+  for (const list of Object.values(seen)) if (list.length > 1) for (const m of list.slice(1)) {
+    const tail = (m.fwNames.mono || m.fwNames.stereo).replace(/^[A-Za-z0-9]+_/, "");
+    m.name += ` (${/^(DL4|M13|M9|M5|FM4|MM4|DM4)/.test(tail) ? tail.match(/^[A-Z]+\d+/)[0] : (/_([A-Za-z]+)$/.exec(tail) || [0, "2"])[1]})`;
+  }
+  return out;
+}
+function setModels(build) {
+  MODELS = buildModels(build);
+  byId = Object.fromEntries(MODELS.map(m => [m.id, m]));
+  byFw = {};
+  for (const m of MODELS) for (const n of Object.values(m.fwNames)) if (n) byFw[n] = m;
+}
+function setCatalog(cat) {
+  FWCAT = cat;
+  FWT = {};
+  for (const [b, c] of Object.entries(cat))
+    FWT[b] = Object.fromEntries(Object.entries(c).map(([n, m]) => [n, [m.pid, m.btype, m.params.map(p => [p.name, p.type, p.default, p.min, p.max]), m.display, m.category]]));
+}
+
+// IndexedDB: the catalogue read from the firmware stays in this browser, so the file is needed once
+const DB = {
+  open: () => new Promise((ok, fail) => {
+    const r = indexedDB.open("hx-preset-builder", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("fw");
+    r.onsuccess = () => ok(r.result); r.onerror = () => fail(r.error);
+  }),
+  async get(k) { const db = await DB.open(); return new Promise((ok, fail) => { const q = db.transaction("fw").objectStore("fw").get(k); q.onsuccess = () => ok(q.result); q.onerror = () => fail(q.error); }); },
+  async put(k, v) { const db = await DB.open(); return new Promise((ok, fail) => { const t = db.transaction("fw", "readwrite"); t.objectStore("fw").put(v, k); t.oncomplete = ok; t.onerror = () => fail(t.error); }); },
+  async del(k) { const db = await DB.open(); return new Promise(ok => { const t = db.transaction("fw", "readwrite"); t.objectStore("fw").delete(k); t.oncomplete = ok; t.onerror = ok; }); },
+};
+const CAT_KEY = "catalog-v2";      // v2: models carry the firmware's legacy flag (v1 is dropped)
+
+// Read the stock file and the three builds the setup page makes from it (their recipes), then keep the result.
+async function readFirmware(file, say) {
+  const md5 = b => SparkMD5.ArrayBuffer.hash(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
+  const env = { pako, md5 };
+  const stock = new Uint8Array(await file.arrayBuffer());
+  say("Reading the stock firmware…");
+  const arc = FIRMWARE.stockArchive(stock, pako);
+  const recipes = {};
+  for (const b of ["nam", "amps", "full"]) {
+    const r = await fetch(WEB + `recipe-${b}.bin`);
+    if (!r.ok) throw new Error(`recipe-${b}.bin not found`);
+    recipes[b] = new Uint8Array(await r.arrayBuffer());
+  }
+  if (md5(arc) !== FIRMWARE.parseRecipe(pako.inflate(recipes.nam)).stockMd5)
+    throw new Error("That isn't Line 6's HX Effects 3.80.0 firmware (HX_Effects_v3.80.0_0xd97239907.hxf).");
+  const cat = { stock: FWREAD.read(arc) };
+  if (!Object.values(cat.stock).some(m => m.legacy === true))
+    throw new Error("The page's firmware reader is out of date in this browser: reload the page (Shift+reload) and try again.");
+  for (const b of ["nam", "amps", "full"]) {
+    say(`Working out the ${BUILDS[b]}…`);
+    await new Promise(r => setTimeout(r, 0));
+    cat[b] = FWREAD.read(FIRMWARE.archive(stock, recipes[b], env));
+  }
+  await DB.put(CAT_KEY, cat).catch(() => {});
+  return cat;
+}
+
+function renderLoader(msg) {
+  const log = el("p", { class: "meta", id: "fwLog" }, msg || "");
+  const pick = el("input", { type: "file", accept: ".hxf", id: "fwFile", class: "visually-hidden",
+    onchange: e => { const f = e.target.files[0]; if (f) go(f); e.target.value = ""; } });
+  const drop = el("label", { class: "fw-drop", for: "fwFile",
+      ondragover: e => { e.preventDefault(); e.currentTarget.classList.add("over"); },
+      ondragleave: e => e.currentTarget.classList.remove("over"),
+      ondrop: e => { e.preventDefault(); e.currentTarget.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) go(f); } },
+    el("strong", {}, "Drop HX_Effects_v3.80.0_0xd97239907.hxf here"), el("span", { class: "meta" }, "or click to choose it"));
+  async function go(f) {
+    const say = t => { log.textContent = t; };
+    try {
+      setCatalog(await readFirmware(f, say));
+      start();
+    } catch (e) { say("Stopped: " + (e.message === "notHxf" ? "that isn't a firmware (.hxf) file." : e.message)); }
+  }
+  app.replaceChildren(el("div", { class: "fw-load panel" },
+    el("h1", {}, "HX Effects Preset Builder"),
+    el("p", {}, "The builder reads the models, their knobs and their settings from Line 6's firmware for the HX Effects: the same file the setup page asks for. Give it the file once; this browser keeps what it reads."),
+    pick, drop, log,
+    el("p", { class: "meta" }, "The file stays on your computer: nothing is uploaded. Download it from Line 6 (HX Effects, firmware 3.80.0) if you don't have it.")));
+}
+
+
+// ---------- state ----------
+function emptyRows(n) { return Array.from({ length: n }, () => Array(SLOTS).fill(null)); }
+const NSNAP = 4;   // the HX Effects has four snapshots
+const defaultSnaps = () => ({ names: Array.from({ length: NSNAP }, (_, k) => `SNAPSHOT ${k + 1}`), cur: 0 });
+// The split (Y) and the merge mixer: their knobs as the unit stores them, in its order
+const FLOW_PARAMS = {
+  split: [
+    { symbolicID: "BalanceA", name: "Balance A", valueType: 1, displayType: "pan", min: 0, max: 1, default: 0.5 },
+    { symbolicID: "BalanceB", name: "Balance B", valueType: 1, displayType: "pan", min: 0, max: 1, default: 0.5 }],
+  merge: [
+    { symbolicID: "A Level", name: "A Level", valueType: 1, displayType: "db", min: -60, max: 12, default: 0 },
+    { symbolicID: "A Pan", name: "A Pan", valueType: 1, displayType: "pan", min: 0, max: 1, default: 0.5 },
+    { symbolicID: "B Level", name: "B Level", valueType: 1, displayType: "db", min: -60, max: 12, default: 0 },
+    { symbolicID: "B Pan", name: "B Pan", valueType: 1, displayType: "pan", min: 0, max: 1, default: 0.5 },
+    { symbolicID: "B Polarity", name: "B Polarity", valueType: 2, labels: { 0: "Normal", 1: "Inverted" }, min: false, max: true, default: false },
+    { symbolicID: "Level", name: "Level", valueType: 1, displayType: "db", min: -60, max: 12, default: 0 }],
+};
+const defaultFlow = kind => ({ model: "@" + kind, stereo: false, values: Object.fromEntries(FLOW_PARAMS[kind].map(p => [p.symbolicID, p.default])) });
+const flowValues = kind => FLOW_PARAMS[kind].map(p => state[kind + "Block"].values[p.symbolicID] ?? p.default);
+let state = { name: "New Preset", device: "hfx", build: "full", rows: emptyRows(2), split: 1, merge: 10, snaps: defaultSnaps(),
+  splitBlock: defaultFlow("split"), mergeBlock: defaultFlow("merge"), sel: { row: 0, slot: 0 } };
+let ui = { group: "Distortion", query: "" };
+// a saved page (browser storage or a file from Save file): true if it was usable
+function adoptState(saved) {
+  if (!(saved && DEVICES[saved.device] && Array.isArray(saved.rows) && (saved.rows.length === 1 || saved.rows.length === 2))) return false;
+  state = { split: 1, merge: 10, snaps: defaultSnaps(), splitBlock: defaultFlow("split"), mergeBlock: defaultFlow("merge"), ...saved, sel: { row: 0, slot: 0 } };
+  if (state.rows.length === 1) state.rows.push(Array(SLOTS).fill(null));
+  if (!BUILDS[state.build]) state.build = "full";
+  state.rows = state.rows.map(r => Array.from({ length: SLOTS }, (_, i) => r[i] ? migrateBlock(r[i]) : null));
+  return true;
+}
+// A block saved by an older page: custom effects had their own ids and knobs named slotN; HX Edit spelled some knob
+// names differently (Gate_Range / Gate Range). Null when the chosen build has no such model.
+function migrateBlock(b) {
+  let m = byId[b.model] || byFw[OLD_IDS[b.model]] || byFw[b.model];
+  if (!m) return null;
+  const values = {};
+  for (const [k, v] of Object.entries(b.values || {})) {
+    const slot = /^slot(\d+)$/.exec(k);
+    const p = m.params.find(q => q.symbolicID === k) || (slot && m.params.find(q => q.slot === +slot[1]))
+      || m.params.find(q => normKnob(q.symbolicID) === normKnob(k));
+    if (p) values[p.symbolicID] = v;
+  }
+  const nb = { ...newBlock(m), ...b, model: m.id };
+  nb.values = { ...newBlock(m).values, ...values };
+  if (nb.stereo && !m.stereo) nb.stereo = false;
+  if (!nb.stereo && !m.mono) nb.stereo = true;
+  if (b.ctl) { nb.ctl = {}; for (const [k, c] of Object.entries(b.ctl)) { const p = m.params.find(q => q.symbolicID === k) || m.params.find(q => normKnob(q.symbolicID) === normKnob(k)); if (p) nb.ctl[p.symbolicID] = c; } }
+  return nb;
+}
+const normKnob = x => String(x).toLowerCase().replace(/[^a-z0-9]/g, "");
+const FILE_FORMAT = "hx-effects-preset-builder";
+try {
+  const savedUi = JSON.parse(localStorage.getItem(STORE_KEY + "-ui") || "null");
+  if (savedUi) ui = { ...ui, ...savedUi, query: "" };
+  ui.irs = JSON.parse(localStorage.getItem(STORE_KEY + "-irs") || "null");
+} catch (e) { /* storage unavailable: start fresh */ }
+function save() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORE_KEY + "-ui", JSON.stringify({ group: ui.group, channel: ui.channel }));
+    if (ui.irs) localStorage.setItem(STORE_KEY + "-irs", JSON.stringify(ui.irs));
+  } catch (e) { /* ignore */ }
+}
+
+// ---------- model helpers ----------
+const dev = () => DEVICES[state.device];
+const canStereo = m => m.stereo === true;
+const canMono = m => m.mono === true;
+const available = m => !!m;               // the browser lists only the chosen build's models
+const isAmp = m => !!(m && m.amp);
+
+function blockLoad(b) {
+  const m = byId[b.model];
+  const v = b.stereo ? (m.loadStereo ?? m.load) : (m.load ?? m.loadStereo);
+  return v || 0;
+}
+function paramMax(p, stereo) { return stereo && p.max_stereo != null ? p.max_stereo : p.max; }
+function paramDefault(p, stereo) { return stereo && p.default_stereo != null ? p.default_stereo : p.default; }
+
+function newBlock(m, wantStereo) {
+  const stereo = !canMono(m) ? true : !canStereo(m) ? false : !!wantStereo;
+  const values = {};
+  for (const p of m.params) {
+    if (p.symbolicID === "@enabled" || p.symbolicID === "@stereo") continue;
+    values[p.symbolicID] = paramDefault(p, stereo);
+  }
+  return { model: m.id, enabled: true, stereo, values };
+}
+// Snapshots: b.snap holds the block's on/off in each snapshot (b.enabled is the current one's), unless snapshot bypass
+// is off for it (b.snapBypass false: the same in all). b.ctl maps a knob to its controller: {src: "snapshots", vals[4]}
+// or {src: exp1|exp2|fs1..fs6|midi, min, max, cc}; a snapshot knob's b.values entry is the current snapshot's value.
+const snapOf = b => (Array.isArray(b.snap) && b.snap.length === NSNAP) ? b.snap : (b.snap = Array(NSNAP).fill(!!b.enabled));
+function toggleOn(b) {
+  if (b.snapBypass === false) { b.enabled = !b.enabled; b.snap = Array(NSNAP).fill(b.enabled); }
+  else { const sn = snapOf(b); sn[state.snaps.cur] = !sn[state.snaps.cur]; b.enabled = sn[state.snaps.cur]; }
+  render();
+}
+function setSnapshot(k) {
+  state.snaps.cur = k;
+  for (const b of state.rows.flat()) {
+    if (!b) continue;
+    if (b.snapBypass !== false) b.enabled = snapOf(b)[k];
+    for (const [sid, c] of Object.entries(b.ctl || {})) if (c.src === "snapshots") b.values[sid] = c.vals[k];
+  }
+  render();
+}
+function putValue(b, sid, v) {
+  b.values[sid] = v;
+  const c = b.ctl && b.ctl[sid];
+  if (c && c.src === "snapshots") c.vals[state.snaps.cur] = v;
+}
+const CTL_SOURCES = [["", "Fixed"], ["snapshots", "Snapshots"], ["exp1", "EXP 1"], ["exp2", "EXP 2"],
+  ["fs1", "FS1"], ["fs2", "FS2"], ["fs3", "FS3"], ["fs4", "FS4"], ["fs5", "FS5"], ["fs6", "FS6"], ["midi", "MIDI CC"]];
+const SOURCE_NUM = { exp1: 1, exp2: 2, fs1: 3, fs2: 4, fs3: 5, fs4: 6, fs5: 7, fs6: 8, midi: 9, snapshots: 10 };
+// the firmware knob number of a page knob (null: not a firmware knob, so no controller)
+function fwKnobIndex(b, p) {
+  const t = fwTable(), m = byId[b.model], name = t && fwName(m, b.stereo);
+  if (!name) return null;
+  const i = t[name][2].findIndex(pp => pageKnob(m, pp[0]) === p);
+  return i < 0 ? null : i;
+}
+
+// ---------- value formatting (by the firmware's display types) ----------
+const fix = (x, d) => (+x).toFixed(d);
+function formatValue(p, v) {
+  if (p.valueType === 2) return p.labels ? (p.labels[v ? 1 : 0] ?? (v ? "On" : "Off")) : (v ? "On" : "Off");
+  if (p.labels && p.labels[String(Math.round(v))] != null) return p.labels[String(Math.round(v))];
+  if (p.minString && v <= p.min) return p.minString;
+  if (p.maxString && v >= p.max) return p.maxString;
+  if (p.midString && Math.abs(v - (p.min + p.max) / 2) < (p.max - p.min) / 400) return p.midString;
+  const unit01 = p.min === 0 && p.max <= 1.0001;
+  const side = (v, a, b) => { const c = (v - 0.5) * 200; return Math.abs(c) < 0.5 ? "Center" : (c < 0 ? `${a} ${fix(-c, 0)}` : `${b} ${fix(c, 0)}`); };
+  switch (p.displayType) {
+    case "knob": return unit01 ? fix(v * 10, 1) : fix(v, 1);
+    case "percent": return (unit01 ? fix(v * 100, 0) : fix(v, 0)) + "%";
+    case "db": case "volume": return `${v > 0 ? "+" : ""}${fix(v, 1)} dB`;
+    case "hz": return v >= 1000 ? `${fix(v / 1000, v >= 10000 ? 1 : 2)} kHz` : `${fix(v, v < 100 ? 1 : 0)} Hz`;
+    case "time": case "rt60": return v < 1 ? `${fix(v * 1000, 0)} ms` : `${fix(v, v < 10 ? 2 : 1)} s`;
+    case "timeAB": return `${v > 0 ? "+" : ""}${fix(v * 1000, 1)} ms`;
+    case "pan": case "blend": return side(v, "Left", "Right");
+    case "abpan": return side(v, "A", "B");
+    case "inches": return `${fix(v, 1)} in`;
+    case "micAngle": return `${fix(v, 0)}°`;
+    case "micPosition": return fix(v * 10, 1);
+    case "tenths": return fix(v, 1);
+    case "ratio": return `${fix(v, 1)}:1`;
+    case "stepsAndCents": return `${v > 0 ? "+" : ""}${fix(v, 1)}`;
+  }
+  return p.valueType === 0 ? String(Math.round(v)) : unit01 ? fix(v * 10, 1) : fix(v, 2);
+}
+const fromCentre = p => ["pan", "blend", "abpan"].includes(p.displayType);
+
+// ---------- rendering ----------
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v;
+    else if (k === "style") n.style.cssText = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (v === true) n.setAttribute(k, "");
+    else if (v !== false && v != null) n.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) if (c != null) n.append(c instanceof Node ? c : document.createTextNode(c));
+  return n;
+};
+
+// ---------- icons (24×24, stroked) ----------
+const ICONS = {
+  "Distortion": '<path d="M2 12h4l2.5-7 3 14 3-14 2.5 7h5"/>',
+  "Dynamics": '<path d="M4 20V4M4 20h16"/><path d="M4 20l8-8c2-2 5-3 8-3.5"/>',
+  "EQ": '<path d="M2 15c3 0 3.5-7 6.5-7s3.5 11 7 11 3.5-6 6.5-6"/>',
+  "Modulation": '<path d="M2 12c2.2-6 4.4-6 6.6 0s4.4 6 6.6 0 4.4-6 6.6 0"/>',
+  "Delay": '<path d="M5 5v14M10 7.5v9M14.5 9.5v5M19 11v2"/>',
+  "Reverb": '<path d="M3 6c4 0 4 3 9 3s5-3 9-3M3 12c4 0 4 3 9 3s5-3 9-3M3 18c4 0 4 2 9 2s5-2 9-2" opacity=".9"/>',
+  "Pitch/Synth": '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  "Filter": '<path d="M2 8h9c4 0 5 3 6.5 6.5S20 20 22 20"/>',
+  "Wah": '<path d="M4 19l15-7M4 19h16M7 17.6l1.5 1.4"/><circle cx="18.5" cy="12.2" r="1.2"/>',
+  "Amp": '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M2.5 10h19"/><circle cx="6" cy="8" r=".8"/><circle cx="9" cy="8" r=".8"/><circle cx="12" cy="8" r=".8"/><path d="M5 14h14" opacity=".6"/>',
+  "Preamp": '<rect x="4" y="8" width="16" height="9" rx="2"/><circle cx="8" cy="12.5" r="1.6"/><circle cx="12" cy="12.5" r="1.6"/><circle cx="16" cy="12.5" r="1.6"/>',
+  "Cab": '<rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+  "IR": '<path d="M2 15h6l1.5-11 2.5 16 2-9 1.5 4h6.5"/>',
+  "Volume/Pan": '<path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z"/><path d="M15.5 9a4 4 0 010 6M18 6.5a7.5 7.5 0 010 11"/>',
+  "Send/Return": '<path d="M3 8h14l-3-3M21 16H7l3 3"/>',
+  "Looper": '<path d="M20 12a8 8 0 11-2.4-5.7"/><path d="M20 3.5v4.5h-4.5"/>',
+};
+function icon(group, size = 26) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("width", size); s.setAttribute("height", size);
+  s.setAttribute("fill", "none"); s.setAttribute("stroke", "currentColor"); s.setAttribute("stroke-width", "1.7");
+  s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round"); s.setAttribute("aria-hidden", "true");
+  s.innerHTML = ICONS[group] || '<circle cx="12" cy="12" r="7"/>';
+  return s;
+}
+// arrows for the two unit buttons: into the page (open from the unit) and out to the unit (send)
+const unitIcon = up => { const s = icon("", 15); s.innerHTML = (up ? '<path d="M12 15V4"/><path d="M7.5 8.5L12 4l4.5 4.5"/>'
+  : '<path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/>') + '<path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/>'; return s; };
+const powerIcon = () => { const s = icon("", 16); s.innerHTML = '<path d="M12 3v8"/><path d="M6.3 6.6a8 8 0 1011.4 0"/>'; return s; };
+
+// ---------- under the header: getting the unit back after a preset locks it up ----------
+// What worked on the unit (2026-11-22): a power cycle; FS4+FS5 held at power-on starts it on 1A with Global Settings
+// reset and the presets kept; then writing over the bad slot without loading it.
+function renderRecovery() {
+  const step = (title, ...text) => el("li", {}, el("strong", {}, title), " ", ...text);
+  const det = el("details", { class: "panel recovery", open: !!ui.recoveryOpen, ontoggle: e => { ui.recoveryOpen = e.target.open; } },
+    el("summary", {}, "If a preset locks up the unit"),
+    el("ol", {},
+      step("Switch the HX Effects off and on.", "Unplugging the USB cable doesn't help: the unit has its own power. " +
+        "If it starts and plays, go to step 3."),
+      step("If it locks up again while starting", "(it starts on the last preset it played): switch it off, then hold " +
+        "footswitches FS4 and FS5 while you switch it on, until it has started. It starts on preset 1A with its Global " +
+        "Settings back to their defaults; your presets are kept."),
+      step("Don't load the bad preset again.", "Replace it from this page: build a preset (or leave one block), click ",
+        el("em", {}, "Send to unit"), ", pick the bad slot and untick ", el("em", {}, "Load it on the unit afterwards"),
+        ". To look at it first, use ", el("em", {}, "Open from unit"), " with ", el("em", {}, "Switch the unit to it too"),
+        " unticked. In HX Edit, don't double-click it: that loads it."),
+      step("Keep 1A a simple preset you trust.", "Step 2 starts the unit on 1A, so never send a test preset there."),
+      step("Last resort:", "Line 6's factory reset (see the HX Effects owner's manual) erases every preset on the unit.")),
+    el("p", { class: "meta" }, "A preset over the unit's DSP limit doesn't lock it up: it loads with nothing running."));
+  // the setup page (WEB: beside this page's folder on the website), where the firmware is built and installed
+  return el("div", { class: "subbar" }, det,
+    el("a", { class: "panel to-setup", href: WEB, title: "Build and install the NAM, amps and effects firmware; send NAM captures as IRs" },
+      "Firmware and NAM captures: setup page →"));
+}
+
+function render() {
+  const focusId = document.activeElement && document.activeElement.id;
+  const caret = document.activeElement && document.activeElement.selectionStart;
+  const scroll = document.querySelector(".models") && document.querySelector(".models").scrollTop;
+  app.replaceChildren(el("div", { class: "app" }, renderHeader(), renderRecovery(),
+    el("div", { class: "main" }, renderBrowser(),
+      el("div", { class: "work" }, renderToolbar(), renderChain(), renderEditor()))));
+  if (focusId && !focusId.startsWith("slot-")) {
+    const f = document.getElementById(focusId);
+    if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch (e) {} }
+  }
+  if (scroll && document.querySelector(".models")) document.querySelector(".models").scrollTop = scroll;
+  save();
+}
+
+function renderHeader() {
+  const fileInput = el("input", { type: "file", accept: ".json,.hlx,application/json", class: "visually-hidden", id: "importFile",
+    onchange: e => { const f = e.target.files[0]; if (f) importFile(f); e.target.value = ""; } });
+  const logo = icon("", 22); logo.innerHTML = '<path d="M2 12h4l2.5-6 3 12 3-12 2.5 6h5"/>';
+  return el("header", { class: "topbar" },
+    el("div", { class: "brand" }, logo, "HX Effects Builder"),
+    el("label", { class: "visually-hidden", for: "presetName" }, "Preset name"),
+    el("input", { id: "presetName", class: "preset-name", maxlength: "16", value: state.name, spellcheck: "false",
+      oninput: e => { state.name = e.target.value; save(); } }),
+    el("label", { class: "fw-pick", for: "buildSel", title: "Pick the firmware your HX Effects actually runs: the page can't check it" }, "Your unit runs",
+      el("select", { id: "buildSel", onchange: e => setBuild(e.target.value) },
+        BUILD_ORDER.map(k => el("option", { value: k, selected: k === state.build }, (BUILDS[k] || k).replace(/ firmware$/, ""))))),
+    el("div", { class: "spacer" }),
+    fileInput,
+    el("div", { class: "btn-group" },
+      el("button", { class: "btn", onclick: () => fileInput.click(), title: "A file from Save file, or an .hlx from HX Edit" }, "Open"),
+      el("button", { class: "btn", onclick: saveFile, title: "Everything on the page: both paths, snapshots, controllers" }, "Save"),
+      el("button", { class: "btn", onclick: exportHlx, title: "An HX Edit preset file (blocks and their settings; no snapshots or controllers)" }, "Export .hlx"),
+      el("button", { class: "btn danger", onclick: clearAll }, "Clear")),
+    el("button", { class: "btn ic", onclick: unitPresets, title: "Pick a preset on the unit to open it here (and switch the unit to it)" }, unitIcon(false), "Open from unit"),
+    el("button", { class: "btn primary ic", onclick: unitDialog }, unitIcon(true), "Send to unit"));
+}
+
+function renderToolbar() {
+  const sn = state.snaps;
+  const all = state.rows.flat().filter(Boolean);
+  const load = all.reduce((t, b) => t + blockLoad(b), 0), over = load > 100;
+  const amps = all.filter(b => isAmp(byId[b.model])).length;
+  return el("section", { class: "panel toolbar", "aria-label": "Snapshots" },
+    el("span", { class: "label-xs" }, "Snapshot"),
+    el("div", { class: "seg", role: "group", "aria-label": "Snapshot" },
+      sn.names.map((nm, k) => el("button", { "aria-pressed": sn.cur === k ? "true" : "false",
+        title: "Blocks' on/off and snapshot knobs show this snapshot; the unit opens on the selected one", onclick: () => setSnapshot(k) },
+        nm || `Snapshot ${k + 1}`))),
+    el("label", { class: "visually-hidden", for: "snapName" }, "Snapshot name"),
+    el("input", { id: "snapName", class: "mini", maxlength: "10", value: sn.names[sn.cur], spellcheck: "false", title: "Rename this snapshot",
+      oninput: e => { sn.names[sn.cur] = e.target.value; save(); }, onchange: () => render() }),
+    el("div", { class: "dsp", title: "Estimated from each model's load; both paths share the one DSP" },
+      el("span", { class: "label-xs" }, "DSP"),
+      el("div", { class: "meter" + (over ? " over" : "") }, el("div", { style: `width:${Math.min(100, load)}%` })),
+      el("span", { class: "meter-label" + (over || amps > AMP_LIMIT ? " over" : "") },
+        `${load.toFixed(0)}%` + (amps ? ` · ${amps}/${AMP_LIMIT} amps` : "") + (over ? " — too much" : "") + (amps > AMP_LIMIT ? " — too many amps" : ""))));
+}
+
+// The chain as a signal-flow diagram: In, nine places, Out on path A; path B leaves after the split and rejoins at the
+// merge. Grid columns: 0 In, 1..9 the places, 10 Out (the wires' SVG uses 100 units a column, 100 a row).
+function renderChain() {
+  const pathB = state.rows[1].some(Boolean);
+  const wires = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  wires.setAttribute("class", "wires"); wires.setAttribute("viewBox", "0 0 1100 200"); wires.setAttribute("preserveAspectRatio", "none");
+  wires.innerHTML = `<path d="M50 50H1050"/><path class="${pathB ? "" : "idle"}" d="${bWire(state.split, state.merge)}"/>`;
+  const bPath = wires.children[1];
+  const grid = el("div", { class: "grid" });
+  const handles = [junction("split", grid, bPath), junction("merge", grid, bPath)];
+  const cells = [
+    el("div", { class: "io", style: "grid-column:1;grid-row:1" }, "IN"),
+    el("div", { class: "io", style: "grid-column:11;grid-row:1" }, "OUT"),
+  ];
+  state.rows.forEach((row, ri) => row.forEach((b, s) => cells.push(renderSlot(b, ri, s))));
+  const span = bSpan();
+  const splitSel = el("select", { class: "mini", id: "splitSel",
+      onchange: e => { state.split = +e.target.value; if (state.merge <= state.split) state.merge = state.split + 1; render(); } },
+    Array.from({ length: SLOTS }, (_, i) => el("option", { value: i + 1, selected: state.split === i + 1, disabled: !!span && i + 1 > span[0] }, `before ${i + 1}`)));
+  const mergeSel = el("select", { class: "mini", id: "mergeSel",
+      onchange: e => { state.merge = +e.target.value; if (state.split >= state.merge) state.split = state.merge - 1; render(); } },
+    Array.from({ length: SLOTS }, (_, i) => el("option", { value: i + 2, selected: state.merge === i + 2, disabled: !!span && i + 2 < span[1] }, `after ${i + 1}`)));
+  return el("section", { class: "panel flow", "aria-label": "Signal chain" },
+    el("div", { class: "flow-scroll" }, (grid.append(wires, ...cells, ...handles), grid)),
+    el("div", { class: "flow-foot" },
+      el("span", {}, `${state.rows.flat().filter(Boolean).length} blocks`),
+      el("span", {}, pathB ? "Path B (lower) runs in parallel:" : "Put a block on the lower line for a parallel path B:"),
+      el("label", {}, "Split", splitSel), el("label", {}, "Merge", mergeSel),
+      el("span", { class: "spacer" }),
+      el("span", {}, "Drag blocks, and the split and merge points, to change the routing")));
+}
+// path B's wire: down from the split, along the lower row, up into the merge (100 SVG units a column)
+function bWire(split, merge) {
+  const sx = split * 100, mx = merge * 100, r = 14;
+  return `M${sx} 50V${150 - r}Q${sx} 150 ${sx + r} 150H${mx - r}Q${mx} 150 ${mx} ${150 - r}V50`;
+}
+// The split or merge point on path A, dragged sideways between the places (or moved with the arrow keys). It snaps
+// to the gaps between blocks and can't pass the other point or leave a path B block outside.
+function junction(kind, grid, bPath) {
+  const isSplit = kind === "split";
+  const limits = () => {
+    const span = bSpan();
+    return isSplit ? [1, Math.min(span ? span[0] : SLOTS, state.merge - 1)] : [Math.max(span ? span[1] : 2, state.split + 1), SLOTS + 1];
+  };
+  const val = () => isSplit ? state.split : state.merge;
+  const h = el("div", { id: kind + "Point", class: "junction" + (state.rows[1].some(Boolean) ? "" : " idle"), tabindex: "0", role: "slider",
+    "aria-label": isSplit ? "Split point" : "Merge point", "aria-valuemin": limits()[0], "aria-valuemax": limits()[1],
+    title: isSplit ? "Split: drag to where path B leaves path A; click for its settings" : "Merge: drag to where path B rejoins path A; click for its mix" });
+  const place = () => {
+    h.style.left = `${val() * 100 / 11}%`;
+    h.setAttribute("aria-valuenow", val());
+    h.setAttribute("aria-valuetext", isSplit ? `before block ${val()}` : `after block ${val() - 1}`);
+    bPath.setAttribute("d", bWire(state.split, state.merge));
+  };
+  const set = k => {
+    const [lo, hi] = limits();
+    k = Math.min(hi, Math.max(lo, k));
+    if (k === val()) return false;
+    if (isSplit) state.split = k; else state.merge = k;
+    place(); return true;
+  };
+  place();
+  let dragging = false, moved = false;
+  if (state.sel.flow === kind) h.classList.add("sel");
+  h.addEventListener("pointerdown", e => { dragging = true; moved = false; h.setPointerCapture(e.pointerId); h.classList.add("drag"); e.preventDefault(); });
+  h.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    const r = grid.getBoundingClientRect();
+    if (set(Math.round((e.clientX - r.left) / (r.width / 11)))) moved = true;
+  });
+  const end = () => { if (dragging) { dragging = false; if (!moved) state.sel = { ...state.sel, flow: kind }; render(); } };
+  h.addEventListener("pointerup", end); h.addEventListener("pointercancel", end);
+  h.addEventListener("keydown", e => {
+    const d = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (d) { e.preventDefault(); e.stopPropagation(); if (set(val() + d)) render(); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); state.sel = { ...state.sel, flow: kind }; render(); }
+  });
+  return h;
+}
+
+function renderSlot(b, r, s) {
+  const sel = !state.sel.flow && state.sel.row === r && state.sel.slot === s;
+  const m = b && byId[b.model];
+  const attrs = {
+    id: `slot-${r}-${s}`,
+    class: "cell" + (sel ? " sel" : "") + (m && !b.enabled ? " off" : ""),
+    style: `grid-column:${s + 2};grid-row:${r + 1};` + (m ? `--c:${COLORS[m.group]}` : ""),
+    title: m ? `${m.name}${b.enabled ? "" : " (bypassed)"}` : "Empty: pick a model to put here",
+    "aria-label": `${r ? "Path B" : "Path A"} slot ${s + 1}: ${m ? m.name + (b.enabled ? "" : ", bypassed") : "empty"}`,
+    "aria-pressed": sel ? "true" : "false",
+    draggable: m ? "true" : "false",
+    onclick: () => { state.sel = { row: r, slot: s }; render(); },
+    ondblclick: () => { if (b) toggleOn(b); },
+    ondragstart: e => { e.dataTransfer.setData("text/plain", `${r},${s}`); e.dataTransfer.effectAllowed = "move"; },
+    ondragover: e => { e.preventDefault(); e.currentTarget.classList.add("dragover"); },
+    ondragleave: e => e.currentTarget.classList.remove("dragover"),
+    ondrop: e => {
+      e.preventDefault();
+      const [fr, fs] = e.dataTransfer.getData("text/plain").split(",").map(Number);
+      if (Number.isInteger(fr) && Number.isInteger(fs)) moveBlock(fr, fs, r, s);
+    },
+  };
+  if (!m) return el("button", attrs, el("span", { class: "node" }, "+"));
+  return el("button", attrs,
+    el("span", { class: "tile" }, icon(m.group),
+      b.stereo ? el("span", { class: "stereo" }, "ST") : null,
+      b.fs ? el("span", { class: "fs" }, `FS${b.fs}`) : null),
+    el("span", { class: "nm" }, m.name));
+}
+
+function renderBrowser() {
+  const q = ui.query.trim().toLowerCase();
+  const ch = ui.channel || "all";
+  // the unit's browser folders: Mono and Stereo hold the current models, Legacy the older ones
+  const inChannel = m => ch === "all" || (ch === "legacy" ? m.legacy : !m.legacy && (ch === "stereo" ? canStereo(m) : canMono(m)));
+  const list = MODELS.filter(m => available(m) && inChannel(m) && (q ? (m.name.toLowerCase().includes(q) || m.group.toLowerCase().includes(q)) : m.group === ui.group));
+  list.sort((a, b) => q ? (GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.name.localeCompare(b.name)) : a.name.localeCompare(b.name));
+  const groups = GROUPS.filter(g => MODELS.some(m => m.group === g && available(m)));
+  const where = `${state.sel.row ? "path B" : "path A"} slot ${state.sel.slot + 1}`;
+  return el("aside", { class: "panel sidebar", "aria-label": "Model browser" },
+    el("h2", {}, "Models"),
+    el("input", { class: "search", id: "modelSearch", type: "search", placeholder: "Search all models…", value: ui.query,
+      oninput: e => { ui.query = e.target.value; render(); } }),
+    el("div", { class: "groups" }, groups.map(g => el("button", {
+      class: "grp-btn", style: `--c:${COLORS[g]}`, "aria-pressed": (!q && ui.group === g) ? "true" : "false",
+      onclick: () => { ui.group = g; ui.query = ""; render(); } }, icon(g, 16), g))),
+    el("div", { class: "seg channels", role: "group", "aria-label": "Mono, stereo or legacy models" },
+      [["all", "All"], ["mono", "Mono"], ["stereo", "Stereo"], ["legacy", "Legacy"]].map(([k, label]) =>
+        el("button", { "aria-pressed": ch === k ? "true" : "false", onclick: () => { ui.channel = k; save(); render(); },
+          title: { all: "Every model", mono: "Mono models (placed as mono)", stereo: "Stereo models (placed as stereo)",
+                   legacy: "The older Line 6 models, as the unit files them under Legacy" }[k] }, label))),
+    el("div", { class: "models" },
+      list.length ? list.map(m => { const why = !state.sel.flow && fitProblem(newBlock(m), state.sel.row, state.sel.slot); return el("button", { class: "model" + (why ? " nofit" : ""), style: `--c:${COLORS[m.group]}`,
+          title: why || `Put ${m.name} in ${where}`, "aria-disabled": why ? "true" : null, onclick: () => placeModel(m) },
+          el("span", {}, m.name + (m.fw && m.fw.build ? " ★" : "")), el("span", { class: "mg" }, q ? m.group : (((ch === "stereo" ? m.loadStereo : null) ?? m.load ?? m.loadStereo ?? 0).toFixed(1) + "%"))); })
+        : el("div", { class: "empty-note" }, "No models match.")),
+    el("div", { class: "meta side-foot" }, `Click a model to put it in ${where}. ★ added by this repo's firmware. `,
+      window.FW_CATALOG ? "Models from the HX Effects 3.80 firmware."
+        : ["Models read from your firmware file (", el("a", { href: "#", onclick: e => { e.preventDefault(); forgetFirmware(); } }, "read it again"), ")."]));
+}
+
+function renderFlowEditor(kind) {
+  const b = state[kind + "Block"], isSplit = kind === "split";
+  const panel = el("section", { class: "panel editor", "aria-label": isSplit ? "Split" : "Merge", style: "--c:#b4bac2" });
+  const ic = icon("", 24); ic.innerHTML = isSplit ? '<path d="M3 12h6l5-6h7M9 12l5 6h7"/>' : '<path d="M3 6h7l5 6h6M3 18h7l5-6"/>';
+  panel.append(el("div", { class: "ed-head" },
+    el("span", { class: "ed-icon" }, ic),
+    el("div", { class: "ed-title" },
+      el("span", { class: "title" }, isSplit ? "Split" : "Merge"),
+      el("span", { class: "sub" }, isSplit ? `Before block ${state.split} · sends the signal to path A and path B`
+                                           : `After block ${state.merge - 1} · mixes path A and path B back together`)),
+    el("button", { class: "btn small", title: "Back to the defaults", onclick: () => { state[kind + "Block"] = defaultFlow(kind); render(); } }, "Reset")));
+  panel.append(el("p", { class: "meta", style: "margin:-4px 0 16px" }, isSplit
+    ? "These only matter if you use both of the unit's inputs (left and right). Balance A chooses which input feeds path A, Balance B which feeds path B: for example, a guitar in Left and a second instrument in Right, with A turned fully left and B fully right, gives each its own path. With one guitar into a mono chain, leave them at Center. For the level mix of A and B, click the merge point."
+    : "A Level and B Level set the mix of the two paths; Level is the output after the merge."));
+  panel.append(el("div", { class: "params" }, FLOW_PARAMS[kind].map(p => renderParam(b, p))));
+  return panel;
+}
+
+function renderEditor() {
+  if (state.sel.flow) return renderFlowEditor(state.sel.flow);
+  const { row, slot } = state.sel;
+  const b = state.rows[row] && state.rows[row][slot];
+  const where = `${row ? "Path B" : "Path A"} · slot ${slot + 1}`;
+  const panel = el("section", { class: "panel editor", "aria-label": "Block editor" });
+  if (!b) {
+    panel.append(el("h2", {}, where), el("div", { class: "hint" },
+      el("p", {}, "Empty slot. Pick a model on the left to put it here."),
+      el("p", {}, "Drag blocks to move them, between path A and path B too. Double-click a block to bypass it. ", el("kbd", {}, "Delete"), " removes the selected block; the arrow keys move around."),
+      el("p", {}, "When you're done, Send to unit writes it straight to a preset slot over USB (Chrome or Edge, HX Edit closed). Save keeps everything in a file.")));
+    return panel;
+  }
+  const m = byId[b.model];
+  panel.style.setProperty("--c", COLORS[m.group]);
+  const head = el("div", { class: "ed-head" },
+    el("span", { class: "ed-icon" }, icon(m.group, 24)),
+    el("div", { class: "ed-title" },
+      el("span", { class: "title" }, m.name),
+      el("span", { class: "sub" }, `${where} · ${m.group} · ${m.fw && m.fw.build ? "added by this repo's firmware" : m.id} · ≈ ${blockLoad(b).toFixed(1)}% DSP`)));
+  if (canStereo(m) && canMono(m)) {
+    head.append(el("button", { class: "pill", "aria-pressed": b.stereo ? "true" : "false",
+      onclick: () => setStereo(b, !b.stereo) }, b.stereo ? "Stereo" : "Mono"));
+  }
+  head.append(
+    el("button", { class: "btn small", title: "Back to the model's defaults", onclick: () => { state.rows[row][slot] = { ...newBlock(m), enabled: b.enabled, stereo: b.stereo, fs: b.fs, snap: b.snap, snapBypass: b.snapBypass, midiCC: b.midiCC }; render(); } }, "Reset"),
+    el("button", { class: "btn small danger", onclick: () => removeSelected() }, "Remove"),
+    el("button", { class: "power", "aria-pressed": b.enabled ? "true" : "false", "aria-label": b.enabled ? "On" : "Bypassed",
+      title: (b.enabled ? "On" : "Bypassed") + (b.snapBypass === false ? " (in every snapshot)" : ` in ${state.snaps.names[state.snaps.cur]}`),
+      onclick: () => toggleOn(b) }, powerIcon()));
+  panel.append(head);
+  panel.append(el("div", { class: "ed-opts" },
+    el("label", { for: "fsSel" }, "Bypass footswitch",
+      el("select", { id: "fsSel", onchange: e => { b.fs = +e.target.value || null; render(); } },
+        [0, 1, 2, 3, 4, 5, 6].map(n => el("option", { value: n, selected: (b.fs || 0) === n }, n ? `FS${n}` : "None")))),
+    el("label", { for: "midiBypass" }, "MIDI bypass CC",
+      el("input", { id: "midiBypass", class: "mini", type: "number", min: 0, max: 127, placeholder: "off", value: b.midiCC ?? "",
+        oninput: e => { const v = e.target.value; b.midiCC = v === "" ? null : Math.max(0, Math.min(127, Math.round(+v))); save(); } })),
+    el("button", { class: "pill", "aria-pressed": b.snapBypass !== false ? "true" : "false",
+      title: "On: snapshots switch this block on and off. Off: it stays as it is when you change snapshot.",
+      onclick: () => { b.snapBypass = b.snapBypass === false; if (b.snapBypass === false) b.snap = Array(NSNAP).fill(!!b.enabled); render(); } },
+      b.snapBypass !== false ? "Snapshots switch it" : "Same in all snapshots")));
+  let params = m.params.filter(p => !p.symbolicID.match(/^@(enabled|stereo)$/) && (b.stereo || !p["stereo-only"]));
+  if (isShortLooper(b)) {
+    const keep = looperKnobs(b);
+    params = params.filter(p => keep.includes(p.symbolicID));
+    const one = /OneSwitch/.test(fwName(m, b.stereo));
+    panel.append(el("p", { class: "hint" }, one
+      ? "1-Switch Looper: its footswitch records, plays and overdubs. Give it a footswitch to use it."
+      : "6-Switch Looper: its footswitch puts the unit into looper mode, where all six switches become the looper's " +
+        "controls (play/stop, record/overdub, half speed, reverse, undo...). Give it a footswitch to use it."));
+  }
+  panel.append(el("div", { class: "params" }, params.map(p => renderParam(b, p))));
+  return panel;
+}
+
+// A rotary knob: drag up/down (Shift for fine), scroll, arrow keys, double-click to reset.
+const KNOB_A0 = -135, KNOB_A1 = 135;
+function knobGeom(f, fromCentre) {
+  const pt = (a, rad) => { const t = (a - 90) * Math.PI / 180; return [32 + rad * Math.cos(t), 32 + rad * Math.sin(t)]; };
+  const arc = (a0, a1, rad) => { const [x0, y0] = pt(a0, rad), [x1, y1] = pt(a1, rad);
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${rad} ${rad} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
+  const a = KNOB_A0 + f * (KNOB_A1 - KNOB_A0);
+  const [px, py] = pt(a, 15), [qx, qy] = pt(a, 6);
+  const value = fromCentre ? (Math.abs(f - 0.5) < 0.002 ? "" : arc(Math.min(0, a), Math.max(0, a), 27)) : (f > 0.002 ? arc(KNOB_A0, a, 27) : "");
+  return { track: arc(KNOB_A0, KNOB_A1, 27), value, ptr: [qx, qy, px, py] };
+}
+function renderKnob(b, p, id, max, onValue) {
+  const sid = p.symbolicID, span = max - p.min || 1;
+  const get = () => b.values[sid] ?? paramDefault(p, b.stereo);
+  const NS = "http://www.w3.org/2000/svg";
+  const s = document.createElementNS(NS, "svg");
+  s.setAttribute("viewBox", "0 0 64 64"); s.setAttribute("class", "knob" + (b.ctl && b.ctl[sid] && b.ctl[sid].src !== "snapshots" ? " ctl" : ""));
+  s.setAttribute("id", id); s.setAttribute("tabindex", "0"); s.setAttribute("role", "slider");
+  s.setAttribute("aria-label", p.name); s.setAttribute("aria-valuemin", p.min); s.setAttribute("aria-valuemax", max);
+  s.innerHTML = '<path class="track"/><path class="arc"/><circle class="cap" cx="32" cy="32" r="19"/><line class="ptr"/>';
+  const [track, arcP, , ptr] = s.children;
+  const draw = v => {
+    const g = knobGeom(Math.min(1, Math.max(0, (v - p.min) / span)), fromCentre(p));
+    track.setAttribute("d", g.track); arcP.setAttribute("d", g.value);
+    ptr.setAttribute("x1", g.ptr[0]); ptr.setAttribute("y1", g.ptr[1]); ptr.setAttribute("x2", g.ptr[2]); ptr.setAttribute("y2", g.ptr[3]);
+    s.setAttribute("aria-valuenow", v); s.setAttribute("aria-valuetext", formatValue(p, v));
+  };
+  const set = v => {
+    v = Math.min(max, Math.max(p.min, v));
+    if (p.valueType === 0) v = Math.round(v);
+    if (v === get()) return;
+    putValue(b, sid, v); draw(v); onValue(v); save();
+  };
+  draw(get());
+  let drag = null;
+  s.addEventListener("pointerdown", e => { s.setPointerCapture(e.pointerId); s.focus(); drag = { y: e.clientY, v: get() }; e.preventDefault(); });
+  s.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const dv = (drag.y - e.clientY) / (e.shiftKey ? 800 : 180) * span;
+    set(drag.v + dv);
+  });
+  const end = () => { if (drag) { drag = null; if (b.ctl && b.ctl[sid]) render(); } };
+  s.addEventListener("pointerup", end); s.addEventListener("pointercancel", end);
+  s.addEventListener("wheel", e => { e.preventDefault(); set(get() + (e.deltaY < 0 ? 1 : -1) * (p.valueType === 0 ? 1 : span / 100)); }, { passive: false });
+  s.addEventListener("keydown", e => {
+    const step = p.valueType === 0 ? 1 : span / (e.shiftKey ? 1000 : 100);
+    const k = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step, PageUp: step * 10, PageDown: -step * 10 }[e.key];
+    if (k != null) { e.preventDefault(); e.stopPropagation(); set(get() + k); }
+    else if (e.key === "Home") { e.preventDefault(); e.stopPropagation(); set(p.min); }
+    else if (e.key === "End") { e.preventDefault(); e.stopPropagation(); set(max); }
+    else if (e.key === "Delete" || e.key === "Backspace") e.stopPropagation();
+  });
+  s.addEventListener("dblclick", () => { putValue(b, sid, paramDefault(p, b.stereo)); render(); });
+  return s;
+}
+
+function renderParam(b, p) {
+  const id = `p-${b.model}-${p.symbolicID}`.replace(/[^\w-]/g, "_");
+  const v = b.values[p.symbolicID] ?? paramDefault(p, b.stereo);
+  const lbl = el("label", { class: "lbl", for: id, title: p.name }, p.name);
+  const cell = (...kids) => el("div", { class: "param" }, lbl, ...kids, renderCtl(b, p, id));
+  if (p.displayType === "dynamicList") {
+    const irs = ui.irs;
+    const name = n => irs ? (irs[n] ? `${n}  ${irs[n]}` : `${n}  (empty)`) : `IR ${n}`;
+    return cell(
+      el("select", { id, class: irs && !irs[v] ? "ir-empty" : "", onchange: e => { putValue(b, p.symbolicID, +e.target.value); render(); } },
+        Array.from({ length: p.max - p.min + 1 }, (_, i) => el("option", { value: p.min + i, selected: p.min + i === v }, name(p.min + i)))),
+      el("button", { class: "btn small", title: "Read the names of the IRs on the unit (Chrome or Edge, HX Edit closed)",
+        onclick: () => loadIrList() }, irs ? "Refresh IR names" : "Get IR names from unit"),
+      irs && !irs[v] ? el("span", { class: "meta warn-text" }, "No IR in this slot on the unit") : null);
+  }
+  if (p.valueType === 2) {
+    return cell(el("button", { class: "switch", id, "aria-pressed": v ? "true" : "false",
+      onclick: () => { putValue(b, p.symbolicID, !v); render(); } }, formatValue(p, v)));
+  }
+  const max = paramMax(p, b.stereo);
+  // whole numbers with named choices (and short lists): a menu over the whole range, the name where there is one
+  if (p.valueType === 0 && (p.labels || p.displayType === "list") && max - p.min < 200) {
+    return cell(el("select", { id, onchange: e => { putValue(b, p.symbolicID, +e.target.value); render(); } },
+      Array.from({ length: max - p.min + 1 }, (_, i) => el("option", { value: p.min + i, selected: p.min + i === v }, formatValue(p, p.min + i)))));
+  }
+  const val = el("span", { class: "val" }, formatValue(p, v));
+  return cell(renderKnob(b, p, id, max, nv => { val.textContent = formatValue(p, nv); }), val);
+}
+// a knob's controller: Fixed, Snapshots (a value per snapshot), an expression pedal, a footswitch or a MIDI CC (min..max)
+function renderCtl(b, p, id) {
+  if (isShortLooper(b)) return null;
+  if (!byId[b.model] || fwKnobIndex(b, p) == null) return null;
+  const sid = p.symbolicID, c = b.ctl && b.ctl[sid];
+  const isBool = p.valueType === 2;
+  const cur = () => b.values[sid] ?? paramDefault(p, b.stereo);
+  const sel = el("select", { class: "mini" + (c ? " on" : ""), id: id + "-ctl", "aria-label": `${p.name} controller`,
+    onchange: e => {
+      const src = e.target.value;
+      b.ctl ||= {};
+      if (!src) delete b.ctl[sid];
+      else if (src === "snapshots") b.ctl[sid] = { src, vals: Array(NSNAP).fill(cur()) };
+      else b.ctl[sid] = { src, min: isBool ? false : p.min, max: isBool ? true : paramMax(p, b.stereo), cc: src === "midi" ? 1 : undefined };
+      render();
+    } }, CTL_SOURCES.map(([k, l]) => el("option", { value: k, selected: (c ? c.src : "") === k }, l)));
+  const row = el("div", { class: "ctl" }, sel);
+  if (!c) return row;
+  if (c.src === "snapshots") {
+    row.append(el("span", { class: "ctl-vals" }, c.vals.map((x, k) => el("span", { class: k === state.snaps.cur ? "cur" : "" },
+      `${k + 1}: ${formatValue(p, x)}`))));
+    return row;
+  }
+  if (!isBool) {
+    const max = paramMax(p, b.stereo), step = p.valueType === 0 ? 1 : (max - p.min) / 1000;
+    const span = (key, label) => {
+      const out = el("span", { class: "ctl-v" }, formatValue(p, c[key]));
+      return el("label", { class: "ctl-num" }, label,
+        el("input", { type: "range", class: "ctl-range", min: p.min, max, step, value: c[key], "aria-label": `${p.name} ${label.trim()}`,
+          oninput: e => { let x = +e.target.value; if (p.valueType === 0) x = Math.round(x); c[key] = x; out.textContent = formatValue(p, x); save(); } }),
+        out);
+    };
+    row.append(span("min", "Min "), span("max", "Max "));
+  }
+  if (c.src === "midi") row.append(el("label", { class: "ctl-num" }, "CC ",
+    el("input", { type: "number", class: "mini", min: 0, max: 127, value: c.cc,
+      onchange: e => { c.cc = Math.max(0, Math.min(127, Math.round(+e.target.value))); render(); } })));
+  if (c.src.startsWith("fs")) row.append(el("span", { class: "meta" }, isBool ? "switches it" : "switches between min and max"));
+  return row;
+}
+
+// ---------- actions ----------
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 3500);
+}
+// Why block b can't go in at row/slot (replacing what's there), or null: the one DSP both paths share, and the amp limit
+function fitProblem(b, row, slot) {
+  const others = state.rows.flatMap((rw, r) => rw.filter((x, i) => x && !(r === row && i === slot)));
+  const used = others.reduce((t, x) => t + blockLoad(x), 0), need = blockLoad(b), m = byId[b.model];
+  if (used + need > 100) return `Not enough DSP: ${m.name}${b.stereo ? " (stereo)" : ""} needs ≈ ${need.toFixed(1)}%, ${Math.max(0, 100 - used).toFixed(1)}% is free.`;
+  if (isAmp(m) && others.filter(x => isAmp(byId[x.model])).length >= AMP_LIMIT) return `The unit takes at most ${AMP_LIMIT} amps and preamps per preset.`;
+  return null;
+}
+function placeModel(m) {
+  if (state.sel.flow) { toast("Click a place in the chain first."); return; }
+  const { row, slot } = state.sel;
+  const why = fitProblem(newBlock(m), row, slot);
+  if (why) { toast(why); return; }
+  changePathB(() => { state.rows[row][slot] = newBlock(m, ui.channel === "stereo"); });
+  render();
+}
+function setBuild(key) {
+  if (!FWCAT[key]) return;
+  state.build = key;
+  setModels(key);
+  const before = state.rows.flat().filter(Boolean).length;
+  state.rows = state.rows.map(r => r.map(b => {
+    if (!b) return null;
+    const m = byId[b.model];
+    if (!m) return null;
+    if (!b.stereo && !canMono(m)) return null;      // its mono version is a custom effect in this build
+    if (b.stereo && !canStereo(m)) return null;
+    return b;
+  }));
+  const lost = before - state.rows.flat().filter(Boolean).length;
+  if (lost) toast(`${lost} block${lost > 1 ? "s" : ""} removed: not in the ${BUILDS[key]}.`);
+  render();
+}
+function removeSelected() {
+  if (state.sel.flow) return;
+  const { row, slot } = state.sel;
+  if (state.rows[row][slot]) { changePathB(() => { state.rows[row][slot] = null; }); render(); }
+}
+function moveBlock(fr, fs, tr, ts) {
+  if (fr === tr && fs === ts) return;
+  changePathB(() => {
+    const a = state.rows[fr][fs];
+    state.rows[fr][fs] = state.rows[tr][ts];
+    state.rows[tr][ts] = a;
+  });
+  state.sel = { row: tr, slot: ts };
+  render();
+}
+// Path B's tightest split/merge: before its first block, after its last (null when it has none)
+function bSpan() {
+  const idx = state.rows[1].map((b, i) => b ? i : -1).filter(i => i >= 0);
+  return idx.length ? [idx[0] + 1, idx[idx.length - 1] + 2] : null;
+}
+// The split and merge follow path B's blocks: a path B that hugged its blocks keeps hugging them (a new path B
+// starts that way); one widened by hand only grows, so the blocks always sit between the split and the merge.
+function changePathB(fn) {
+  const before = bSpan();
+  const tight = !before || (state.split === before[0] && state.merge === before[1]);
+  fn();
+  const after = bSpan();
+  if (!after) return;
+  if (tight) { state.split = after[0]; state.merge = after[1]; }
+  else { state.split = Math.min(state.split, after[0]); state.merge = Math.max(state.merge, after[1]); }
+}
+function setStereo(b, stereo) {
+  const m = byId[b.model];
+  if (stereo) {
+    const why = fitProblem({ ...b, stereo: true }, state.sel.row, state.sel.slot);
+    if (why) { toast(why); return; }
+  }
+  b.stereo = stereo;
+  for (const p of m.params) {   // switch params whose default/range differ in stereo
+    if (p.default_stereo != null && b.values[p.symbolicID] === paramDefault(p, !stereo)) b.values[p.symbolicID] = paramDefault(p, stereo);
+    const max = paramMax(p, stereo);
+    if (typeof b.values[p.symbolicID] === "number" && b.values[p.symbolicID] > max) b.values[p.symbolicID] = max;
+  }
+  render();
+}
+function clearAll() {
+  if (!state.rows.flat().some(Boolean) || confirm("Clear all blocks?")) {
+    state.rows = emptyRows(dev().rows); state.split = 1; state.merge = 10; state.snaps = defaultSnaps(); state.splitBlock = defaultFlow("split"); state.mergeBlock = defaultFlow("merge"); state.sel = { row: 0, slot: 0 }; state.unitSlot = null; render();
+  }
+}
+
+// ---------- .hlx export / import (HX Edit's preset files) ----------
+// The file's frame, written here: HX Edit's preset format for the HX Effects (device 2162693), one DSP. Blocks carry
+// the firmware's model names (without Mono/Stereo, which @stereo gives) and knob names, which are HX Edit's too.
+const HLX_DEVICE = 2162693;
+function hlxFrame(name) {
+  const snap = k => ({ "@name": state.snaps.names[k] || `SNAPSHOT ${k + 1}`, "@tempo": 120, "@pedalstate": 0, "@ledcolor": 0 });
+  return { version: 6, schema: "L6Preset", data: {
+    meta: { name: name.slice(0, 16), application: "Helix Edit", build_sha: "050fc4a", modifieddate: Math.floor(Date.now() / 1000), appversion: 327680 },
+    device: HLX_DEVICE, device_version: 37814625,
+    tone: {
+      dsp0: {
+        inputA: { "@model": "HelixFx_AppDSPFlowInput", "@input": 1 }, inputB: { "@model": "HelixFx_AppDSPFlowInput", "@input": 0 },
+        outputA: { "@model": "HelixFx_AppDSPFlowOutput", "@output": 1, pan: 0.5, gain: 0 },
+        outputB: { "@model": "HelixFx_AppDSPFlowOutput", "@output": 0, pan: 0.5, gain: 0 },
+        split: { "@model": "HD2_AppDSPFlowSplitY", "@enabled": true, "@position": 0, bypass: false, ...state.splitBlock.values },
+        join: { "@model": "HD2_AppDSPFlowJoin", "@enabled": true, "@position": 0, ...state.mergeBlock.values },
+      },
+      dsp1: {},
+      global: { "@model": "@global_params", "@topology0": "A", "@topology1": "", "@tempo": 120, "@current_snapshot": state.snaps.cur,
+                "@cursor_dsp": 0, "@cursor_path": 0, "@cursor_position": 0, "@cursor_group": "", "@pedalstate": 0, "@guitarinputZ": 0,
+                "@variax_model": 0, "@variax_magmode": false, "@variax_lockctrls": 0, "@variax_customtuning": true,
+                "@variax_volumeknob": -0.1, "@variax_toneknob": -0.1, "@variax_str1tuning": 0, "@variax_str2tuning": 0,
+                "@variax_str3tuning": 0, "@variax_str4tuning": 0, "@variax_str5tuning": 0, "@variax_str6tuning": 0 },
+      snapshot0: snap(0), snapshot1: snap(1), snapshot2: snap(2), snapshot3: snap(3),
+    } } };
+}
+const hlxBase = n => n.replace(/(Mono|Stereo)(V\d+)?$/, "$2");
+// HX Edit's block kind (its BlockTypeFromCategory): amp/preamp 1, IR 5, looper 6, delay/reverb with trails 7, else 0
+function hlxType(m) {
+  if (m.amp) return 1;
+  if (m.group === "IR") return 5;
+  if (m.group === "Looper") return 6;
+  return m.params.some(p => p.symbolicID === "@trails" || p.symbolicID === "DryThru" || p.symbolicID === "Trails") ? 7 : 0;
+}
+function buildHlx() {
+  const t = hlxFrame(state.name || "New Preset"), dsp = t.data.tone.dsp0;
+  if (state.rows[1].some(Boolean)) { dsp.split["@position"] = state.split - 1; dsp.join["@position"] = state.merge - 2; }
+  let n = 0;
+  state.rows.forEach((row, r) => row.forEach((b, pos) => {
+    if (!b) return;
+    const m = byId[b.model], name = fwName(m, b.stereo);
+    const o = { "@model": hlxBase(name), "@position": pos, "@path": r, "@type": hlxType(m), "@enabled": !!b.enabled,
+                "@no_snapshot_bypass": b.snapBypass === false, "@stereo": !!b.stereo };
+    for (const p of m.params) {
+      if (p["stereo-only"] && !b.stereo) continue;
+      let v = b.values[p.symbolicID] ?? paramDefault(p, b.stereo);
+      if (p.valueType === 0) v = Math.round(v);
+      if (p.symbolicID === "DryThru" || p.symbolicID === "Trails") o["@trails"] = !!v;
+      o[p.symbolicID] = v;
+    }
+    dsp["block" + n++] = o;
+  }));
+  return t;
+}
+function exportHlx() {
+  if (!state.rows.flat().some(Boolean)) { toast("Add at least one block first."); return; }
+  const json = JSON.stringify(buildHlx(), null, 2);
+  const a = el("a", { href: URL.createObjectURL(new Blob([json], { type: "application/json" })),
+    download: (state.name.trim() || "preset").replace(/[^\w\- ]+/g, "_") + ".hlx" });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast("Exported as .hlx.");
+}
+function importHlx(j, fileName) {
+  const otherDevice = j.data.device !== HLX_DEVICE;
+  state.name = (j.data.meta && j.data.meta.name) || fileName.replace(/\.hlx$/i, "");
+  state.rows = emptyRows(2);
+  state.snaps = defaultSnaps();
+  const tone = j.data.tone, dsp = tone.dsp0 || {};
+  for (let k = 0; k < NSNAP; k++) if (tone["snapshot" + k] && tone["snapshot" + k]["@name"]) state.snaps.names[k] = String(tone["snapshot" + k]["@name"]).slice(0, 10);
+  if (dsp.split && dsp.join) {
+    state.split = Math.min(SLOTS, Math.max(1, (dsp.split["@position"] ?? 0) + 1));
+    state.merge = Math.min(SLOTS + 1, Math.max(state.split + 1, (dsp.join["@position"] ?? SLOTS - 1) + 2));
+  }
+  for (const [kind, node] of [["split", dsp.split], ["merge", dsp.join]]) {
+    const fb = defaultFlow(kind);
+    if (node) for (const p of FLOW_PARAMS[kind]) if (p.symbolicID in node) fb.values[p.symbolicID] = node[p.symbolicID];
+    state[kind + "Block"] = fb;
+  }
+  let skipped = 0, unknown = 0;
+  const blocks = Object.entries(dsp).filter(([k]) => /^block\d+$/.test(k)).map(([, b]) => b)
+    .sort((a, b) => (a["@position"] ?? 0) - (b["@position"] ?? 0));
+  for (const blk of blocks) {
+    const id = String(blk["@model"] || ""), stereo = !!blk["@stereo"], ms = stereo ? "Stereo" : "Mono";
+    const fname = [id + ms, id.replace(/(V\d+)$/, ms + "$1"), id].find(c => byFw[c]);
+    const m = fname && byFw[fname];
+    if (!m) { unknown++; continue; }
+    const row = state.rows[blk["@path"] || 0], pos = blk["@position"];
+    if (!row || !(pos >= 0 && pos < SLOTS) || row[pos]) { skipped++; continue; }
+    const b = newBlock(m);
+    b.stereo = m.fwNames.stereo === fname;
+    b.enabled = blk["@enabled"] !== false;
+    b.snap = Array(NSNAP).fill(b.enabled);
+    if (blk["@no_snapshot_bypass"] === true) b.snapBypass = false;
+    for (const [k, v] of Object.entries(blk)) {
+      if (k.startsWith("@") && k !== "@trails") continue;
+      const p = m.params.find(q => q.symbolicID === k) || m.params.find(q => normKnob(q.symbolicID) === normKnob(k))
+        || (k === "@trails" && m.params.find(q => q.symbolicID === "DryThru" || q.symbolicID === "Trails"));
+      if (p) b.values[p.symbolicID] = p.valueType === 2 ? !!v : p.valueType === 0 ? Math.round(v) : +v;
+    }
+    row[pos] = b;
+  }
+  state.sel = { row: 0, slot: 0 };
+  render();
+  const notes = [];
+  if (otherDevice) notes.push("preset is from another device");
+  if (skipped) notes.push(`${skipped} block${skipped > 1 ? "s" : ""} without room skipped`);
+  if (unknown) notes.push(`${unknown} block${unknown > 1 ? "s" : ""} not in the ${BUILDS[state.build]} skipped`);
+  toast(notes.length ? `Imported with notes: ${notes.join("; ")}.` : "Imported.");
+}
+function saveFile() {
+  const json = JSON.stringify({ format: FILE_FORMAT, version: 1, state: { ...state, sel: undefined } }, null, 1);
+  const a = el("a", { href: URL.createObjectURL(new Blob([json], { type: "application/json" })),
+    download: (state.name.trim() || "preset").replace(/[^\w\- ]+/g, "_") + ".json" });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  ui.cleanSig = editorSig();
+  toast("Saved. Open file loads it back.");
+}
+async function importFile(file) {
+  let j;
+  try { j = JSON.parse(await file.text()); } catch (e) { toast("That file isn't valid JSON."); return; }
+  if (j && j.format === FILE_FORMAT) {
+    if (adoptState(j.state)) { render(); toast(`Opened ${state.name}.`); } else toast("That file's preset can't be read.");
+    return;
+  }
+  if (j && j.data && j.data.tone) { importHlx(j, file.name); return; }
+  toast("That isn't a file this page saved, or a Helix .hlx preset.");
+}
+
+// ---------- sending to / reading from the unit (preset-core.js, web/flasher.js) ----------
+// The page's blocks become a preset the unit stores directly: every knob, custom effects' own knobs included.
+// FWT (from the firmware, above) holds each build's model table in the form preset-core.js takes.
+const fwName = (m, stereo) => (m && m.fwNames[stereo ? "stereo" : "mono"]) || null;
+// The 6-Switch and 1-Switch loopers: a preset keeps only their first four knobs (Playback, Overdub, Low Cut, High Cut),
+// and those can't take a controller (preset-core.js SHORT_LOOPERS)
+const isShortLooper = b => /^HD2_Looper(OneSwitch)?(Mono|Stereo)$/.test(fwName(byId[b.model], b.stereo) || "");
+const looperKnobs = b => { const n = fwName(byId[b.model], b.stereo), t = fwTable(); return t && t[n] ? t[n][2].slice(0, 4).map(p => p[0]) : []; };
+const pageKnob = (m, fwKnob) => m.params.find(q => q.symbolicID === fwKnob);
+// a block's knob values in the firmware's order, Trails last
+function fwValues(m, b, fwm) {
+  const params = fwm[2];
+  const vals = params.map((pp, i) => {
+    const p = pageKnob(m, pp[0]);
+    const v = p ? (b.values[p.symbolicID] ?? paramDefault(p, b.stereo)) : null;
+    return v ?? (typeof pp[2] === "number" && Number.isNaN(pp[2]) ? 0 : pp[2]);
+  });
+  const last = params[params.length - 1];
+  const ownTrails = last && last[1] === 1 && (last[0] === "DryThru" || last[0] === "Trails");
+  if ([8, 9, 13].includes(fwm[1]) && !ownTrails && "@trails" in b.values) vals.push(!!b.values["@trails"]);
+  return vals;
+}
+function buildSpec() {
+  const blocks = [], problems = [], states = {}, knobs = [], controls = [];
+  state.rows.forEach((row, r) => row.forEach((b, s) => {
+    if (!b) return;
+    const m = byId[b.model], name = fwName(m, b.stereo);
+    if (!name) { problems.push(`${m ? m.name : b.model} (${r ? "path B" : "path A"} slot ${s + 1}) isn't in the ${BUILDS[state.build]}`); return; }
+    const fwm = fwTable()[name];
+    const blk = { pos: (r ? 12 : 1) + s, model: name, values: fwValues(m, b, fwm), on: !!b.enabled };
+    if (b.fs) { blk.footswitch = b.fs; blk.label = m.name.slice(0, 16); }
+    if (b.midiCC != null) blk.midi_bypass = b.midiCC;
+    if (b.snapBypass === false) blk.snapshot_bypass = false;
+    else states[blk.pos] = snapOf(b).map(Boolean);
+    for (const [sid, c] of Object.entries(b.ctl || {})) {
+      const p = m.params.find(q => q.symbolicID === sid), knob = p && fwKnobIndex(b, p);
+      if (knob == null) continue;
+      if (c.src === "snapshots") knobs.push({ pos: blk.pos, knob, values: c.vals.slice() });
+      else {
+        const ctl = { pos: blk.pos, knob, source: c.src, min: c.min, max: c.max, label: p.name.slice(0, 16) };
+        if (c.src === "midi") ctl.cc = c.cc;
+        controls.push(ctl);
+      }
+    }
+    blocks.push(blk);
+  }));
+  const snapshots = { current: state.snaps.cur + 1, names: state.snaps.names.map((n, k) => (n || `SNAPSHOT ${k + 1}`).slice(0, 10)), states, knobs };
+  return { spec: { name: state.name || "New Preset", split: state.split, merge: state.merge,
+    split_values: flowValues("split"), merge_values: flowValues("merge"), blocks, snapshots, controls }, problems };
+}
+function loadFromBlob(blob) {
+  const body = PRESET.parse(blob).body, t = fwTable(), byPid = {};
+  for (const [n, e] of Object.entries(t)) byPid[e[0]] ??= n;
+  const rows = emptyRows(2), atPos = {};
+  const snaps = body[10][10], cur = body[10][6] || 0, sb = body[10][13];
+  let skipped = 0, unknown = 0;
+  body[0][22].forEach((blk, pos) => {
+    // kind 6: an effect block; kind 7: a looper in the unit's short form (preset id in 8, its four knobs in 7)
+    if (blk[19] !== 6 && blk[19] !== 7) return;
+    const short = blk[19] === 7;
+    const r = pos >= 12 && pos < 12 + SLOTS ? 1 : 0, s = r ? pos - 12 : pos - 1;
+    if (!r && (pos < 1 || pos > SLOTS)) { skipped++; return; }
+    const d = blk[20], name = byPid[short ? d[8] : d[24][25]];
+    if (!name) { unknown++; return; }
+    const m = byFw[name], stereo = !!m && m.fwNames.stereo === name;
+    if (!m) { unknown++; return; }
+    const b = newBlock(m);
+    b.stereo = stereo;
+    b.enabled = !!d[10];
+    const vals = (short ? d[7] : d[11])[4], params = t[name][2];
+    params.forEach((pp, i) => {
+      const p = pageKnob(m, pp[0]);
+      if (p && i < vals.length) b.values[p.symbolicID] = typeof vals[i] === "boolean" ? vals[i] : (p.valueType === 0 ? Math.round(vals[i]) : vals[i]);
+    });
+    if (vals.length > params.length && "@trails" in b.values) b.values["@trails"] = !!vals[params.length];
+    (body[3][8] || []).forEach((sw, j) => (sw || []).forEach(e => { if (e[11][0] === 1 && e[11][8] === pos) b.fs = j + 1; }));
+    b.snap = snaps.slice(0, NSNAP).map(sn => { const x = sn[3] && sn[3][pos]; return Array.isArray(x) && typeof x[1] === "boolean" ? x[1] : b.enabled; });
+    while (b.snap.length < NSNAP) b.snap.push(b.enabled);
+    if (Array.isArray(sb) && sb[pos] === false) b.snapBypass = false;
+    atPos[pos] = { b, m, params };
+    rows[r][s] = b;
+  });
+  // controllers: section 4, one list per source; snapshot knob values from the snapshots' slots, by id
+  const srcName = Object.fromEntries(Object.entries(SOURCE_NUM).map(([k, v]) => [v, k]));
+  (body[4] || []).forEach((list, src) => (list || []).forEach(e => {
+    const c = e && e[1], at = c && atPos[c[5]];
+    if (!at || !srcName[src]) return;
+    const { b, m, params } = at;
+    if (src === 9 && c[4] === 2) { b.midiCC = c[1]; return; }
+    const ki = c[6] && c[6][29], p = ki != null && params[ki] && pageKnob(m, params[ki][0]);
+    if (!p) return;
+    const conv = x => typeof x === "boolean" ? x : (p.valueType === 0 ? Math.round(x) : x);
+    b.ctl ||= {};
+    if (src === 10) {
+      const vals = snaps.slice(0, NSNAP).map(sn => { const sl = (sn[2] || []).find(x => x && x[1] === e[0]); return conv(sl ? sl[2] : b.values[p.symbolicID]); });
+      b.ctl[p.symbolicID] = { src: "snapshots", vals };
+      b.values[p.symbolicID] = vals[cur] ?? b.values[p.symbolicID];
+    } else {
+      b.ctl[p.symbolicID] = { src: srcName[src], min: conv(c[2]), max: conv(c[3]), cc: src === 9 ? c[1] : undefined };
+    }
+  }));
+  const txt = x => (x instanceof Uint8Array ? new TextDecoder().decode(x) : x && x.bytes ? new TextDecoder().decode(x.bytes) : String(x ?? "")).replace(/\0[\s\S]*$/, "");
+  state.snaps = { names: Array.from({ length: NSNAP }, (_, k) => (snaps[k] && txt(snaps[k][4])) || `SNAPSHOT ${k + 1}`), cur: Math.min(NSNAP - 1, cur) };
+  state.rows = rows;
+  const sp = body[0][22][11], mg = body[0][22][21];
+  const where = (x, k) => x && x[20] && x[20][k] && x[20][k][13];
+  state.split = Math.min(SLOTS, Math.max(1, where(sp, 15) || 1));
+  for (const [kind, x, k] of [["split", sp, 15], ["merge", mg, 17]]) {
+    const vals = x && x[20] && x[20][k] && x[20][k][7] && x[20][k][7][4], fb = defaultFlow(kind);
+    if (Array.isArray(vals)) FLOW_PARAMS[kind].forEach((p, i) => { if (i < vals.length && vals[i] != null) fb.values[p.symbolicID] = p.valueType === 2 ? !!vals[i] : +vals[i]; });
+    state[kind + "Block"] = fb;
+  }
+  state.merge = Math.min(SLOTS + 1, Math.max(state.split + 1, where(mg, 17) || SLOTS + 1));
+  state.sel = { row: 0, slot: 0 };
+  return { skipped, unknown };
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// what to do when the unit's USB connection stops answering (it can stay stuck until the cable is reconnected)
+const usbHint = e => /connect message|no reply|stopped acknowledging/.test(e.message)
+  ? " The unit's USB connection is stuck: unplug the USB cable and plug it back in (or switch the unit off and on), then try again." : "";
+// The names of the IRs on the unit, for the IR blocks' slot choice: {slot: name}, empty slots left out
+function keepIrList(list) {
+  ui.irs = {};
+  for (const e of list) if (e.md5) ui.irs[e.slot] = e.name || `IR ${e.slot}`;
+  save();
+}
+async function loadIrList() {
+  if (!navigator.usb) { toast("Reading the unit needs Chrome or Edge (WebUSB)."); return; }
+  try {
+    keepIrList(await FLASHER.irSession({ usb: navigator.usb, log: () => {} }, api => api.list()));
+    render();
+    toast(`${Object.keys(ui.irs).length} IRs on the unit.`);
+  } catch (e) { toast("Could not reach the unit: " + e.message + (usbHint(e) || " (quit HX Edit first)")); }
+}
+const slotLabel = n => `${Math.floor(n / 4) + 1}${"ABCD"[n % 4]}`;
+const unitSession = fn => FLASHER.irSession({ usb: navigator.usb, log: () => {} }, fn);
+// what the editor holds, to tell whether opening another preset would lose changes
+const editorSig = () => JSON.stringify([state.name, state.build, state.rows, state.snaps, state.split, state.merge, state.splitBlock, state.mergeBlock]);
+
+// ---------- the unit's presets: click one and the unit switches to it, and the editor opens it ----------
+async function unitPresets() {
+  if (!navigator.usb) { toast("Reaching the unit needs Chrome or Edge (WebUSB)."); return; }
+  if (!fwTable()) { toast(`No model table for the ${BUILDS[state.build]}.`); return; }
+  const dlg = el("dialog", { class: "unit wide" });
+  const log = el("div", { class: "log" });
+  const say = t => { log.textContent += t + "\n"; log.scrollTop = log.scrollHeight; };
+  const grid = el("div", { class: "unit-presets" }, el("p", {}, "Connecting…"));
+  const switchUnit = el("input", { type: "checkbox", id: "switchUnit", checked: ui.switchUnit !== false,
+    onchange: e => { ui.switchUnit = e.target.checked; } });
+  dlg.append(el("h2", {}, "Presets on the HX Effects"),
+    el("p", {}, "Click a preset to open it here. Quit HX Edit and Line 6 Updater first: they hold the USB connection."),
+    el("p", {}, switchUnit, el("label", { for: "switchUnit" }, " Switch the unit to it too")),
+    grid, log,
+    el("div", { class: "row-btns" }, el("button", { class: "btn", onclick: () => dlg.close() }, "Close")));
+  document.body.append(dlg);
+  dlg.addEventListener("close", () => dlg.remove());
+  dlg.showModal();
+  let list, cur = null, busy = false;
+  try {
+    [list, cur] = await unitSession(async api => [await api.presetList(), (await api.current()).index]);
+  } catch (e) {
+    grid.replaceChildren();
+    say(/no device chosen/.test(e.message) ? "No unit chosen. Close this and click Unit presets again to pick the HX Effects."
+      : "Could not reach the unit: " + e.message + (usbHint(e) || " (quit HX Edit first)"));
+    return;
+  }
+  const names = new Map(list.map(p => [p.index, p.name]));
+  const draw = () => {
+    grid.classList.toggle("busy", busy);
+    const banks = [];
+    for (let b = 0; b * 4 < Math.max(128, list.length); b++) {
+      banks.push(el("div", { class: "bank" }, el("span", { class: "bn" }, String(b + 1)), [0, 1, 2, 3].map(k => {
+        const n = b * 4 + k, nm = names.get(n), empty = !nm || nm === "New Preset";
+        return el("button", { class: "slot" + (empty ? " empty" : "") + (n === cur ? " cur" : ""), disabled: empty || busy,
+          title: empty ? `${slotLabel(n)}: empty` : `${slotLabel(n)} ${nm}` + (n === cur ? " (loaded on the unit)" : ""),
+          "aria-current": n === cur ? "true" : null, onclick: () => pick(n) },
+          el("span", { class: "sl" }, slotLabel(n)), el("span", { class: "nm" }, empty ? "–" : nm));
+      })));
+    }
+    grid.replaceChildren(...banks);
+  };
+  const pick = async n => {
+    if (busy) return;
+    const dirty = state.rows.flat().some(Boolean) && editorSig() !== ui.cleanSig;
+    if (dirty && !confirm(`Open ${slotLabel(n)} "${names.get(n)}"? What's in the editor now hasn't been sent or saved and will be replaced.`)) return;
+    busy = true; draw();
+    const sw = switchUnit.checked;
+    try {
+      let irList = null;
+      // read first, then load: after a load the unit saves the preset's running copy into its slot
+      const blob = await unitSession(async api => {
+        const x = await api.presetRead(n);
+        try { irList = await api.list(); } catch (e) { /* IR names are optional */ }
+        if (x && sw) await api.presetLoad(n);
+        return x;
+      });
+      if (irList) keepIrList(irList);
+      if (!blob) { say(`${slotLabel(n)} is empty.`); return; }
+      const r = loadFromBlob(blob);
+      state.name = names.get(n);
+      state.unitSlot = n;
+      if (sw) cur = n;
+      render();
+      ui.cleanSig = editorSig();
+      say(`${sw ? "Loaded" : "Opened"} ${slotLabel(n)} ${names.get(n)}${sw ? " on the unit and here" : " here (the unit stays where it is)"}.`);
+      if (r.skipped) say(`${r.skipped} block(s) outside the two paths not shown.`);
+      if (r.unknown) say(`${r.unknown} block(s) not in the ${BUILDS[state.build]}: change "Your unit runs" and open it again.`);
+    } catch (e) {
+      say("Stopped: " + e.message + usbHint(e));
+    } finally { busy = false; draw(); }
+  };
+  draw();
+  grid.querySelector(".slot.cur")?.scrollIntoView({ block: "center" });
+}
+
+async function unitDialog() {
+  if (!navigator.usb) { toast("Sending needs Chrome or Edge (WebUSB)."); return; }
+  if (!fwTable()) { toast(`No model table for the ${BUILDS[state.build]}.`); return; }
+  const r = buildSpec();
+  if (!r.spec.blocks.length) { toast("Add at least one block first."); return; }
+  if (r.problems.length) { toast(r.problems[0]); return; }
+  const all = state.rows.flat().filter(Boolean);
+  const load = all.reduce((a, b) => a + blockLoad(b), 0);
+  const amps = all.filter(b => isAmp(byId[b.model])).length;
+  if (load > 100 || amps > AMP_LIMIT) { toast("Too much for the unit's DSP: take a block out first."); return; }
+  const spec = r.spec;
+  const dlg = el("dialog", { class: "unit" });
+  const log = el("div", { class: "log" });
+  const say = t => { log.textContent += t + "\n"; log.scrollTop = log.scrollHeight; };
+  const sel = el("select", { id: "unitSlot", disabled: true }, el("option", {}, "Connecting…"));
+  const go = el("button", { class: "btn primary", disabled: true }, "Send");
+  const loadAfter = el("input", { type: "checkbox", id: "loadAfter", checked: true });
+  // The page can't ask the unit which firmware it runs (it reports the same version and build id on every build), so
+  // the person confirms it on every send. On other firmware a preset's blocks can be other effects with these knob
+  // values, or models the unit doesn't have.
+  const fwName = BUILDS[state.build];
+  const extra = [...new Set(all.map(b => byId[b.model]).filter(m => m && m.fw && m.fw.build).map(m => m.name))];
+  const fwOk = el("input", { type: "checkbox", id: "fwOk", onchange: () => { go.disabled = !fwOk.checked || !listed; } });
+  let listed = false;
+  dlg.append(el("h2", {}, "Send to the HX Effects"),
+    el("div", { class: "fw-warn", role: "alert" },
+      el("p", {}, el("strong", {}, `This preset is built for the ${fwName}.`)),
+      el("p", {}, "Only send it to a unit running exactly that firmware. The page can't check what your unit runs. " +
+        "On any other firmware the preset can load wrong: blocks can turn into different effects with nonsense settings, " +
+        "or load with nothing running, and a bad preset can lock up the unit until it's switched off and on " +
+        "(\"If a preset locks up the unit\", at the top of the page, says how to get it back). " +
+        "Not sure what your unit runs? The setup page (link at the top) builds and installs this repo's firmware."),
+      extra.length ? el("p", {}, `It uses ${extra.length === 1 ? "a model" : extra.length + " models"} that only this repo's firmware has: ` +
+        extra.slice(0, 6).join(", ") + (extra.length > 6 ? ", …" : "") + ".") : null,
+      el("label", { for: "fwOk" }, fwOk, `My HX Effects runs the ${fwName}.`)),
+    el("p", {}, "Quit HX Edit and Line 6 Updater first: they hold the USB connection. Chrome asks which device to use the first time."),
+    sel,
+    el("p", {}, loadAfter, el("label", { for: "loadAfter" }, " Load it on the unit afterwards")),
+    log,
+    el("div", { class: "row-btns" }, el("button", { class: "btn", onclick: () => dlg.close() }, "Close"), go));
+  document.body.append(dlg);
+  dlg.addEventListener("close", () => dlg.remove());
+  dlg.showModal();
+  const session = unitSession;
+  let list;
+  try {
+    list = await session(api => api.presetList());
+  } catch (e) { say("Could not reach the unit: " + e.message + usbHint(e)); return; }
+  sel.replaceChildren(...list.map(p => el("option", { value: p.index }, `${slotLabel(p.index)}  ${p.name}`)));
+  sel.disabled = false; listed = true; go.disabled = !fwOk.checked;
+  // the slot the editor's preset came from (Unit presets), else the first empty one
+  const from = list.find(p => p.index === state.unitSlot), free = list.find(p => p.name === "New Preset");
+  if (from || free) sel.value = (from || free).index;
+  go.onclick = async () => {
+    const n = +sel.value, target = list.find(p => p.index === n);
+    go.disabled = true; sel.disabled = true;
+    try {
+      if (target.name !== "New Preset" && !confirm(`Replace ${slotLabel(n)} "${target.name}" on the unit?`)) { go.disabled = !fwOk.checked; sel.disabled = false; return; }
+      await session(async api => {
+        const isPreset = b => b && b.length > 10 && String.fromCharCode(...b.slice(1, 9)) === "l6-helix";
+        let base = await api.presetRead(n);
+        if (!isPreset(base)) base = await api.presetRead(0);   // an empty (or damaged) slot: build on 1A's settings
+        let irs = {};
+        if (spec.blocks.some(b => fwTable()[b.model][1] === 19)) {
+          const l = await api.list();
+          for (const e of l) if (e.md5) irs[e.slot] = e.md5;
+          keepIrList(l);
+        }
+        const blob = PRESET.build(base, spec, fwTable(), irs);
+        say(`Built ${blob.length} bytes; writing ${slotLabel(n)}…`);
+        // The unit now and then stores a write with its start scrambled; writing again has fixed it every time.
+        // A damaged copy is never loaded: a scrambled preset can freeze the unit, also at its next start-up.
+        let same = false;
+        for (let k = 0; k < 3 && !same; k++) {
+          if (k) { say(`It read back differently; writing ${slotLabel(n)} again…`); await sleep(1000); }
+          await api.presetWrite(n, blob, spec.name, sleep);
+          const back = await api.presetRead(n);
+          same = !!back && back.length === blob.length && back.every((x, i) => x === blob[i]);
+        }
+        if (!same) throw new Error(`${slotLabel(n)} still reads back differently after three writes, so it was not loaded. ` +
+                                   "Don't load that slot on the unit; switch the unit off and on, then send again.");
+        say("Written and read back: identical.");
+        if (loadAfter.checked) { await api.presetLoad(n); say(`Loaded ${slotLabel(n)} on the unit.`); }
+      });
+      state.unitSlot = n; save();
+      ui.cleanSig = editorSig();
+      toast(`Sent to ${slotLabel(n)}.`);
+    } catch (e) {
+      say("Stopped: " + e.message + usbHint(e));
+    }
+    go.disabled = !fwOk.checked; sel.disabled = false;
+  };
+}
+
+// ---------- keyboard ----------
+document.addEventListener("keydown", e => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "select" || tag === "textarea") return;
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeSelected(); }
+  const { row, slot } = state.sel;
+  if (e.key === "ArrowRight" && slot < SLOTS - 1) { state.sel = { row, slot: slot + 1 }; render(); }
+  if (e.key === "ArrowLeft" && slot > 0) { state.sel = { row, slot: slot - 1 }; render(); }
+  if (e.key === "ArrowDown" && row < state.rows.length - 1) { e.preventDefault(); state.sel = { row: row + 1, slot }; render(); }
+  if (e.key === "ArrowUp" && row > 0) { e.preventDefault(); state.sel = { row: row - 1, slot }; render(); }
+});
+
+// ---------- start: the model data from this browser's store, else from the firmware file ----------
+function start() {
+  if (!FWCAT[state.build]) state.build = "full";
+  setModels(state.build);
+  try { adoptState(JSON.parse(localStorage.getItem(STORE_KEY) || "null")); } catch (e) { /* start fresh */ }
+  if (!FWCAT[state.build]) state.build = "full";
+  setModels(state.build);
+  render();
+}
+// fw-catalog.js (make_catalog.js): the model tables extracted from the firmware and this repo's builds of it, each
+// build as its differences from the one before. With it the page needs no firmware file; without it (not generated
+// yet) the page falls back to reading the person's file.
+const CATALOG_ORDER = ["stock", "nam", "amps", "full"];
+function expandCatalog(c) {
+  const cat = { stock: c.stock };
+  for (let i = 1; i < CATALOG_ORDER.length; i++) {
+    const d = c[CATALOG_ORDER[i]], m = { ...cat[CATALOG_ORDER[i - 1]], ...d.changed };
+    for (const n of d.removed) delete m[n];
+    cat[CATALOG_ORDER[i]] = d.order ? Object.fromEntries(d.order.map(n => [n, m[n]])) : m;
+  }
+  return cat;
+}
+async function forgetFirmware() {
+  if (!confirm("Forget the models read from the firmware? You'll need to give the page the firmware file again.")) return;
+  await DB.del(CAT_KEY);
+  location.reload();
+}
+(async () => {
+  try {
+    await Promise.all([loadScript(WEB + "flasher.js?v=20261122b"), loadScript(WEB + "firmware-core.js")]);
+  } catch (e) { app.textContent = "This page couldn't load its files: " + e.message; return; }
+  let cat = null;
+  try { cat = await DB.get(CAT_KEY); } catch (e) { /* no IndexedDB: read the file each visit */ }
+  if (window.FW_CATALOG) { setCatalog(expandCatalog(window.FW_CATALOG)); start(); return; }   // the usual case
+  if (cat && cat.stock && cat.full) { setCatalog(cat); start(); }
+  else {
+    let old = null;
+    try { old = await DB.get("catalog-v1"); if (old) await DB.del("catalog-v1"); } catch (e) { /* none */ }
+    renderLoader(old ? "This version of the page also reads which models are Legacy: give it the firmware file once more." : undefined);
+  }
+})();
+</script>
+</body>
+</html>
