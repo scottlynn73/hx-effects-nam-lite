@@ -41,6 +41,12 @@ Mono or Stereo goes in as that version. Models added by a build are marked ★. 
 (measured on the unit: a preset over about 7,500 units loads with nothing running); the page
 refuses a block that would take the preset over 100%, or a fourth amp/preamp.
 
+Seven of the custom effects are **overlays**: Bam Crusher, Doom Chug, Pure Whitey, Greasy Strangler, Drum Chapel,
+Bethblahem and Puggy Puncher share one code region. One on its own costs only its own load. With two or more in a preset,
+the unit copies each one in every time it runs, so the page adds 20% per overlay. A preset with five of them froze the
+unit. Two heavy ones (Drum Chapel + Bam Crusher + a reverb, 95%) and three light ones (Doom Chug + Puggy Puncher +
+Bethblahem, 99%) were tested on the unit and play fine with the knobs turning.
+
 ## Running it locally
 
 ```bash

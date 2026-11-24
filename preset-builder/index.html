@@ -528,6 +528,21 @@ const canMono = m => m.mono === true;
 const available = m => !!m;               // the browser lists only the chosen build's models
 const isAmp = m => !!(m && m.amp);
 
+// Overlay effects (build_all.py OVERLAYS): this repo's effects that share one region of DSP code memory. One alone
+// stays put; with two or more in a preset each one's code is copied in on every call (about 25 DSP cycles a word,
+// ~28,000 cycles for ~1,100 words: the 2026-11-10 meter), a load the firmware's declared costs leave out. Five in one
+// preset (89% on this meter) locked the unit up (2026-11-23), as three plus Garrrry Tank had (2026-11-18). So each
+// overlay costs OVERLAY_SWAP more once there are two or more. Keyed by the stock block each one takes over (mono).
+const OVERLAY_HOSTS = ["HD2_DistBitcrusherMono", "HD2_DistPocketFuzzMono", "HD2_DistTycoctaviaFuzzMono", "VIC_PitchBoctaverMono",
+  "VIC_DelayRatchetMono", "HD2_PitchTwinHarmonyMono", "HD2_DelaySweepEchoMono"];
+const OVERLAY_SWAP = 20;            // % of the DSP per overlay, two or more in a preset
+const isOverlay = b => { const m = byId[b.model]; return !!(m && m.fw && !b.stereo && OVERLAY_HOSTS.includes(fwName(m, false))); };
+// a preset's load: its blocks' own costs, plus the overlays' copying when there are two or more
+function presetLoad(blocks) {
+  const own = blocks.reduce((t, b) => t + blockLoad(b), 0), overlays = blocks.filter(isOverlay).length;
+  const swap = overlays >= 2 ? overlays * OVERLAY_SWAP : 0;
+  return { load: own + swap, own, overlays, swap };
+}
 function blockLoad(b) {
   const m = byId[b.model];
   const v = b.stereo ? (m.loadStereo ?? m.load) : (m.load ?? m.loadStereo);
@@ -731,7 +746,7 @@ function renderHeader() {
 function renderToolbar() {
   const sn = state.snaps;
   const all = state.rows.flat().filter(Boolean);
-  const load = all.reduce((t, b) => t + blockLoad(b), 0), over = load > 100;
+  const pl = presetLoad(all), load = pl.load, over = load > 100;
   const amps = all.filter(b => isAmp(byId[b.model])).length;
   return el("section", { class: "panel toolbar", "aria-label": "Snapshots" },
     el("span", { class: "label-xs" }, "Snapshot"),
@@ -742,11 +757,12 @@ function renderToolbar() {
     el("label", { class: "visually-hidden", for: "snapName" }, "Snapshot name"),
     el("input", { id: "snapName", class: "mini", maxlength: "10", value: sn.names[sn.cur], spellcheck: "false", title: "Rename this snapshot",
       oninput: e => { sn.names[sn.cur] = e.target.value; save(); }, onchange: () => render() }),
-    el("div", { class: "dsp", title: "Estimated from each model's load; both paths share the one DSP" },
+    el("div", { class: "dsp", title: "Estimated from each model's load; both paths share the one DSP" +
+        (pl.swap ? `. Includes ${pl.swap}% for copying ${pl.overlays} overlay effects in on every cycle (${OVERLAY_SWAP}% each with two or more)` : "") },
       el("span", { class: "label-xs" }, "DSP"),
       el("div", { class: "meter" + (over ? " over" : "") }, el("div", { style: `width:${Math.min(100, load)}%` })),
       el("span", { class: "meter-label" + (over || amps > AMP_LIMIT ? " over" : "") },
-        `${load.toFixed(0)}%` + (amps ? ` · ${amps}/${AMP_LIMIT} amps` : "") + (over ? " — too much" : "") + (amps > AMP_LIMIT ? " — too many amps" : ""))));
+        `${load.toFixed(0)}%` + (pl.swap ? ` · ${pl.overlays} overlays +${pl.swap}%` : "") + (amps ? ` · ${amps}/${AMP_LIMIT} amps` : "") + (over ? " — too much" : "") + (amps > AMP_LIMIT ? " — too many amps" : ""))));
 }
 
 // The chain as a signal-flow diagram: In, nine places, Out on path A; path B leaves after the split and rejoins at the
@@ -927,7 +943,8 @@ function renderEditor() {
     el("span", { class: "ed-icon" }, icon(m.group, 24)),
     el("div", { class: "ed-title" },
       el("span", { class: "title" }, m.name),
-      el("span", { class: "sub" }, `${where} · ${m.group} · ${m.fw && m.fw.build ? "added by this repo's firmware" : m.id} · ≈ ${blockLoad(b).toFixed(1)}% DSP`)));
+      el("span", { class: "sub" }, `${where} · ${m.group} · ${m.fw && m.fw.build ? "added by this repo's firmware" : m.id} · ≈ ${blockLoad(b).toFixed(1)}% DSP` +
+        (isOverlay(b) ? ` · overlay effect: +${OVERLAY_SWAP}% with another overlay in the preset` : ""))));
   if (canStereo(m) && canMono(m)) {
     head.append(el("button", { class: "pill", "aria-pressed": b.stereo ? "true" : "false",
       onclick: () => setStereo(b, !b.stereo) }, b.stereo ? "Stereo" : "Mono"));
@@ -1098,8 +1115,13 @@ function toast(msg) {
 // Why block b can't go in at row/slot (replacing what's there), or null: the one DSP both paths share, and the amp limit
 function fitProblem(b, row, slot) {
   const others = state.rows.flatMap((rw, r) => rw.filter((x, i) => x && !(r === row && i === slot)));
-  const used = others.reduce((t, x) => t + blockLoad(x), 0), need = blockLoad(b), m = byId[b.model];
-  if (used + need > 100) return `Not enough DSP: ${m.name}${b.stereo ? " (stereo)" : ""} needs ≈ ${need.toFixed(1)}%, ${Math.max(0, 100 - used).toFixed(1)}% is free.`;
+  const m = byId[b.model], before = presetLoad(others).load, after = presetLoad([...others, b]);
+  if (after.load > 100) {
+    const need = after.load - before;
+    return `Not enough DSP: ${m.name}${b.stereo ? " (stereo)" : ""} needs ≈ ${need.toFixed(1)}%` +
+      (after.swap && isOverlay(b) ? ` with the overlay copying (${after.overlays} overlays, ${OVERLAY_SWAP}% each)` : "") +
+      `, ${Math.max(0, 100 - before).toFixed(1)}% is free.`;
+  }
   if (isAmp(m) && others.filter(x => isAmp(byId[x.model])).length >= AMP_LIMIT) return `The unit takes at most ${AMP_LIMIT} amps and preamps per preset.`;
   return null;
 }
@@ -1532,7 +1554,7 @@ async function unitDialog() {
   if (!r.spec.blocks.length) { toast("Add at least one block first."); return; }
   if (r.problems.length) { toast(r.problems[0]); return; }
   const all = state.rows.flat().filter(Boolean);
-  const load = all.reduce((a, b) => a + blockLoad(b), 0);
+  const load = presetLoad(all).load;
   const amps = all.filter(b => isAmp(byId[b.model])).length;
   if (load > 100 || amps > AMP_LIMIT) { toast("Too much for the unit's DSP: take a block out first."); return; }
   const spec = r.spec;
