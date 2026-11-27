@@ -246,9 +246,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
 <!-- ?v=: change it whenever these files change, so a browser never runs an old copy beside a new page -->
-<script src="preset-core.js?v=20261122b"></script>
+<script src="preset-core.js?v=20261127a"></script>
 <script src="fw-reader.js?v=20261122b"></script>
-<script src="fw-catalog.js?v=20261123a"></script>
+<script src="fw-catalog.js?v=20261127a"></script>
 <script>
 "use strict";
 // The setup page's files (flasher.js, firmware-core.js, the recipes): beside this page's folder on the website,
@@ -267,16 +267,16 @@ const DEVICES = {
   hfx: { label: "HX Effects", rows: 2 },
 };
 const GROUPS = ["Distortion","Dynamics","EQ","Modulation","Delay","Reverb","Pitch/Synth","Filter","Wah",
-                "Amp","Preamp","IR","Volume/Pan","Send/Return","Looper"];
+                "Amp","Preamp","Cab","IR","Volume/Pan","Send/Return","Looper"];
 const COLORS = {
   "Distortion":"#f5901e","Dynamics":"#e3cf2a","EQ":"#b8bec6","Modulation":"#3d94f0","Delay":"#33c27a",
   "Reverb":"#e7739a","Pitch/Synth":"#a07bff","Filter":"#cf74e0","Wah":"#c98a4b","Amp":"#ff5a4e",
-  "Preamp":"#ff8a7a","IR":"#8fb57a","Volume/Pan":"#86aec4","Send/Return":"#a5a8d6","Looper":"#d9b24c",
+  "Preamp":"#ff8a7a","Cab":"#e0a080","IR":"#8fb57a","Volume/Pan":"#86aec4","Send/Return":"#a5a8d6","Looper":"#d9b24c",
 };
 // the firmware's model categories -> the browser's groups
 const CATEGORY_GROUP = {
   distortion: "Distortion", dynamics: "Dynamics", eq: "EQ", modulation: "Modulation", delay: "Delay", reverb: "Reverb",
-  pitch: "Pitch/Synth", synth: "Pitch/Synth", filter: "Filter", wah: "Wah", amp: "Amp", preamp: "Preamp", ir: "IR",
+  pitch: "Pitch/Synth", synth: "Pitch/Synth", filter: "Filter", wah: "Wah", amp: "Amp", preamp: "Preamp", cab: "Cab", ir: "IR",
   volume: "Volume/Pan", send: "Send/Return", return: "Send/Return", fxloop: "Send/Return", looper: "Looper",
 };
 const STORE_KEY = "hx-effects-preset-builder-v2";
@@ -286,6 +286,12 @@ const BUILDS = { stock: "Stock 3.80 firmware", nam: "NAM firmware", amps: "NAM +
 const BUILD_ORDER = ["stock", "nam", "amps", "full"];
 const AMP_LIMIT = 3;   // amps + preamps per preset on the amp builds (docs/amps-findings.md)
 const TRAILS_TYPES = [8, 9, 13];   // delays/reverbs: a preset stores a Trails switch after their knobs (preset-core.js)
+// legacy single cabs (NAM + Amps + Effects): the Mic is stored after the five knobs, as 0..15 in the unit's order
+// (the app's mic table, 0x280f8abc); at most two cab blocks per preset (the placement check, docs/amps-findings.md)
+const CAB_TYPE = 15, CAB_LIMIT = 2;
+const MICS = ["57 Dynamic", "409 Dynamic", "421 Dynamic", "30 Dynamic", "20 Dynamic", "121 Ribbon", "160 Ribbon", "4038 Ribbon",
+  "414 Cond", "84 Cond", "67 Cond", "87 Cond", "47 Cond", "112 Dynamic", "12 Dynamic", "7 Dynamic"];
+const isCab = m => !!(m && m.btype === CAB_TYPE);
 // The firmware's DSP cost units per percent: the unit runs a preset up to about 7,500 units and loads one above that
 // empty (stock blocks only: 7,350 ran, 7,650 loaded empty; amp presets agree: 7,150 ran, 7,970 empty; 2026-11-22).
 const COST_PER_PERCENT = 75;
@@ -360,6 +366,9 @@ function buildModels(build) {
     const last = main.params[main.params.length - 1];
     if (TRAILS_TYPES.includes(main.btype) && !(last && last.type === 1 && (last.name === "DryThru" || last.name === "Trails")))
       params.push({ symbolicID: "@trails", name: "Trails", valueType: 2, min: false, max: true, default: false, labels: { 0: "Off", 1: "On" } });
+    if (main.btype === CAB_TYPE)
+      params.unshift({ symbolicID: "@mic", name: "Mic", valueType: 0, displayType: "list", min: 0, max: MICS.length - 1, default: 0,
+                       labels: Object.fromEntries(MICS.map((n, k) => [k, n])) });
     const firstBuild = BUILD_ORDER.find(b => FWCAT[b] && FWCAT[b][mono || stereo] && FWCAT[b][mono || stereo].display === g.display);
     const m = { id, name: g.display, group: g.group, amp: g.group === "Amp" || g.group === "Preamp",
                 mono: !!mono, stereo: !!stereo, fwNames: { mono, stereo }, btype: main.btype,
@@ -692,7 +701,8 @@ function renderHowto() {
         step("Send to unit", "(Chrome or Edge, with HX Edit closed) and pick the slot. Keep 1A a preset you trust. ",
           el("em", {}, "Open from unit"), " brings in a preset that's already there; ", el("em", {}, "Save"), " and ",
           el("em", {}, "Open"), " keep it as a file on your computer."),
-        step("Not here yet:", "the cabs (EQ › Cabs): add them on the unit."))));
+        step("Cabs", "(NAM + Amps + Effects firmware): the HX Stomp's 41 legacy cabs are under ", el("em", {}, "Cab"),
+          ", with their Mic; at most two in a preset, so one in each path."))));
 }
 
 // ---------- under the header: getting the unit back after a preset locks it up ----------
@@ -1148,6 +1158,7 @@ function fitProblem(b, row, slot) {
       `, ${Math.max(0, 100 - before).toFixed(1)}% is free.`;
   }
   if (isAmp(m) && others.filter(x => isAmp(byId[x.model])).length >= AMP_LIMIT) return `The unit takes at most ${AMP_LIMIT} amps and preamps per preset.`;
+  if (isCab(m) && others.filter(x => isCab(byId[x.model])).length >= CAB_LIMIT) return `The unit takes at most ${CAB_LIMIT} cabs per preset.`;
   return null;
 }
 function placeModel(m) {
@@ -1274,7 +1285,7 @@ function buildHlx() {
       let v = b.values[p.symbolicID] ?? paramDefault(p, b.stereo);
       if (p.valueType === 0) v = Math.round(v);
       if (p.symbolicID === "DryThru" || p.symbolicID === "Trails") o["@trails"] = !!v;
-      o[p.symbolicID] = v;
+      o[p.symbolicID === "@mic" ? "Mic" : p.symbolicID] = v;
     }
     dsp["block" + n++] = o;
   }));
@@ -1323,6 +1334,7 @@ function importHlx(j, fileName) {
     for (const [k, v] of Object.entries(blk)) {
       if (k.startsWith("@") && k !== "@trails") continue;
       const p = m.params.find(q => q.symbolicID === k) || m.params.find(q => normKnob(q.symbolicID) === normKnob(k))
+        || (k === "Mic" && m.params.find(q => q.symbolicID === "@mic"))
         || (k === "@trails" && m.params.find(q => q.symbolicID === "DryThru" || q.symbolicID === "Trails"));
       if (p) b.values[p.symbolicID] = p.valueType === 2 ? !!v : p.valueType === 0 ? Math.round(v) : +v;
     }
@@ -1376,6 +1388,7 @@ function fwValues(m, b, fwm) {
   const last = params[params.length - 1];
   const ownTrails = last && last[1] === 1 && (last[0] === "DryThru" || last[0] === "Trails");
   if ([8, 9, 13].includes(fwm[1]) && !ownTrails && "@trails" in b.values) vals.push(!!b.values["@trails"]);
+  if (fwm[1] === CAB_TYPE) vals.push(Math.round(b.values["@mic"] ?? 0));
   return vals;
 }
 function buildSpec() {
@@ -1431,6 +1444,7 @@ function loadFromBlob(blob) {
       if (p && i < vals.length) b.values[p.symbolicID] = typeof vals[i] === "boolean" ? vals[i] : (p.valueType === 0 ? Math.round(vals[i]) : vals[i]);
     });
     if (vals.length > params.length && "@trails" in b.values) b.values["@trails"] = !!vals[params.length];
+    if (vals.length > params.length && "@mic" in b.values) b.values["@mic"] = Math.round(+vals[params.length] || 0);
     (body[3][8] || []).forEach((sw, j) => (sw || []).forEach(e => { if (e[11][0] === 1 && e[11][8] === pos) b.fs = j + 1; }));
     b.snap = snaps.slice(0, NSNAP).map(sn => { const x = sn[3] && sn[3][pos]; return Array.isArray(x) && typeof x[1] === "boolean" ? x[1] : b.enabled; });
     while (b.snap.length < NSNAP) b.snap.push(b.enabled);

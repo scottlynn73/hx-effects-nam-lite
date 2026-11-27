@@ -168,6 +168,9 @@
 
   // ---------- blocks ----------
   const TRAILS_TYPES = [8, 9, 13], IR_TYPE = 19;
+  // A legacy single cab (block type 15) stores its Mic after its five knobs, counted in 2 but not in 3: {2: 6, 3: 5,
+  // 4: [Distance, LowCut, HighCut, EarlyReflections, Level, mic]}, mic 0..15 (a preset saved on the unit, 2026-11-27)
+  const CAB_TYPE = 15;
   const PATH_A = [1, 2, 3, 4, 5, 6, 7, 8, 9], PATH_B = [12, 13, 14, 15, 16, 17, 18, 19, 20];
   const EMPTY_BLOCK = M([19, 8], [20, null]);
   const SNAP_CTRL = 10;
@@ -199,6 +202,7 @@
       if (last && last[1] === 1 && (last[0] === "DryThru" || last[0] === "Trails")) n3 -= 1;
       else vals.push(values && values.length > params.length ? !!values[params.length] : false);
     }
+    if (btype === CAB_TYPE) vals.push(values && values.length > params.length ? Math.max(0, Math.min(15, pyRound(+values[params.length] || 0))) : 0);
     const pairs = [[24, M([23, false], [25, pid], [26, -1])], [9, btype], [10, !!on], [11, M([2, vals.length], [3, n3], [4, vals])]];
     if (btype === IR_TYPE) {
       if (!irMd5) throw new Error("an IR block needs the MD5 of the IR in its slot");
@@ -240,7 +244,7 @@
   const LED = { distortion: [0xd0af00, 0x080600], amp: [0xd0af00, 0x080600], preamp: [0xd0af00, 0x080600],
     dynamics: [0x84ff00, 0x080c00], eq: [0x84ff00, 0x080c00], modulation: [0x0032ff, 0x00040d], delay: [0x06ff00, 0x010900],
     reverb: [0xff2d00, 0x100400], pitch: [0x3200ff, 0x03000b], synth: [0x3200ff, 0x03000b], filter: [0x3200ff, 0x03000b],
-    wah: [0x3200ff, 0x03000b], ir: [0xff0028, 0x0b0007], looper: [0x6bffce, 0x07100c], send: [0x6bffce, 0x07100c],
+    wah: [0x3200ff, 0x03000b], ir: [0xff0028, 0x0b0007], cab: [0xff0003, 0x0b0000], looper: [0x6bffce, 0x07100c], send: [0x6bffce, 0x07100c],
     return: [0x6bffce, 0x07100c], fxloop: [0x6bffce, 0x07100c], volume: [0x6bffce, 0x07100c] };
   const led = (category, on) => (LED[category] || LED.distortion)[on ? 0 : 1];
   // 11 -> 7 is the block's on/off and 11 -> 6 its LED colour: both must match the block as loaded (a preset with every
