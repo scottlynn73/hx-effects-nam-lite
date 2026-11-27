@@ -321,14 +321,17 @@ function renderHeader() {
 function renderSubbar() {
   const step = (t, ...x) => el("li", {}, el("strong", {}, t), " ", ...x);
   return el("div", { class: "subbar" },
-    el("details", { class: "panel howto", open: !!ui.howOpen, ontoggle: e => { ui.howOpen = e.target.open; } },
-      el("summary", {}, "How your grooves reach Drum Chapel"),
+    el("details", { class: "panel howto", open: ui.howOpen !== false, ontoggle: e => { ui.howOpen = e.target.open; } },
+      el("summary", {}, "How to make grooves for Drum Chapel"),
       el("ol", {},
+        step("Draw a pattern:", "click the squares (or drag across them) to put a kick, snare, hat or tom on each sixteenth. " +
+          "Set the time signature and bars above the grid; press play to hear it with the kit you pick."),
+        step("Or start from one:", "click one of the Starting points on the left, or add a MIDI drum loop (Add MIDI loops)."),
         step("Make up to 20 patterns", "here: Pattern 1–20 on the unit plays them in this order (past the last one it starts again)."),
         step("Send to unit", "writes them all into User IR slot 128 (or download the .wav and import it into slot 128 with HX Edit)."),
         step("On the unit,", "set Drum Chapel's ", el("em", {}, "Groove"), " to ", el("em", {}, "User"), " and pick the ", el("em", {}, "Pattern"),
           ". Tempo comes from the block's Time (tap tempo), not from this page. If slot 128 holds anything else, User plays the Classic patterns."),
-        step("Needs", "the NAM + Amps + Effects firmware with Drum Chapel's User groove (not released yet)."),
+        step("Needs", "the NAM + Amps + Effects firmware, v1.1.0 or later (Drum Chapel's User groove)."),
         step("The preview", "plays the kits' sounds as the unit makes them, each on its own: on the unit the kit's drive acts on all of them together (Doom's fuzz most).")),
     ),
     el("a", { class: "panel to-page", href: WEB, title: "Build and install the firmware; send NAM captures as IRs" }, "Firmware: setup page →"),

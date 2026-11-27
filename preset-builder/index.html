@@ -212,6 +212,10 @@
   .to-setup:hover { border-color: var(--accent); }
   @media (max-width: 700px) { .subbar { flex-direction: column; align-items: stretch; } }
   .recovery summary { cursor: pointer; font-weight: 600; color: var(--warn); }
+  .howto { flex: 1; min-width: 0; padding: 10px 16px; font-size: 13px; }
+  .howto summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+  .howto ol { margin: 10px 0 6px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+  .howto em { font-style: normal; color: var(--text); font-weight: 600; }
   .recovery ol { margin: 10px 0 6px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
   .recovery em { font-style: normal; color: var(--text); font-weight: 600; }
   .fw-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -670,6 +674,27 @@ const unitIcon = up => { const s = icon("", 15); s.innerHTML = (up ? '<path d="M
   : '<path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/>') + '<path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/>'; return s; };
 const powerIcon = () => { const s = icon("", 16); s.innerHTML = '<path d="M12 3v8"/><path d="M6.3 6.6a8 8 0 1011.4 0"/>'; return s; };
 
+// ---------- under the header: how to use the page (open until the user closes it) ----------
+function renderHowto() {
+  const step = (title, ...text) => el("li", {}, el("strong", {}, title), " ", ...text);
+  return el("div", { class: "subbar" },
+    el("details", { class: "panel howto", open: ui.howOpen !== false, ontoggle: e => { ui.howOpen = e.target.open; } },
+      el("summary", {}, "How to build a preset"),
+      el("ol", {},
+        step("Pick your firmware", "in ", el("em", {}, "Your unit runs"), " at the top: the model list follows it. Models only " +
+          "this repo's firmware has are marked ★."),
+        step("Pick a slot, then a model.", "Click an empty slot in path A or path B, then a model in the list on the left " +
+          "(search it, or pick a category; ", el("em", {}, "Mono"), ", ", el("em", {}, "Stereo"), " and ", el("em", {}, "Legacy"),
+          " filter it the way the unit does)."),
+        step("Set the knobs:", "click a block to open its settings below the paths. The ", el("em", {}, "DSP"), " meter shows the " +
+          "load of both paths together; a block that would take it over 100%, or a fourth amp or preamp, is refused."),
+        step("Snapshots (optional):", "pick a snapshot and set which blocks are on and the knobs it changes."),
+        step("Send to unit", "(Chrome or Edge, with HX Edit closed) and pick the slot. Keep 1A a preset you trust. ",
+          el("em", {}, "Open from unit"), " brings in a preset that's already there; ", el("em", {}, "Save"), " and ",
+          el("em", {}, "Open"), " keep it as a file on your computer."),
+        step("Not here yet:", "the cabs (EQ › Cabs): add them on the unit."))));
+}
+
 // ---------- under the header: getting the unit back after a preset locks it up ----------
 // What worked on the unit (2026-11-22): a power cycle; FS4+FS5 held at power-on starts it on 1A with Global Settings
 // reset and the presets kept; then writing over the bad slot without loading it.
@@ -709,7 +734,7 @@ function render() {
   const focusId = document.activeElement && document.activeElement.id;
   const caret = document.activeElement && document.activeElement.selectionStart;
   const scroll = document.querySelector(".models") && document.querySelector(".models").scrollTop;
-  app.replaceChildren(el("div", { class: "app" }, renderHeader(), renderRecovery(),
+  app.replaceChildren(el("div", { class: "app" }, renderHeader(), renderHowto(), renderRecovery(),
     el("div", { class: "main" }, renderBrowser(),
       el("div", { class: "work" }, renderToolbar(), renderChain(), renderEditor())), renderDisclaimer()));
   if (focusId && !focusId.startsWith("slot-")) {

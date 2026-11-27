@@ -16,7 +16,7 @@
   var KERNEL = [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 15, 15, 6, 6, 6, 6, 6, 6, 6];
   var DILATION = [1, 3, 7, 17, 41, 101, 239, 1, 3, 7, 17, 41, 101, 239, 1, 13, 1, 3, 7, 17, 41, 101, 239];
   var N_WEIGHTS = 1871;
-  var STOMP_DBU = 11.5;             // the Stomp's input at 0 dBFS, the firmware's: tools/sharc/nam_lite.py
+  var STOMP_DBU = 11.5;             // the Stomp's input at 0 dBFS, also used for the HX Effects (not measured on it): tools/sharc/nam_lite.py
 
   function same(a, b) {
     return Array.isArray(a) && a.length === b.length && a.every(function (x, i) { return x === b[i]; });
