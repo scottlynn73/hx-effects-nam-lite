@@ -726,9 +726,12 @@ function renderRecovery() {
       step("Last resort:", "Line 6's factory reset (see the HX Effects owner's manual) erases every preset on the unit.")),
     el("p", { class: "meta" }, "A preset over the unit's DSP limit doesn't lock it up: it loads with nothing running."));
   // the setup page (WEB: beside this page's folder on the website), where the firmware is built and installed
+  // and the groove editor, beside this page's folder on the website and in tools/ alike
   return el("div", { class: "subbar" }, det,
-    el("a", { class: "panel to-setup", href: WEB, title: "Build and install the NAM, amps and effects firmware; send NAM captures as IRs" },
-      "Firmware and NAM captures: setup page →"));
+    el("a", { class: "panel to-setup", href: WEB, title: "Build and install the firmware; send NAM captures as IRs" },
+      "Firmware: setup page →"),
+    el("a", { class: "panel to-setup", href: "../groove-editor/", title: "Make drum grooves for Drum Chapel and send them to the unit" },
+      "Grooves: groove editor →"));
 }
 
 // ---------- the disclaimer at the foot of the page (the README's Disclaimer, short) ----------
@@ -760,7 +763,7 @@ function renderHeader() {
     onchange: e => { const f = e.target.files[0]; if (f) importFile(f); e.target.value = ""; } });
   const logo = icon("", 22); logo.innerHTML = '<path d="M2 12h4l2.5-6 3 12 3-12 2.5 6h5"/>';
   return el("header", { class: "topbar" },
-    el("div", { class: "brand" }, logo, "HX Effects Builder"),
+    el("div", { class: "brand" }, logo, "HX Effects Preset Builder"),
     el("label", { class: "visually-hidden", for: "presetName" }, "Preset name"),
     el("input", { id: "presetName", class: "preset-name", maxlength: "16", value: state.name, spellcheck: "false",
       oninput: e => { state.name = e.target.value; save(); } }),
