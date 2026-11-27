@@ -111,15 +111,15 @@
     display: inline-flex; align-items: center; justify-content: center; padding: 0; flex: none; }
   .rlabel .aud:hover { border-color: var(--c); }
   .rlabel .sw { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
-  .cell { width: calc(var(--cell) - 3px); height: var(--cell); margin-right: 3px; border-radius: 6px; border: 1px solid var(--line);
+  .cell { width: calc(100% - 3px); height: var(--cell); margin-right: 3px; border-radius: 6px; border: 1px solid var(--line);
     background: var(--panel-2); padding: 0; }
   .cell.beat { background: #202328; }
-  .cell.bar { margin-left: 8px; }
+  .cell.bar { margin-left: 8px; width: calc(100% - 11px); }
   .cell.on { background: var(--c); border-color: var(--c); box-shadow: 0 0 8px -3px var(--c); }
   .cell:hover { border-color: var(--line-2); }
   .cell.now { outline: 2px solid #fff; outline-offset: -2px; }
-  .num { font-size: 10px; color: var(--faint); text-align: center; width: calc(var(--cell) - 3px); margin-right: 3px; height: 14px; }
-  .num.bar { margin-left: 8px; color: var(--muted); font-weight: 700; }
+  .num { font-size: 10px; color: var(--faint); text-align: center; width: calc(100% - 3px); margin-right: 3px; height: 14px; }
+  .num.bar { margin-left: 8px; width: calc(100% - 11px); color: var(--muted); font-weight: 700; }
   .num.now { color: #fff; }
   .grid-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
 
@@ -139,7 +139,7 @@
   dialog.unit p { margin: 6px 0; font-size: 14px; }
   dialog.unit .row-btns { justify-content: flex-end; margin-top: 14px; }
   dialog.unit .log { font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); white-space: pre-wrap; max-height: 140px; overflow: auto; }
-  footer.disclaimer { margin: 4px 12px 20px; color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 110ch; }
+  footer.disclaimer { margin: 4px 12px 20px; color: var(--muted); font-size: 12px; line-height: 1.5; }
   footer.disclaimer p { margin: 0 0 6px; }
   footer.disclaimer strong { color: var(--text); }
   footer.disclaimer a { color: inherit; }
@@ -407,7 +407,8 @@ function renderGrid() {
     el("span", {}, "×"),
     el("input", { class: "mini", type: "number", min: 1, max: 48, value: p.bars, "aria-label": "Bars",
       onchange: e => { remeter(p, p.num, p.den, Math.max(1, Math.min(48, +e.target.value || 1))); render(); } }), "bars");
-  const g = el("div", { class: "sgrid", style: `grid-template-columns: max-content repeat(${n}, max-content)` });
+  // the steps share the panel's width (at least --cell each; a long pattern scrolls sideways)
+  const g = el("div", { class: "sgrid", style: `grid-template-columns: max-content repeat(${n}, minmax(var(--cell), 1fr))` });
   g.append(el("div", { class: "rlabel" }));
   for (let i = 0; i < n; i++)
     g.append(el("div", { class: "num" + (i % bl === 0 && i ? " bar" : "") + (i === ui.now ? " now" : "") },
