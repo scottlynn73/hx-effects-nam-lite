@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HX Effects Groove Editor</title>
+<style>
+  :root {
+    --bg: #0b0c0e; --panel: #141518; --panel-2: #1b1d21; --panel-3: #23262b; --line: #2b2e34; --line-2: #3a3e45;
+    --text: #eceef1; --muted: #8d939c; --faint: #5d626a; --accent: #3fb8ff; --warn: #ff6b5b; --ok: #46c37b;
+    --radius: 12px; --cell: 26px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* ---- top bar (as the preset builder's) ---- */
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 16px;
+    background: #08090a; border-bottom: 1px solid var(--line); }
+  @media (min-width: 980px) { .topbar { position: sticky; top: 0; z-index: 5; } }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: .4px; font-size: 13px;
+    text-transform: uppercase; color: var(--muted); margin-right: 6px; }
+  .brand svg { color: var(--accent); }
+  .bank-name { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px;
+    font-size: 17px; font-weight: 600; width: 16ch; min-width: 0; }
+  .spacer { flex: 1; }
+  .btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 8px 13px; font-size: 13px; }
+  .btn:hover { border-color: var(--line-2); background: var(--panel-3); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #04121c; font-weight: 700; }
+  .btn.primary:hover { filter: brightness(1.08); background: var(--accent); }
+  .btn.small { padding: 5px 10px; font-size: 12px; }
+  .btn.danger:hover { border-color: var(--warn); color: var(--warn); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.ic { display: inline-flex; align-items: center; gap: 6px; }
+  .btn.ic:not(.primary) svg { color: var(--accent); }
+  .btn-group { display: inline-flex; }
+  .btn-group .btn { border-radius: 0; margin-left: -1px; }
+  .btn-group .btn:first-child { border-radius: 9px 0 0 9px; margin-left: 0; }
+  .btn-group .btn:last-child { border-radius: 0 9px 9px 0; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .subbar { display: flex; gap: 12px; align-items: flex-start; margin: 12px 12px 0; flex-wrap: wrap; }
+  .howto { flex: 1; min-width: 260px; padding: 10px 16px; font-size: 13px; }
+  .howto summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+  .howto ol { margin: 10px 0 6px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+  .howto em { font-style: normal; color: var(--text); font-weight: 600; }
+  .to-page { padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .to-page:hover { border-color: var(--accent); }
+
+  /* ---- layout ---- */
+  .main { flex: 1; display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px; min-height: 0; }
+  @media (min-width: 980px) { .main { grid-template-columns: 290px minmax(0, 1fr); } }
+  .work { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
+  .panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .9px; color: var(--muted); margin: 0 0 10px; font-weight: 700; }
+  .sidebar { display: flex; flex-direction: column; gap: 12px; min-height: 0; order: 2; }
+  @media (min-width: 980px) { .sidebar { order: 0; } }
+
+  /* ---- the patterns and the library ---- */
+  .plist { display: flex; flex-direction: column; gap: 2px; }
+  .pitem { display: flex; gap: 8px; align-items: baseline; width: 100%; text-align: left; background: transparent; border: 1px solid transparent;
+    border-radius: 8px; padding: 6px 8px; }
+  .pitem:hover { background: var(--panel-2); }
+  .pitem[aria-current="true"] { background: var(--panel-3); border-color: var(--accent); }
+  .pitem .no { color: var(--faint); font-size: 12px; width: 1.6em; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+  .pitem .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pitem .mg { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .row-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .lib { max-height: 330px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; border-top: 1px solid var(--line); padding-top: 6px; }
+  .litem { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; width: 100%; text-align: left;
+    background: transparent; border: 0; border-radius: 7px; padding: 6px 8px; }
+  .litem:hover { background: var(--panel-2); }
+  .litem .by { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 10px; border: 2px dashed var(--line-2);
+    border-radius: 12px; cursor: pointer; text-align: center; color: var(--muted); font-size: 12px; }
+  .drop.over, .drop:hover { border-color: var(--accent); background: rgba(63,184,255,.06); color: var(--text); }
+
+  /* ---- toolbar ---- */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; }
+  .label-xs { font-size: 11px; text-transform: uppercase; letter-spacing: .9px; color: var(--muted); font-weight: 700; }
+  input.mini, select.mini { background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; font-size: 12px; }
+  input.mini[type=number] { width: 5em; }
+  .fld { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .fld input[type=range] { width: 90px; accent-color: var(--accent); }
+  .fld .v { min-width: 2.6em; font-variant-numeric: tabular-nums; color: var(--text); }
+  .play { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--accent); background: var(--panel-2); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; }
+  .play[aria-pressed="true"] { background: var(--accent); color: #04121c; box-shadow: 0 0 14px -3px var(--accent); }
+  .usage { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .meter { width: 140px; height: 6px; background: var(--panel-3); border-radius: 3px; overflow: hidden; }
+  .meter > div { height: 100%; background: var(--ok); transition: width .2s; }
+  .meter.over > div { background: var(--warn); }
+  .meter-label { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meter-label.over { color: var(--warn); }
+
+  /* ---- the step grid ---- */
+  .ed-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .ed-icon { width: 40px; height: 40px; border-radius: 10px; border: 2px solid var(--accent); color: var(--accent); display: flex;
+    align-items: center; justify-content: center; background: #0d0e10; flex: none; }
+  .pname { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 16px; font-weight: 700; width: 18ch; min-width: 0; }
+  .warn-text { color: var(--warn); font-size: 12px; }
+  .grid-scroll { overflow-x: auto; padding-bottom: 6px; }
+  .sgrid { display: grid; gap: 3px 0; align-items: center; user-select: none; -webkit-user-select: none; touch-action: none; }
+  .rlabel { position: sticky; left: 0; z-index: 2; background: var(--panel); display: flex; align-items: center; gap: 6px; padding-right: 8px;
+    font-size: 12px; color: var(--muted); white-space: nowrap; height: var(--cell); }
+  .rlabel .aud { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--c);
+    display: inline-flex; align-items: center; justify-content: center; padding: 0; flex: none; }
+  .rlabel .aud:hover { border-color: var(--c); }
+  .rlabel .sw { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+  .cell { width: calc(var(--cell) - 3px); height: var(--cell); margin-right: 3px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--panel-2); padding: 0; }
+  .cell.beat { background: #202328; }
+  .cell.bar { margin-left: 8px; }
+  .cell.on { background: var(--c); border-color: var(--c); box-shadow: 0 0 8px -3px var(--c); }
+  .cell:hover { border-color: var(--line-2); }
+  .cell.now { outline: 2px solid #fff; outline-offset: -2px; }
+  .num { font-size: 10px; color: var(--faint); text-align: center; width: calc(var(--cell) - 3px); margin-right: 3px; height: 14px; }
+  .num.bar { margin-left: 8px; color: var(--muted); font-weight: 700; }
+  .num.now { color: #fff; }
+  .grid-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+  /* ---- own sounds ---- */
+  .own { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .own .drop { padding: 10px 8px; }
+  .own .drop.has { border-style: solid; border-color: var(--c); color: var(--text); }
+
+  /* ---- misc ---- */
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #24282e; border: 1px solid var(--line-2);
+    padding: 10px 16px; border-radius: 10px; max-width: calc(100% - 32px); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+  #toast.show { opacity: 1; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  dialog.unit { max-width: 520px; width: calc(100% - 32px); border-radius: 14px; border: 1px solid var(--line-2); padding: 18px; background: var(--panel); color: inherit; }
+  dialog.unit::backdrop { background: rgba(0,0,0,.6); }
+  dialog.unit h2 { margin: 0 0 8px; font-size: 18px; }
+  dialog.unit p { margin: 6px 0; font-size: 14px; }
+  dialog.unit .row-btns { justify-content: flex-end; margin-top: 14px; }
+  dialog.unit .log { font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); white-space: pre-wrap; max-height: 140px; overflow: auto; }
+  footer.disclaimer { margin: 4px 12px 20px; color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 110ch; }
+  footer.disclaimer p { margin: 0 0 6px; }
+  footer.disclaimer strong { color: var(--text); }
+  footer.disclaimer a { color: inherit; }
+  @media (max-width: 700px) { .subbar { flex-direction: column; align-items: stretch; } :root { --cell: 30px; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
+<!-- ?v=: change it whenever these files change, so a browser never runs an old copy beside a new page -->
+<script src="groove-core.js?v=20261127a"></script>
+<script src="beats.js?v=20261127a"></script>
+<script>
+"use strict";
+// The setup page's files (flasher.js): beside this page's folder on the website, in web/ in the repository
+const WEB = location.pathname.includes("/tools/groove-editor/") ? "../../web/" : "../";
+const BUILDER = "../preset-builder/";
+const loadScript = src => new Promise((ok, fail) => {
+  const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => fail(new Error("could not load " + src));
+  document.head.append(s);
+});
+const G = window.GROOVE;
+
+// ---------- the sounds: one row each (a step's byte, drumchapel.h DC_B_*) ----------
+const ROWS = [
+  { key: "O", label: "Crash / open", sound: "open", voice: "hat", c: "#ffcf4a" },
+  { key: "H", label: "Hi-hat", sound: "hat", voice: "hat", c: "#f2e56b" },
+  { key: "T1", label: "Tom 1 (high)", sound: "tom1", voice: "tom", c: "#9b7bff" },
+  { key: "T2", label: "Tom 2", sound: "tom2", voice: "tom", c: "#8a6cf0" },
+  { key: "T3", label: "Tom 3", sound: "tom3", voice: "tom", c: "#7a5fe0" },
+  { key: "T4", label: "Tom 4 (floor)", sound: "tom4", voice: "tom", c: "#6a52d0" },
+  { key: "S", label: "Snare", sound: "snare", voice: "snare", c: "#3fb8ff" },
+  { key: "K", label: "Kick", sound: "kick", voice: "kick", c: "#ff6b5b" },
+];
+const KITS = ["Boom", "Punch", "Tick", "Bit", "Doom", "Eighty", "Acoustic"];
+const OWN = "Your sounds";
+const SOUNDS = ["kick", "snare", "hat", "open", "tom1", "tom2", "tom3", "tom4"];
+
+function has(b, key) {
+  switch (key) {
+    case "K": return !!(b & G.KICK);
+    case "S": return !!(b & G.SNARE);
+    case "H": return (b & G.HAT) && !(b & G.OPEN);
+    case "O": return (b & G.HAT) && !!(b & G.OPEN);
+    default: return (b & G.TOM) && (b >> G.PITCH & 3) === +key[1] - 1;
+  }
+}
+// on/off for one sound; the hat voice is closed or open, the tom voice one pitch: setting one clears the other
+function put(b, key, on) {
+  switch (key) {
+    case "K": return on ? b | G.KICK : b & ~G.KICK;
+    case "S": return on ? b | G.SNARE : b & ~G.SNARE;
+    case "H": return on ? (b | G.HAT) & ~G.OPEN : (has(b, "H") ? b & ~G.HAT : b);
+    case "O": return on ? b | G.HAT | G.OPEN : (has(b, "O") ? b & ~(G.HAT | G.OPEN) : b);
+    default: {
+      const p = +key[1] - 1, clear = b & ~(G.TOM | 3 << G.PITCH);
+      return on ? clear | G.TOM | p << G.PITCH : (has(b, key) ? clear : b);
+    }
+  }
+}
+
+// ---------- state (kept in this browser) ----------
+const STORE = "groove-editor-v1";
+let state = load() || newBank();
+const ui = { playing: false, now: -1, paint: null, own: {}, buffers: {} };
+
+function newPattern(name = "Rock", num = 4, den = 4, bars = 1) {
+  const n = num * (16 / den) * bars;
+  const steps = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    if (i % 2 === 0) steps[i] = put(steps[i], "H", true);
+    if (i % 16 === 4 || i % 16 === 12) steps[i] = put(steps[i], "S", true);
+    if (i % 16 === 0 || i % 16 === 8) steps[i] = put(steps[i], "K", true);
+  }
+  return { name, num, den, bars, bpm: 110, steps };
+}
+function newBank() {
+  return { name: "My grooves", cur: 0, kit: "Acoustic", bpm: 110, swing: 0, lev: { kick: 0.8, snare: 0.7, hat: 0.5 }, patterns: [newPattern()] };
+}
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(STORE)); return s && Array.isArray(s.patterns) && s.patterns.length ? s : null; } catch (e) { return null; }
+}
+function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {} }
+const cur = () => state.patterns[Math.min(state.cur, state.patterns.length - 1)];
+const barLen = p => p.num * (16 / p.den);
+const total = () => state.patterns.reduce((t, p) => t + p.steps.length, 0);
+
+function fromBeat(b) {
+  const p = { name: b.name, num: b.num, den: b.den, bars: b.bars, bpm: b.bpm, steps: [] };
+  const n = barLen(p) * p.bars;
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (const r of ROWS) if (b[r.key] && b[r.key][i] === "x") s = put(s, r.key, true);
+    p.steps.push(s);
+  }
+  return p;
+}
+
+// a new meter or bar count: each bar keeps its steps where they fit
+function remeter(p, num, den, bars) {
+  const old = p.steps, ob = barLen(p), nb = num * (16 / den);
+  const steps = new Array(nb * bars).fill(0);
+  for (let bar = 0; bar < bars; bar++)
+    for (let i = 0; i < nb; i++) {
+      const src = (bar % p.bars) * ob + i;
+      if (i < ob && src < old.length) steps[bar * nb + i] = old[src];
+    }
+  Object.assign(p, { num, den, bars, steps });
+}
+const problem = p => {
+  const n = p.steps.length;
+  if (n > G.MAX_STEPS) return `${n} sixteenths: a pattern holds at most ${G.MAX_STEPS}`;
+  if (n % 4) return `${n} sixteenths: the unit needs a multiple of 4 (use an even number of bars)`;
+  return null;
+};
+
+// ---------- the page ----------
+const app = document.getElementById("app");
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v;
+    else if (k === "style") n.style.cssText = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (v === true) n.setAttribute(k, "");
+    else if (v !== false && v != null) n.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) if (c != null) n.append(c instanceof Node ? c : document.createTextNode(c));
+  return n;
+};
+function svg(path, size = 18) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("width", size); s.setAttribute("height", size);
+  s.setAttribute("fill", "none"); s.setAttribute("stroke", "currentColor"); s.setAttribute("stroke-width", "1.8");
+  s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round"); s.setAttribute("aria-hidden", "true");
+  s.innerHTML = path;
+  return s;
+}
+const I = {
+  drum: '<ellipse cx="12" cy="7" rx="8" ry="3"/><path d="M4 7v9c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M8 10l-3 10M16 10l3 10"/>',
+  play: '<path d="M8 5v14l11-7z" fill="currentColor"/>',
+  stop: '<rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/>',
+  out: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+  send: '<path d="M4 12h12M11 7l5 5-5 5"/><path d="M20 4v16"/>',
+  ear: '<path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z"/><path d="M15.5 9a4 4 0 010 6"/>',
+};
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+function render() {
+  const sx = document.querySelector(".grid-scroll") && document.querySelector(".grid-scroll").scrollLeft;
+  app.replaceChildren(el("div", { class: "app" }, renderHeader(), renderSubbar(),
+    el("div", { class: "main" }, renderSidebar(), el("div", { class: "work" }, renderToolbar(), renderGrid(), renderOwn())), renderDisclaimer()));
+  if (sx) document.querySelector(".grid-scroll").scrollLeft = sx;
+  save();
+}
+
+function renderHeader() {
+  const file = el("input", { type: "file", accept: ".json,.mid,.midi,.wav", multiple: true, class: "visually-hidden", id: "openFile",
+    onchange: e => { openFiles([...e.target.files]); e.target.value = ""; } });
+  return el("header", { class: "topbar" },
+    el("div", { class: "brand" }, svg(I.drum, 22), "HX Effects Groove Editor"),
+    el("label", { class: "visually-hidden", for: "bankName" }, "Bank name"),
+    el("input", { id: "bankName", class: "bank-name", maxlength: "16", value: state.name, spellcheck: "false",
+      oninput: e => { state.name = e.target.value; save(); } }),
+    el("div", { class: "spacer" }),
+    file,
+    el("div", { class: "btn-group" },
+      el("button", { class: "btn", onclick: () => file.click(), title: "A bank saved from this page (.json), a groove bank .wav, or MIDI loops (.mid)" }, "Open"),
+      el("button", { class: "btn", onclick: saveJson, title: "Save the bank as a .json file to open here again" }, "Save")),
+    el("button", { class: "btn ic", onclick: downloadWav, title: "The bank as a .wav for User IR slot 128 (HX Edit, or tools/ir_upload.py)" }, svg(I.out), "Download .wav"),
+    el("button", { class: "btn primary ic", onclick: sendDialog, title: "Write the bank into User IR slot 128 over USB (Chrome or Edge)" }, svg(I.send), "Send to unit"));
+}
+
+function renderSubbar() {
+  const step = (t, ...x) => el("li", {}, el("strong", {}, t), " ", ...x);
+  return el("div", { class: "subbar" },
+    el("details", { class: "panel howto", open: !!ui.howOpen, ontoggle: e => { ui.howOpen = e.target.open; } },
+      el("summary", {}, "How your grooves reach Drum Chapel"),
+      el("ol", {},
+        step("Make up to 20 patterns", "here: Pattern 1–20 on the unit plays them in this order (past the last one it starts again)."),
+        step("Send to unit", "writes them all into User IR slot 128 (or download the .wav and import it into slot 128 with HX Edit)."),
+        step("On the unit,", "set Drum Chapel's ", el("em", {}, "Groove"), " to ", el("em", {}, "User"), " and pick the ", el("em", {}, "Pattern"),
+          ". Tempo comes from the block's Time (tap tempo), not from this page. If slot 128 holds anything else, User plays the Classic patterns."),
+        step("Needs", "the NAM + Amps + Effects firmware with Drum Chapel's User groove (not released yet)."),
+        step("The preview", "plays the kits' sounds as the unit makes them, each on its own: on the unit the kit's drive acts on all of them together (Doom's fuzz most).")),
+    ),
+    el("a", { class: "panel to-page", href: WEB, title: "Build and install the firmware; send NAM captures as IRs" }, "Firmware: setup page →"),
+    el("a", { class: "panel to-page", href: BUILDER, title: "Build presets and send them to the unit" }, "Presets: preset builder →"));
+}
+
+function renderSidebar() {
+  const list = el("div", { class: "plist" }, state.patterns.map((p, k) =>
+    el("button", { class: "pitem", "aria-current": String(k === state.cur), onclick: () => { state.cur = k; ui.now = -1; render(); } },
+      el("span", { class: "no" }, String(k + 1)), el("span", { class: "nm" }, p.name || "Untitled"),
+      el("span", { class: "mg" + (problem(p) ? " warn-text" : "") }, `${p.num}/${p.den} × ${p.bars}`))));
+  const full = state.patterns.length >= G.MAX_LOOPS;
+  const add = p => { if (state.patterns.length >= G.MAX_LOOPS) { toast("The Pattern knob has 20 entries."); return; }
+    state.patterns.push(p); state.cur = state.patterns.length - 1; render(); };
+  const move = d => { const k = state.cur, j = k + d; if (j < 0 || j >= state.patterns.length) return;
+    [state.patterns[k], state.patterns[j]] = [state.patterns[j], state.patterns[k]]; state.cur = j; render(); };
+  const lib = el("div", { class: "lib" }, window.GROOVE_BEATS.map(b =>
+    el("button", { class: "litem", disabled: full, onclick: () => { add(fromBeat(b)); state.bpm = b.bpm; render(); },
+      title: `Add as Pattern ${state.patterns.length + 1} (${b.num}/${b.den}, about ${b.bpm} BPM)` },
+      el("span", {}, b.name), el("span", { class: "by" }, b.by || `${b.num}/${b.den}`))));
+  const midi = el("input", { type: "file", accept: ".mid,.midi", multiple: true, class: "visually-hidden",
+    onchange: e => { openFiles([...e.target.files]); e.target.value = ""; } });
+  const drop = el("div", { class: "drop", tabindex: "0", onclick: () => midi.click(),
+    onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); midi.click(); } },
+    ondragover: e => { e.preventDefault(); drop.classList.add("over"); }, ondragleave: () => drop.classList.remove("over"),
+    ondrop: e => { e.preventDefault(); drop.classList.remove("over"); openFiles([...e.dataTransfer.files]); } },
+    el("strong", {}, "Add MIDI loops"), "Drop .mid files (or click): each becomes a pattern, quantised to sixteenths, in name order", midi);
+  return el("aside", { class: "sidebar" },
+    el("section", { class: "panel" }, el("h2", {}, `Patterns (${state.patterns.length} of 20)`), list,
+      el("div", { class: "row-btns" },
+        el("button", { class: "btn small", disabled: full, onclick: () => add(newPattern("New", cur().num, cur().den, cur().bars)) }, "New"),
+        el("button", { class: "btn small", disabled: full, onclick: () => add(JSON.parse(JSON.stringify(Object.assign({}, cur(), { name: (cur().name + " 2").slice(0, 24) })))) }, "Duplicate"),
+        el("button", { class: "btn small", onclick: () => move(-1), title: "Move up" }, "↑"),
+        el("button", { class: "btn small", onclick: () => move(1), title: "Move down" }, "↓"),
+        el("button", { class: "btn small danger", disabled: state.patterns.length < 2, onclick: () => { state.patterns.splice(state.cur, 1); state.cur = Math.max(0, state.cur - 1); render(); } }, "Delete"))),
+    el("section", { class: "panel" }, el("h2", {}, "Starting points"),
+      el("p", { class: "meta", style: "margin:0 0 8px" }, "Written for this page after the feel of each song's drums, not transcriptions: click one to add it, then make it yours."),
+      lib),
+    el("section", { class: "panel" }, el("h2", {}, "Import"), drop));
+}
+
+function renderToolbar() {
+  const t = total(), over = t > G.USER_MAX_STEPS;
+  const range = (label, v, on, min = 0, max = 1, stepv = 0.01, fmt = x => Math.round(x * 100) + "%") => {
+    const out = el("span", { class: "v" }, fmt(v));
+    return el("label", { class: "fld" }, label, el("input", { type: "range", min, max, step: stepv, value: v,
+      oninput: e => { on(+e.target.value); out.textContent = fmt(+e.target.value); save(); } }), out);
+  };
+  return el("section", { class: "panel toolbar" },
+    el("button", { class: "play", "aria-pressed": String(ui.playing), title: "Play / stop (space)", onclick: togglePlay }, svg(ui.playing ? I.stop : I.play, 20)),
+    el("label", { class: "fld" }, "BPM", el("input", { class: "mini", type: "number", min: 30, max: 300, value: state.bpm,
+      onchange: e => { state.bpm = Math.max(30, Math.min(300, +e.target.value || 120)); save(); } })),
+    range("Swing", state.swing, v => { state.swing = v; }),
+    el("label", { class: "fld" }, "Kit", el("select", { class: "mini", onchange: e => { state.kit = e.target.value; loadKit(state.kit); save(); } },
+      [...KITS, OWN].map(k => el("option", { value: k, selected: k === state.kit }, k)))),
+    range("Kick", state.lev.kick, v => { state.lev.kick = v; }),
+    range("Snare", state.lev.snare, v => { state.lev.snare = v; }),
+    range("Hat", state.lev.hat, v => { state.lev.hat = v; }),
+    el("div", { class: "usage", title: "All patterns share one IR slot" },
+      el("span", { class: "label-xs" }, "Slot"),
+      el("div", { class: "meter" + (over ? " over" : "") }, el("div", { style: `width:${Math.min(100, 100 * t / G.USER_MAX_STEPS)}%` })),
+      el("span", { class: "meter-label" + (over ? " over" : "") }, `${t} / ${G.USER_MAX_STEPS} sixteenths`)));
+}
+
+function renderGrid() {
+  const p = cur(), bl = barLen(p), n = p.steps.length, beat = p.den === 4 ? 4 : 2;
+  const sig = el("span", { class: "fld" }, "Time",
+    el("select", { class: "mini", "aria-label": "Beats a bar", onchange: e => { remeter(p, +e.target.value, p.den, p.bars); render(); } },
+      Array.from({ length: 16 }, (_, k) => el("option", { value: k + 1, selected: k + 1 === p.num }, String(k + 1)))),
+    "/",
+    el("select", { class: "mini", "aria-label": "Note value", onchange: e => { remeter(p, p.num, +e.target.value, p.bars); render(); } },
+      [4, 8].map(d => el("option", { value: d, selected: d === p.den }, String(d)))),
+    el("span", {}, "×"),
+    el("input", { class: "mini", type: "number", min: 1, max: 48, value: p.bars, "aria-label": "Bars",
+      onchange: e => { remeter(p, p.num, p.den, Math.max(1, Math.min(48, +e.target.value || 1))); render(); } }), "bars");
+  const g = el("div", { class: "sgrid", style: `grid-template-columns: max-content repeat(${n}, max-content)` });
+  g.append(el("div", { class: "rlabel" }));
+  for (let i = 0; i < n; i++)
+    g.append(el("div", { class: "num" + (i % bl === 0 && i ? " bar" : "") + (i === ui.now ? " now" : "") },
+      i % bl === 0 ? String(i / bl + 1) : (i % bl) % beat === 0 ? String((i % bl) / beat + 1) : ""));
+  for (const r of ROWS) {
+    g.append(el("div", { class: "rlabel", style: `--c:${r.c}` },
+      el("button", { class: "aud", title: "Hear it", onclick: () => audition(r) }, svg(I.ear, 13)), el("span", {}, r.label)));
+    for (let i = 0; i < n; i++) {
+      const on = has(p.steps[i], r.key);
+      const c = el("button", { class: "cell" + (on ? " on" : "") + ((i % bl) % beat === 0 ? " beat" : "") + (i % bl === 0 && i ? " bar" : "") + (i === ui.now ? " now" : ""),
+        style: `--c:${r.c}`, "aria-pressed": String(!!on), "aria-label": `${r.label}, step ${i + 1}`, "data-i": i, "data-k": r.key });
+      g.append(c);
+    }
+  }
+  // click toggles; drag paints the same value along a row
+  g.addEventListener("pointerdown", e => {
+    const c = e.target.closest(".cell"); if (!c) return;
+    e.preventDefault();
+    const i = +c.dataset.i, k = c.dataset.k, on = !has(p.steps[i], k);
+    ui.paint = { k, on };
+    setCell(i, k, on, c);
+    if (on) audition(ROWS.find(r => r.key === k));
+  });
+  g.addEventListener("pointerover", e => {
+    if (!ui.paint) return;
+    const c = e.target.closest(".cell"); if (!c || c.dataset.k !== ui.paint.k) return;
+    setCell(+c.dataset.i, c.dataset.k, ui.paint.on, c);
+  });
+  g.addEventListener("keydown", e => {
+    const c = e.target.closest(".cell"); if (!c || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault(); e.stopPropagation();
+    setCell(+c.dataset.i, c.dataset.k, !has(p.steps[+c.dataset.i], c.dataset.k), c);
+  });
+  const pr = problem(p);
+  return el("section", { class: "panel" },
+    el("div", { class: "ed-head" },
+      el("div", { class: "ed-icon" }, svg(I.drum, 22)),
+      el("span", { class: "label-xs" }, `Pattern ${state.cur + 1}`),
+      el("input", { class: "pname", maxlength: "24", value: p.name, "aria-label": "Pattern name", oninput: e => { p.name = e.target.value; save(); },
+        onchange: render }),
+      sig,
+      el("span", { class: "meta" }, `${n} sixteenths`),
+      pr ? el("span", { class: "warn-text" }, pr) : null),
+    el("div", { class: "grid-scroll" }, g),
+    el("div", { class: "grid-foot" },
+      el("button", { class: "btn small", onclick: () => { p.steps.fill(0); render(); } }, "Clear"),
+      el("button", { class: "btn small", disabled: p.bars < 2, onclick: () => { for (let i = bl; i < n; i++) p.steps[i] = p.steps[i % bl]; render(); } }, "Copy bar 1 to every bar"),
+      el("button", { class: "btn small", onclick: () => { p.steps.unshift(p.steps.pop()); render(); }, title: "Everything one sixteenth later" }, "Shift →"),
+      el("button", { class: "btn small", onclick: () => { p.steps.push(p.steps.shift()); render(); }, title: "Everything one sixteenth earlier" }, "← Shift"),
+      el("span", {}, "One sound per row; the hat is closed or open, the toms one at a time (the unit's four voices). Swing delays the odd sixteenths."),
+    ));
+}
+function setCell(i, k, on, c) {
+  const p = cur();
+  p.steps[i] = put(p.steps[i], k, on);
+  // the cells of this step in the other rows of the same voice may have changed
+  for (const r of ROWS) {
+    const x = document.querySelector(`.cell[data-i="${i}"][data-k="${r.key}"]`);
+    if (x) { const v = has(p.steps[i], r.key); x.classList.toggle("on", !!v); x.setAttribute("aria-pressed", String(!!v)); }
+  }
+  save();
+}
+addEventListener("pointerup", () => { ui.paint = null; });
+addEventListener("keydown", e => {
+  if (e.key === " " && !/INPUT|SELECT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); togglePlay(); }
+});
+
+function renderOwn() {
+  if (state.kit !== OWN) return null;
+  return el("section", { class: "panel" }, el("h2", {}, "Your sounds (preview)"),
+    el("p", { class: "meta", style: "margin:0 0 10px" }, "Drop a drum hit (.wav, .aif, .mp3) on each sound to hear the patterns with it. Only in this page for now: putting your own hits on the unit (a User kit) comes with the Acoustic kit's next version."),
+    el("div", { class: "own" }, SOUNDS.map(s => {
+      const r = ROWS.find(x => x.sound === s), name = ui.own[s] && ui.own[s].name;
+      const f = el("input", { type: "file", accept: "audio/*,.wav,.aif,.aiff", class: "visually-hidden", onchange: e => { if (e.target.files[0]) ownSound(s, e.target.files[0]); } });
+      return el("div", { class: "drop" + (name ? " has" : ""), style: `--c:${r.c}`, tabindex: "0", onclick: () => f.click(),
+        ondragover: e => e.preventDefault(), ondrop: e => { e.preventDefault(); if (e.dataTransfer.files[0]) ownSound(s, e.dataTransfer.files[0]); } },
+        el("strong", {}, r.label), name || "drop a file", f);
+    })));
+}
+
+function renderDisclaimer() {
+  return el("footer", { class: "disclaimer", id: "disclaimer" },
+    el("p", {}, el("strong", {}, "Disclaimer. "), 'Provided “as is”, without warranty of any kind. Using this page and sending data to your unit is entirely your own decision and your own responsibility; back up first. To the fullest extent permitted by law, the author accepts no liability for any loss or damage, including to your HX Effects or other equipment, your presets, IRs or settings, your hearing, or your warranty.' +
+      " If you don't accept this, don't use this page. GPL-3.0 sections 15 and 16 (no warranty, limitation of liability) also apply."),
+    el("p", {}, "Unofficial: not affiliated with, endorsed or supported by Line 6 or Yamaha Guitar Group. Song names describe the feel a starting point aims at; no recording or transcription is included. ",
+      el("a", { href: "https://github.com/scottlynn73/hx-effects-nam-lite" }, "Source"), " (GPL-3.0-or-later)."));
+}
+
+// ---------- sound: the kits' one-shots (rendered from the reference: effects/Makefile kit-sounds) ----------
+let ctx = null;
+function audio() { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); return ctx; }
+async function loadKit(kit) {
+  if (kit === OWN || ui.buffers[kit]) return;
+  const a = audio(), out = {};
+  ui.buffers[kit] = out;
+  await Promise.all(SOUNDS.map(async s => {
+    try {
+      const r = await fetch(`sounds/${kit}_${s}.wav`);
+      out[s] = await a.decodeAudioData(await r.arrayBuffer());
+    } catch (e) { out[s] = null; }
+  }));
+}
+async function ownSound(s, file) {
+  try {
+    ui.own[s] = { name: file.name, buf: await audio().decodeAudioData(await file.arrayBuffer()) };
+    render();
+  } catch (e) { toast(`${file.name}: not an audio file this browser can read`); }
+}
+const buffer = s => state.kit === OWN ? (ui.own[s] && ui.own[s].buf) : ui.buffers[state.kit] && ui.buffers[state.kit][s];
+const voices = {};
+function trigger(r, t) {
+  const b = buffer(r.sound); if (!b) return;
+  const a = audio(), lev = r.voice === "snare" ? state.lev.snare : r.voice === "hat" ? state.lev.hat : state.lev.kick;
+  const old = voices[r.voice];
+  if (old) { try { old.g.gain.setTargetAtTime(0, t, 0.002); old.src.stop(t + 0.03); } catch (e) {} }   // the unit's voice: a new hit ends the last
+  const src = a.createBufferSource(), g = a.createGain();
+  src.buffer = b; g.gain.value = lev;
+  src.connect(g).connect(a.destination);
+  src.start(t);
+  voices[r.voice] = { src, g };
+}
+async function audition(r) { await loadKit(state.kit); trigger(r, audio().currentTime + 0.01); }
+
+// the player: a look-ahead scheduler, the playhead from the audio clock
+let timer = null, next = 0, stepNo = 0, queue = [];
+function togglePlay() { ui.playing ? stop() : start(); }
+async function start() {
+  await loadKit(state.kit);
+  const a = audio();
+  ui.playing = true; stepNo = 0; next = a.currentTime + 0.06; queue = [];
+  timer = setInterval(schedule, 25); schedule(); requestAnimationFrame(head);
+  render();
+}
+function stop() {
+  ui.playing = false; clearInterval(timer); timer = null; ui.now = -1;
+  for (const v of Object.values(voices)) try { v.src.stop(); } catch (e) {}
+  render();
+}
+function schedule() {
+  const a = audio(), p = cur(), n = p.steps.length, dur = 60 / state.bpm / 4;
+  while (next < a.currentTime + 0.12) {
+    const i = stepNo % n, t = next + (i % 2 ? state.swing * dur / 3 : 0);
+    for (const r of ROWS) if (has(p.steps[i], r.key)) trigger(r, t);
+    queue.push({ i, t });
+    next += dur; stepNo++;
+  }
+}
+function head() {
+  if (!ui.playing) return;
+  const a = audio();
+  while (queue.length > 1 && queue[1].t <= a.currentTime) queue.shift();
+  const i = queue.length && queue[0].t <= a.currentTime ? queue[0].i : -1;
+  if (i !== ui.now) {
+    document.querySelectorAll(".now").forEach(x => x.classList.remove("now"));
+    ui.now = i;
+    document.querySelectorAll(`.cell[data-i="${i}"]`).forEach(x => x.classList.add("now"));
+    const nums = document.querySelectorAll(".num"); if (nums[i + 1]) nums[i + 1].classList.add("now");
+  }
+  requestAnimationFrame(head);
+}
+
+// ---------- files ----------
+const download = (name, bytes, type) => {
+  const a = el("a", { href: URL.createObjectURL(new Blob([bytes], { type })), download: name });
+  document.body.append(a); a.click(); a.remove();
+};
+const fileName = s => (s || "grooves").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "grooves";
+function bankWords() {
+  const bad = state.patterns.map((p, k) => problem(p) && `Pattern ${k + 1}: ${problem(p)}`).filter(Boolean);
+  if (bad.length) throw new Error(bad[0]);
+  return G.userBank(state.patterns.map(p => p.steps));
+}
+function downloadWav() {
+  try { download(`${fileName(state.name)}_slot128.wav`, G.wavBytes(bankWords()), "audio/wav"); toast("Import it into User IR slot 128."); }
+  catch (e) { toast(e.message); }
+}
+function saveJson() {
+  const out = { format: "hx-groove-bank", version: 1, name: state.name, patterns: state.patterns };
+  download(`${fileName(state.name)}.json`, JSON.stringify(out, null, 1), "application/json");
+}
+async function openFiles(files) {
+  const mids = files.filter(f => /\.midi?$/i.test(f.name)).sort((a, b) => G.naturalCompare(a.name, b.name));
+  let added = 0;
+  for (const f of files) {
+    try {
+      if (/\.json$/i.test(f.name)) {
+        const j = JSON.parse(await f.text());
+        if (j.format !== "hx-groove-bank" || !Array.isArray(j.patterns)) throw new Error("not a groove bank saved from this page");
+        stop();
+        state.name = j.name || state.name; state.patterns = j.patterns.slice(0, G.MAX_LOOPS); state.cur = 0;
+        toast(`Opened ${f.name}.`);
+      } else if (/\.wav$/i.test(f.name)) {
+        const b = new Uint8Array(await f.arrayBuffer()), v = new DataView(b.buffer);
+        const words = new Uint32Array(2048);
+        if (b.length < 44 + 8192) throw new Error("not a groove bank .wav");
+        for (let i = 0; i < 2048; i++) words[i] = v.getUint32(b.length - 8192 + 4 * i, true);
+        const loops = G.readBank(words);
+        state.patterns = loops.map((s, k) => ({ name: `Pattern ${k + 1}`, num: 4, den: 4, bars: Math.max(1, s.length / 16), bpm: state.bpm, steps: s }))
+          .map(p => { if (p.steps.length % 16) { p.num = p.steps.length / 4; p.bars = 1; } return p; });
+        state.cur = 0;
+        toast(`${loops.length} patterns from ${f.name}.`);
+      }
+    } catch (e) { toast(`${f.name}: ${e.message}`); }
+  }
+  for (const f of mids) {
+    if (state.patterns.length >= G.MAX_LOOPS) { toast("The Pattern knob has 20 entries: the rest were left out."); break; }
+    try {
+      const steps = G.convertMidi(new Uint8Array(await f.arrayBuffer()));
+      const p = { name: f.name.replace(/\.midi?$/i, "").slice(0, 24), num: 4, den: 4, bars: steps.length / 16, bpm: state.bpm, steps };
+      if (steps.length % 16) { p.num = steps.length / 4; p.bars = 1; }
+      state.patterns.push(p); added++;
+    } catch (e) { toast(`${f.name}: ${e.message}`); }
+  }
+  if (added) { state.cur = state.patterns.length - 1; toast(`${added} MIDI loop${added > 1 ? "s" : ""} added.`); }
+  render();
+}
+
+// ---------- the unit (web/flasher.js, as the setup page sends IRs) ----------
+let FLASHER = null;
+async function flasher() {
+  if (!FLASHER) { await loadScript(WEB + "flasher.js?v=20261122b"); FLASHER = window.FLASHER; }
+  return FLASHER;
+}
+async function sendDialog() {
+  let words;
+  try { words = bankWords(); } catch (e) { toast(e.message); return; }
+  if (!navigator.usb) { toast("Sending needs Chrome or Edge (WebUSB). Or download the .wav and import it into slot 128 with HX Edit."); return; }
+  const log = el("div", { class: "log" });
+  const go = el("button", { class: "btn primary", disabled: true }, "Write slot 128");
+  const d = el("dialog", { class: "unit" },
+    el("h2", {}, "Send to User IR slot 128"),
+    el("p", {}, `${state.patterns.length} pattern${state.patterns.length > 1 ? "s" : ""}, ${total()} sixteenths, as “${(state.name || "Grooves").slice(0, 16)}”.`),
+    el("p", { class: "meta" }, "Quit HX Edit and Line 6 Updater first. Your other IR slots are not touched."), log,
+    el("div", { class: "row-btns" }, el("button", { class: "btn", onclick: () => d.close() }, "Cancel"), go));
+  d.addEventListener("close", () => d.remove());
+  document.body.append(d); d.showModal();
+  const say = s => { log.textContent += s + "\n"; };
+  try {
+    const F = await flasher();
+    const list = await F.irSession({ usb: navigator.usb, log: () => {} }, api => api.list());
+    const old = list.find(e => e.slot === G.USER_SLOT && e.md5);
+    say(old ? `Slot 128 now holds “${old.name}”: it will be replaced.` : "Slot 128 is empty.");
+    go.disabled = false;
+    go.onclick = async () => {
+      go.disabled = true;
+      const samples = G.sampleBytes(words);
+      const md5 = SparkMD5.ArrayBuffer.hash(samples.buffer.slice(0));
+      say("Writing… don't unplug the HX Effects.");
+      try {
+        await F.irSession({ usb: navigator.usb, log: () => {} }, api =>
+          api.put(G.USER_SLOT, samples, (state.name || "Grooves").slice(0, 16), md5, ms => new Promise(r => setTimeout(r, ms))));
+        say("✓ Written and read back. On the unit: Drum Chapel, Groove = User.");
+        go.textContent = "Done"; go.disabled = false; go.onclick = () => d.close();
+      } catch (e) { say("Failed: " + e.message); go.disabled = false; }
+    };
+  } catch (e) { say("Could not reach the unit: " + e.message + " (quit HX Edit first; Chrome or Edge)"); }
+}
+
+render();
+loadKit(state.kit).catch(() => {});
+</script>
+</body>
+</html>

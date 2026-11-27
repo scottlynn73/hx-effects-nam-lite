@@ -242,6 +242,9 @@
       your browser on a Mac or a Windows PC. Nothing is installed and nothing is uploaded anywhere.</p>
     <p class="lede to-builder">Firmware installed? Build presets for it, with NAM, the amps and the new effects, in the
       <a class="builder-link" href="preset-builder/">preset builder</a>: it sends them straight to the unit.</p>
+    <p class="lede to-builder">Make your own drum grooves for Drum Chapel, or start from rock beats, in the
+      <a class="editor-link" href="groove-editor/">groove editor</a>: a step grid that previews every kit and sends the
+      grooves to the unit.</p>
   </header>
 
   <div class="warning"><b>Unofficial and experimental.</b> This isn't made or supported by Line 6. Installing modified
@@ -650,6 +653,8 @@
   // the preset builder: beside this page on the website (preset-builder/), in tools/ when run from the repo
   if (location.pathname.includes("/web/"))
     document.querySelectorAll("a.builder-link").forEach(a => { a.href = "../tools/preset-builder/"; });
+  if (location.pathname.includes("/web/"))
+    document.querySelectorAll("a.editor-link").forEach(a => { a.href = "../tools/groove-editor/"; });
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
 <script>
