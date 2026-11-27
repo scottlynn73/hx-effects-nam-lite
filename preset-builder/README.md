@@ -32,8 +32,8 @@ then replace the bad slot without loading it):
 |---|---|
 | Stock 3.80 firmware | nothing: HX Effects' own models |
 | NAM firmware | NAM A2 Lite (on mono Regal Bass DI) and Click (on mono Mod/Chorus Echo) |
-| NAM + Amps firmware | the HX Stomp's 111 amps (Amp) and 112 preamps (Preamp), at most three per preset |
-| NAM + Amps + Effects firmware | the effects a plain `build_all.py` makes (Bolt, Rocket!, Garrrry Tank, Quality Polis, Bam Crusher, ...) and the HX Stomp's 41 legacy cabs (Cab), at most two per preset |
+| NAM + Amps firmware | the HX Stomp's 111 amps (Amp) and 112 preamps (Preamp), at most three per preset, and its 41 legacy cabs (Cab), at most two |
+| NAM + Amps + Effects firmware | the effects a plain `build_all.py` makes (Bolt, Rocket!, Garrrry Tank, Quality Polis, Bam Crusher, ...) |
 
 A cab block stores its **Mic** after its five knobs, as 0..15 in the unit's order (57 Dynamic ... 7 Dynamic; the page
 lists the names), counted in the value list's length but not in its knob count: `{2: 6, 3: 5, 4: [Distance, Low Cut,

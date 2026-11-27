@@ -319,9 +319,9 @@
       <label><input type="radio" name="build" value="nam"><span><b>NAM only</b>
         <small>NAM A2 Lite (plays your .nam captures) and Click, a metronome.</small></span></label>
       <label><input type="radio" name="build" value="amps"><span><b>NAM + Amps</b>
-        <small>The above, plus the HX Stomp's 111 amps and 112 preamps.</small></span></label>
+        <small>The above, plus the HX Stomp's 111 amps, 112 preamps and 41 legacy cabs.</small></span></label>
       <label><input type="radio" name="build" value="full" checked><span><b>NAM + Amps + Effects</b> (everything)
-        <small>The above, plus the HX Stomp's 41 legacy cabs and the extra effects, including <b>Drum Chapel, a basic drum machine</b> that follows tap
+        <small>The above, plus the extra effects, including <b>Drum Chapel, a basic drum machine</b> that follows tap
         tempo (grooves, seven kits, one of them sampled acoustic drums). The others: Bolt, Rocket!, Garrrry Tank,
         Quality Polis, Bam Crusher, Doom Chug, Pure Whitey, Greasy Strangler, Bethblahem and Puggy Puncher.</small></span></label>
     </div>
@@ -531,9 +531,8 @@
       <li>The preamps (the amps without their power amp section) are under <span class="path">EQ › Preamps</span>.</li>
     </ol>
     <ul class="plain">
-      <li>With NAM + Amps + Effects, the HX Stomp's 41 legacy cabs are under <span class="path">EQ › Cabs</span>: up to two
-        in a preset, so one in each path. With NAM + Amps there are no cabs: put an IR block after the amp, with a cab
-        IR in a User IR slot.</li>
+      <li>The HX Stomp's 41 legacy cabs are under <span class="path">EQ › Cabs</span>: up to two in a preset, so one in
+        each path. For a newer cab, put an IR block after the amp, with a cab IR in a User IR slot.</li>
       <li>Up to three amps and preamps in a preset, together.</li>
       <li>Amps are heavy blocks: next to NAM and the heavier effects, the unit may refuse one more.</li>
     </ul>
@@ -676,10 +675,10 @@
   var $ = function (id) { return document.getElementById(id); };
   var STOCK_MD5 = "7c2ebdf1bffb6bcc5f89dda97f91e40c";
   var NAMES = { nam: "HX_Effects_v3.80.0_NAM.hxf", amps: "HX_Effects_v3.80.0_NAM_Amps.hxf", full: "HX_Effects_v3.80.0_NAM_Amps_Effects.hxf",
-                "full-names": "HX_Effects_v3.80.0_NAM_Amps_Effects_RealNames.hxf" };
-  var LABELS = { nam: "NAM only", amps: "NAM + Amps", full: "NAM + Amps + Effects", "full-names": "NAM + Amps + Effects (real names)" };
+                "amps-names": "HX_Effects_v3.80.0_NAM_Amps_RealNames.hxf", "full-names": "HX_Effects_v3.80.0_NAM_Amps_Effects_RealNames.hxf" };
+  var LABELS = { nam: "NAM only", amps: "NAM + Amps", full: "NAM + Amps + Effects", "amps-names": "NAM + Amps (real names)", "full-names": "NAM + Amps + Effects (real names)" };
   // builds whose Real names version has been tested on a unit (recipe-<build>-names.bin)
-  var REAL_NAMES_OK = { full: true };
+  var REAL_NAMES_OK = { amps: true, full: true };
   var OUT_NAME = NAMES.full, choice = "full";
   function picked() {
     var r = document.querySelector('input[name="build"]:checked'), b = r ? r.value : "full";
@@ -688,7 +687,7 @@
   function namesState() {
     var r = document.querySelector('input[name="build"]:checked'), b = r ? r.value : "full", ok = !!REAL_NAMES_OK[b];
     $("realNames").disabled = !ok;
-    $("namesWhy").textContent = ok ? "" : "(Not yet for " + LABELS[b] + ": only NAM + Amps + Effects has been tested with real names.)";
+    $("namesWhy").textContent = ok ? "" : "(Not yet for " + LABELS[b] + ": that build hasn't been tested with real names.)";
   }
   Array.prototype.slice.call(document.querySelectorAll('input[name="build"], #realNames')).forEach(function (r) {
     r.addEventListener("change", function () {

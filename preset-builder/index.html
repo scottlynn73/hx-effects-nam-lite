@@ -248,7 +248,7 @@
 <!-- ?v=: change it whenever these files change, so a browser never runs an old copy beside a new page -->
 <script src="preset-core.js?v=20261127b"></script>
 <script src="fw-reader.js?v=20261122b"></script>
-<script src="fw-catalog.js?v=20261127a"></script>
+<script src="fw-catalog.js?v=20261127b"></script>
 <script src="real-names.js?v=20261127a"></script>
 <script>
 "use strict";
@@ -287,7 +287,7 @@ const BUILDS = { stock: "Stock 3.80 firmware", nam: "NAM firmware", amps: "NAM +
 const BUILD_ORDER = ["stock", "nam", "amps", "full"];
 const AMP_LIMIT = 3;   // amps + preamps per preset on the amp builds (docs/amps-findings.md)
 const TRAILS_TYPES = [8, 9, 13];   // delays/reverbs: a preset stores a Trails switch after their knobs (preset-core.js)
-// legacy single cabs (NAM + Amps + Effects): the Mic is stored after the five knobs, as 0..15 in the unit's order
+// legacy single cabs (NAM + Amps and NAM + Amps + Effects): the Mic is stored after the five knobs, as 0..15 in the unit's order
 // (the app's mic table, 0x280f8abc); at most two cab blocks per preset (the placement check, docs/amps-findings.md)
 const CAB_TYPE = 15, CAB_LIMIT = 2;
 const MICS = ["57 Dynamic", "409 Dynamic", "421 Dynamic", "30 Dynamic", "20 Dynamic", "121 Ribbon", "160 Ribbon", "4038 Ribbon",
@@ -711,7 +711,7 @@ function renderHowto() {
         step("Send to unit", "(Chrome or Edge, with HX Edit closed) and pick the slot. Keep 1A a preset you trust. ",
           el("em", {}, "Open from unit"), " brings in a preset that's already there; ", el("em", {}, "Save"), " and ",
           el("em", {}, "Open"), " keep it as a file on your computer."),
-        step("Cabs", "(NAM + Amps + Effects firmware): the HX Stomp's 41 legacy cabs are under ", el("em", {}, "Cab"),
+        step("Cabs", "(NAM + Amps and NAM + Amps + Effects firmware): the HX Stomp's 41 legacy cabs are under ", el("em", {}, "Cab"),
           ", with their Mic; at most two in a preset, so one in each path.")),
       el("p", { class: "meta" }, "New to all this? The ",
         el("a", { href: "https://www.youtube.com/watch?v=yktLS1vPSZ4", target: "_blank", rel: "noopener" }, "▶ video tutorial"),
