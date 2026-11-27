@@ -702,7 +702,10 @@ function renderHowto() {
           el("em", {}, "Open from unit"), " brings in a preset that's already there; ", el("em", {}, "Save"), " and ",
           el("em", {}, "Open"), " keep it as a file on your computer."),
         step("Cabs", "(NAM + Amps + Effects firmware): the HX Stomp's 41 legacy cabs are under ", el("em", {}, "Cab"),
-          ", with their Mic; at most two in a preset, so one in each path."))));
+          ", with their Mic; at most two in a preset, so one in each path.")),
+      el("p", { class: "meta" }, "New to all this? The ",
+        el("a", { href: "https://www.youtube.com/watch?v=yktLS1vPSZ4", target: "_blank", rel: "noopener" }, "▶ video tutorial"),
+        " shows how to set it up and run it, step by step (opens in a new tab).")));
 }
 
 // ---------- under the header: getting the unit back after a preset locks it up ----------
