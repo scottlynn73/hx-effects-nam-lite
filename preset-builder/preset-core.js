@@ -239,9 +239,9 @@
     return blob;
   }
   // A footswitch's LED colour by the block's category (the model's 5th field), [on, off]: the unit stores the lit colour
-  // while the block is on and a dim one while it is off (preset_send.py LED). Amps and preamps take distortion's yellow;
-  // send/return, FX loop and volume the looper's white.
-  const LED = { distortion: [0xd0af00, 0x080600], amp: [0xd0af00, 0x080600], preamp: [0xd0af00, 0x080600],
+  // while the block is on and a dim one while it is off (preset_send.py LED). Amps and preamps: the unit's red (read from a
+  // preset saved on the unit, 2026-11-27); send/return, FX loop and volume the looper's white.
+  const LED = { distortion: [0xd0af00, 0x080600], amp: [0xff0003, 0x0d0001], preamp: [0xff0003, 0x0d0001],
     dynamics: [0x84ff00, 0x080c00], eq: [0x84ff00, 0x080c00], modulation: [0x0032ff, 0x00040d], delay: [0x06ff00, 0x010900],
     reverb: [0xff2d00, 0x100400], pitch: [0x3200ff, 0x03000b], synth: [0x3200ff, 0x03000b], filter: [0x3200ff, 0x03000b],
     wah: [0x3200ff, 0x03000b], ir: [0xff0028, 0x0b0007], cab: [0xff0003, 0x0b0000], looper: [0x6bffce, 0x07100c], send: [0x6bffce, 0x07100c],

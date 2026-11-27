@@ -246,9 +246,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
 <!-- ?v=: change it whenever these files change, so a browser never runs an old copy beside a new page -->
-<script src="preset-core.js?v=20261127a"></script>
+<script src="preset-core.js?v=20261127b"></script>
 <script src="fw-reader.js?v=20261122b"></script>
 <script src="fw-catalog.js?v=20261127a"></script>
+<script src="real-names.js?v=20261127a"></script>
 <script>
 "use strict";
 // The setup page's files (flasher.js, firmware-core.js, the recipes): beside this page's folder on the website,
@@ -338,8 +339,10 @@ function buildModels(build) {
     if (!group) continue;
     const mm = name.match(/^(.*?)(Mono|Stereo)(V\d+)?$/);
     const base = mm ? mm[1] + (mm[3] || "") : name, kind = mm ? mm[2].toLowerCase() : null;
-    const key = base + "|" + fm.display;
-    if (!groups.has(key)) groups.set(key, { base, display: fm.display, group, variants: {} });
+    // a cab goes by its name in the unit's Cabs menu (the model data names four of them "4x12 SoloLead EM")
+    const display = (fm.category === "cab" && (window.CAB_MENU_NAMES || {})[name]) || fm.display;
+    const key = base + "|" + display;
+    if (!groups.has(key)) groups.set(key, { base, display, group, variants: {} });
     groups.get(key).variants[kind || "only"] = name;
   }
   const out = [], taken = new Set();
@@ -369,12 +372,17 @@ function buildModels(build) {
     if (main.btype === CAB_TYPE)
       params.unshift({ symbolicID: "@mic", name: "Mic", valueType: 0, displayType: "list", min: 0, max: MICS.length - 1, default: 0,
                        labels: Object.fromEntries(MICS.map((n, k) => [k, n])) });
-    const firstBuild = BUILD_ORDER.find(b => FWCAT[b] && FWCAT[b][mono || stereo] && FWCAT[b][mono || stereo].display === g.display);
+    const firstBuild = BUILD_ORDER.find(b => FWCAT[b] && FWCAT[b][mono || stereo] &&
+      (FWCAT[b][mono || stereo].display === g.display || (window.CAB_MENU_NAMES || {})[mono || stereo] === g.display));
     const m = { id, name: g.display, group: g.group, amp: g.group === "Amp" || g.group === "Preamp",
                 mono: !!mono, stereo: !!stereo, fwNames: { mono, stereo }, btype: main.btype,
                 legacy: !!((mono && cat[mono].legacy) || (stereo && cat[stereo].legacy)),
                 load: mono ? cat[mono].cost / COST_PER_PERCENT : null, loadStereo: stereo ? cat[stereo].cost / COST_PER_PERCENT : null, params };
     if (firstBuild && firstBuild !== "stock") m.fw = { build: firstBuild };
+    // Real names (build.py --real-names): the unit shows the real gear's name; keep Line 6's for search
+    const real = (window.REAL_NAMES || {})[m.name];
+    if (real) m.line6Name = m.name;
+    if (real && ui.realNames) m.name = real;
     out.push(m);
   }
   // names the firmware shares between models: the IR blocks are all "IR", both loopers "Looper ..."
@@ -529,7 +537,7 @@ try {
 function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
-    localStorage.setItem(STORE_KEY + "-ui", JSON.stringify({ group: ui.group, channel: ui.channel }));
+    localStorage.setItem(STORE_KEY + "-ui", JSON.stringify({ group: ui.group, channel: ui.channel, realNames: !!ui.realNames }));
     if (ui.irs) localStorage.setItem(STORE_KEY + "-irs", JSON.stringify(ui.irs));
   } catch (e) { /* ignore */ }
 }
@@ -691,7 +699,9 @@ function renderHowto() {
       el("summary", {}, "How to build a preset"),
       el("ol", {},
         step("Pick your firmware", "in ", el("em", {}, "Your unit runs"), " at the top: the model list follows it. Models only " +
-          "this repo's firmware has are marked ★."),
+          "this repo's firmware has are marked ★. Built it with real names? Tick ", el("em", {}, "Real names"),
+          " so the list matches the unit (Mandarin Rocker shows as OrangeRockerverb). Search finds either name, and presets " +
+          "work the same with it on or off."),
         step("Pick a slot, then a model.", "Click an empty slot in path A or path B, then a model in the list on the left " +
           "(search it, or pick a category; ", el("em", {}, "Mono"), ", ", el("em", {}, "Stereo"), " and ", el("em", {}, "Legacy"),
           " filter it the way the unit does)."),
@@ -773,6 +783,9 @@ function renderHeader() {
     el("label", { class: "fw-pick", for: "buildSel", title: "Pick the firmware your HX Effects actually runs: the page can't check it" }, "Your unit runs",
       el("select", { id: "buildSel", onchange: e => setBuild(e.target.value) },
         BUILD_ORDER.map(k => el("option", { value: k, selected: k === state.build }, (BUILDS[k] || k).replace(/ firmware$/, ""))))),
+    el("label", { class: "fw-pick", title: "Built with Real names (build.py --real-names, or the setup page's Real names box)? The unit then shows the real gear's names (Mandarin Rocker as OrangeRockerverb): show the same here. Presets are the same either way." },
+      el("input", { type: "checkbox", id: "realNames", checked: !!ui.realNames,
+        onchange: e => { ui.realNames = e.target.checked; save(); setModels(state.build); render(); } }), "Real names"),
     el("div", { class: "spacer" }),
     fileInput,
     el("div", { class: "btn-group" },
@@ -921,7 +934,8 @@ function renderBrowser() {
   const ch = ui.channel || "all";
   // the unit's browser folders: Mono and Stereo hold the current models, Legacy the older ones
   const inChannel = m => ch === "all" || (ch === "legacy" ? m.legacy : !m.legacy && (ch === "stereo" ? canStereo(m) : canMono(m)));
-  const list = MODELS.filter(m => available(m) && inChannel(m) && (q ? (m.name.toLowerCase().includes(q) || m.group.toLowerCase().includes(q)) : m.group === ui.group));
+  const list = MODELS.filter(m => available(m) && inChannel(m) && (q ? (m.name.toLowerCase().includes(q) || (m.line6Name || "").toLowerCase().includes(q) ||
+                                                                      (((window.REAL_NAMES || {})[m.line6Name || m.name]) || "").toLowerCase().includes(q) || m.group.toLowerCase().includes(q)) : m.group === ui.group));
   list.sort((a, b) => q ? (GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.name.localeCompare(b.name)) : a.name.localeCompare(b.name));
   const groups = GROUPS.filter(g => MODELS.some(m => m.group === g && available(m)));
   const where = `${state.sel.row ? "path B" : "path A"} slot ${state.sel.slot + 1}`;

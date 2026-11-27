@@ -40,6 +40,14 @@ lists the names), counted in the value list's length but not in its knob count: 
 High Cut, Early Reflections, Level, mic]}`, as a preset saved on the unit stores it. `preset-core.js` and
 `tools/preset_send.py` both write it that way (`check_core.py` agrees on 400 random presets).
 
+The cabs are listed under their names in the unit's Cabs menu (`CAB_MENU_NAMES` in `real-names.js`, from
+`tools/cab_list.py`): the firmware's model data names 1x12 Cali IV, 1x12 Cali EXT and both Del Sols "4x12 SoloLead EM".
+
+**Real names** (the box next to the firmware picker): for firmware built with real names (`build.py --real-names`,
+or the setup page's Real names box), the page shows the same names as the unit, e.g. OrangeRockerverb for Mandarin
+Rocker. Search finds a model by either name. Presets are the same either way. The names come from `real-names.js`,
+written by `python tools/real_names.py --js` from the table in `tools/real_names.py`: don't edit it by hand.
+
 Under the categories, **All / Mono / Stereo / Legacy** filter the list the way the unit's browser files models: Legacy
 holds the older Line 6 models (the firmware's own `legacy` flag), Mono and Stereo the rest, and a model picked from
 Mono or Stereo goes in as that version. Models added by a build are marked ★. DSP load is the firmware's own cost for each model, 75 units to 1%

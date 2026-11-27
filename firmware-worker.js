@@ -1,5 +1,5 @@
 // firmware-worker.js - runs firmware-core.js off the page's main thread (the compression takes 10-30 s).
-// Messages in:  { stock: ArrayBuffer, build: "nam" | "amps" | "full" }   (recipe-<build>.bin, tools/recipe.py)
+// Messages in:  { stock: ArrayBuffer, build: "nam" | "amps" | "full" | "full-names" }   (recipe-<build>.bin, tools/recipe.py)
 // Messages out: { type: "progress", step } | { type: "done", bytes: ArrayBuffer, md5 } | { type: "error", code }
 importScripts(
   "https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js",
